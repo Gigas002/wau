@@ -19,3 +19,5 @@ dirs = "5"
 
 # colors feature can be used for pretty output
 clap = { version = "4", features = ["derive"] }
+rand = "0.8.5"
+log = "0.4.21"
