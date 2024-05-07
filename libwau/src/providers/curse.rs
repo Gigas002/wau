@@ -11,6 +11,8 @@ use crate::{Addon, Flavor};
 
 const API_URL_BASE: &str = "https://api.curseforge.com/v1";
 
+// API docs: https://docs.curseforge.com/
+
 pub struct Curse {
     pub client: Client,
 }

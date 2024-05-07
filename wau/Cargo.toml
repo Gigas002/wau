@@ -1,0 +1,22 @@
+[package]
+name = "wau"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+libwau = { path = "../libwau" }
+
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+toml = { version = "0", default-features = false, features = ["parse"] }
+dirs = "5"
+# shellexpand = "3"
+
+# colors feature can be used for pretty output
+clap = { version = "4", features = ["derive"] }

@@ -4,7 +4,7 @@ use providers::Provider;
 
 pub mod providers;
 
-// TODO: move this contents to different crate, libwau?
+// TODO: providers can be hidden under features
 
 pub struct Wow {
     pub path: PathBuf,
@@ -31,6 +31,7 @@ impl Wow {
     }
 }
 
+// TODO: check if this is curse-specific id or spec
 pub enum Flavor {
     Retail = 517,
     Classic = 67408,

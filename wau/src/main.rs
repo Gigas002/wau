@@ -4,7 +4,7 @@ pub mod config;
 use clap::Parser;
 use cli::Cli;
 use config::Config;
-use wau::providers::Provider;
+use libwau::providers::Provider;
 
 #[tokio::main]
 async fn main() {

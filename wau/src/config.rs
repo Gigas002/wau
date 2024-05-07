@@ -1,7 +1,7 @@
 use std::{error::Error, fs, io::Read, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
-use wau::{Flavor, Wow};
+use libwau::{Flavor, Wow};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Config {
