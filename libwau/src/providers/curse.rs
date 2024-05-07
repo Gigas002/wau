@@ -22,7 +22,7 @@ impl Curse {
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-        // headers.insert("x-api-key", HeaderValue::from_static(token));
+        headers.insert("x-api-key", HeaderValue::from_str(token).unwrap());
         headers.insert(USER_AGENT, HeaderValue::from_static("wau/v0.1.0"));
 
         let builder = Client::builder().default_headers(headers);
