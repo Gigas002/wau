@@ -3,6 +3,7 @@ use std::{fs, path::PathBuf};
 use providers::Provider;
 
 pub mod providers;
+pub mod toc;
 
 // TODO: providers can be hidden under features
 
@@ -76,6 +77,10 @@ impl Addon {
     }
 
     pub fn determine_addon(_path: &PathBuf) -> Addon {
+        // this requires parsing *.toc files
+        // see: https://addonstudio.org/wiki/WoW:Creating_a_WoW_AddOn
+        // and: https://addonstudio.org/wiki/WoW:TOC_format
+        // and: https://wowpedia.fandom.com/wiki/TOC_format
         panic!("aaa")
     }
 
