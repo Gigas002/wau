@@ -63,17 +63,17 @@ impl Toc {
     }
 
     fn interface_to_game_version(interface: &str) -> String {
-        // TODO: this doesn't handle 10.x properly because 6 digits
-        if interface.len() == 5 {
-            let major = interface[..1].parse::<u8>();
-            let minor = interface[1..3].parse::<u8>();
-            let patch = interface[3..5].parse::<u8>();
-            if let (Ok(major), Ok(minor), Ok(patch)) = (major, minor, patch) {
-                return format!("{}.{}.{}", major, minor, patch);
-            }
-        }
+        let major_len = if interface.len() == 5 { 1 } else { 2 };
+        let (major, minor, patch) = (
+            &interface[..major_len],
+            &interface[major_len..major_len + 2],
+            &interface[major_len + 2..],
+        );
 
-        interface.to_owned()
+        match (major.parse::<u8>(), minor.parse::<u8>(), patch.parse::<u8>()) {
+            (Ok(major), Ok(minor), Ok(patch)) => format!("{}.{}.{}", major, minor, patch),
+            _ => interface.to_owned(),
+        }
     }
 
     fn get_dependencies_vec(dependencies_str: &str) -> Vec<String> {
