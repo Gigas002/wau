@@ -14,10 +14,8 @@ use std::path::PathBuf;
 
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct Toc {
-
-    // TODO: consider separate struct for conversible value?
     /// Required, `Interface`
-    pub interface: String,
+    pub interface: GameVersion,
 
     /// `Title`, usually same as folder name
     pub title: Option<String>,
@@ -136,7 +134,7 @@ impl Toc {
             let value = value.trim();
 
             match key {
-                "Interface" => self.interface = Toc::interface_to_game_version(value),
+                "Interface" => self.interface = GameVersion::from_interface(value),
                 "Title" => self.title = Some(Toc::get_title(value)),
                 "Notes" => self.notes = Some(Toc::get_notes(value)),
                 "IconTexture" => self.icon_texture = Some(value.to_string()),
@@ -181,21 +179,6 @@ impl Toc {
         }
     }
 
-    fn interface_to_game_version(interface: &str) -> String {
-        // xyyzz for 5 digit and xxyyzz for 6 digit
-        let major_len = if interface.len() == 5 { 1 } else { 2 };
-        let (major, minor, patch) = (
-            &interface[..major_len],
-            &interface[major_len..major_len + 2],
-            &interface[major_len + 2..],
-        );
-
-        match (major.parse::<u8>(), minor.parse::<u8>(), patch.parse::<u8>()) {
-            (Ok(major), Ok(minor), Ok(patch)) => format!("{}.{}.{}", major, minor, patch),
-            _ => interface.to_owned(),
-        }
-    }
-
     fn get_dependencies_vec(dependencies_str: &str) -> Vec<String> {
         if dependencies_str.is_empty() {
             return vec![];
@@ -214,5 +197,44 @@ impl Toc {
 
     fn get_notes(notes: &str) -> String {
         notes.replace("|c", "").replace("|r", "")
+    }
+}
+
+#[derive(Default, Debug, Clone, PartialEq)]
+pub struct GameVersion {
+    value: String,
+}
+
+impl GameVersion {
+    pub fn from_interface(interface: &str) -> GameVersion {
+        // xyyzz for 5 digit and xxyyzz for 6 digit
+        let major_len = if interface.len() == 5 { 1 } else { 2 };
+        let (major, minor, patch) = (
+            &interface[..major_len],
+            &interface[major_len..major_len + 2],
+            &interface[major_len + 2..],
+        );
+
+        let value = match (major.parse::<u8>(), minor.parse::<u8>(), patch.parse::<u8>()) {
+            (Ok(major), Ok(minor), Ok(patch)) => format!("{}.{}.{}", major, minor, patch),
+            _ => interface.to_owned(),
+        };
+
+        GameVersion { value }
+    }
+
+    pub fn to_interface(&self) -> String {
+        let mut segments = self.value.split('.').peekable();
+        let mut interface = String::new();
+
+        if let Some(major) = segments.next() {
+            interface.push_str(&major);
+        }
+
+        for segment in segments {
+            interface.push_str(&format!("{:02}", segment.parse::<usize>().unwrap()));
+        }
+
+        interface
     }
 }
