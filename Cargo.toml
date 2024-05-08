@@ -1,5 +1,5 @@
 [workspace]
-members = ["libwau", "wau"]
+members = ["libwau", "wau", "tests"]
 resolver = "2"
 
 [workspace.package]
