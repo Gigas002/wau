@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::io::Read;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 // TOC spec:
 // https://wowpedia.fandom.com/wiki/TOC_format
@@ -53,9 +54,8 @@ pub struct Toc {
     /// `LoadManagers`
     pub load_mangers: Option<String>,
 
-    // TODO: consider enum
     /// `DefaultState`
-    pub default_state: Option<String>,
+    pub default_state: Option<State>,
 
     /// `SavedVariables`
     pub saved_variables: Option<String>,
@@ -95,7 +95,6 @@ pub struct Toc {
 }
 
 impl Toc {
-    // TODO: try to parse flavor from filename
     pub fn load(path: &PathBuf) -> Result<Toc, Box<dyn Error>> {
         let mut toc_file = std::fs::File::open(path)?;
         let mut toc_str = String::new();
@@ -144,12 +143,12 @@ impl Toc {
                 "AddonCompartmentFuncOnEnter" => self.addon_compartment_func_on_enter = Some(value.to_string()),
                 "AddonCompartmentFuncOnLeave" => self.addon_compartment_func_on_leave = Some(value.to_string()),
 
-                "LoadOnDemand" => self.load_on_demand = Some(value.parse::<i32>().unwrap()),
+                "LoadOnDemand" => self.load_on_demand = Some(value.parse::<i32>().unwrap_or_default()),
                 "Dependencies" | "RequiredDeps" => self.dependencies = Toc::get_dependencies_vec(value),
                 "OptionalDependencies" | "OptionalDeps" => self.optional_dependencies = Toc::get_dependencies_vec(value),
                 "LoadWith" => self.load_with = Some(value.to_string()),
                 "LoadManagers" => self.load_mangers = Some(value.to_string()),
-                "DefaultState" => self.default_state = Some(value.to_string()),
+                "DefaultState" => self.default_state = Some(value.parse().unwrap_or_default()),
 
                 "SavedVariables" => self.saved_variables = Some(value.to_string()),
                 "SavedVariablesPerCharacter" => self.saved_variables_per_character = Some(value.to_string()),
@@ -236,5 +235,22 @@ impl GameVersion {
         }
 
         interface
+    }
+}
+
+#[derive(Default, Debug, Clone, PartialEq)]
+pub enum State {
+    Enabled,
+    #[default]
+    Disabled,
+}
+
+impl FromStr for State {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "enabled" => Ok(State::Enabled),
+            _ => Ok(State::Disabled),
+        }
     }
 }
