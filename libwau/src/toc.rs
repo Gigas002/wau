@@ -152,9 +152,7 @@ impl Toc {
                     self.addon_compartment_func_on_leave = Some(value.to_string())
                 }
 
-                "LoadOnDemand" => {
-                    self.load_on_demand = Some(value.parse::<i32>().unwrap_or_default())
-                }
+                "LoadOnDemand" => self.load_on_demand = value.parse::<i32>().ok(),
                 "Dependencies" | "RequiredDeps" => {
                     self.dependencies = Toc::get_dependencies_vec(value)
                 }
@@ -163,7 +161,7 @@ impl Toc {
                 }
                 "LoadWith" => self.load_with = Some(value.to_string()),
                 "LoadManagers" => self.load_mangers = Some(value.to_string()),
-                "DefaultState" => self.default_state = Some(value.parse().unwrap_or_default()),
+                "DefaultState" => self.default_state = value.parse().ok(),
 
                 "SavedVariables" => self.saved_variables = Some(value.to_string()),
                 "SavedVariablesPerCharacter" => {
@@ -176,7 +174,7 @@ impl Toc {
                 "X-Wago-ID" => self.wago_id = Some(value.to_string()),
                 "X-WoWI-ID" => self.wowi_id = Some(value.to_string()),
                 "X-Tukui-ProjectID" => self.tukui_id = Some(value.to_string()),
-                "X-Curse-Project-ID" => self.curse_id = Some(value.parse::<usize>().unwrap()),
+                "X-Curse-Project-ID" => self.curse_id = value.parse::<usize>().ok(),
 
                 _ => {
                     self.unknown_properties
@@ -276,7 +274,7 @@ impl GameVersion {
         GameVersion { value }
     }
 
-    pub fn to_interface(&self) -> String {
+    pub fn to_interface(&self) -> Result<String, Box<dyn Error>> {
         let mut segments = self.value.split('.').peekable();
         let mut interface = String::new();
 
@@ -285,10 +283,15 @@ impl GameVersion {
         }
 
         for segment in segments {
-            interface.push_str(&format!("{:02}", segment.parse::<usize>().unwrap()));
+            if let Ok(num) = segment.parse::<usize>() {
+                interface.push_str(&format!("{:02}", num));
+            }
+            else {
+                return Err("Invalid segment in version string".into());
+            }
         }
 
-        interface
+        Ok(interface)
     }
 }
 
