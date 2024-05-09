@@ -97,11 +97,13 @@ impl FromStr for Toc {
     type Err = Box<dyn Error>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut toc = Toc::default();
-        toc.dependencies = vec![];
-        toc.comments = vec![];
-        toc.files = vec![];
-        toc.unknown_properties = HashMap::new();
+        let mut toc = Toc {
+            dependencies: vec![],
+            comments: vec![],
+            files: vec![],
+            unknown_properties: HashMap::new(),
+            ..Default::default()
+        };
 
         for line in s.lines() {
             match line.chars().next() {
@@ -238,7 +240,7 @@ impl Toc {
         let text_end = seq.len() - 2;
 
         if is_glob {
-            seq[..text_end].split(":").nth(1).unwrap().to_string()
+            seq[..text_end].split(':').nth(1).unwrap().to_string()
         }
         // |cAARRGGBBtext|r
         else {
@@ -279,7 +281,7 @@ impl GameVersion {
         let mut interface = String::new();
 
         if let Some(major) = segments.next() {
-            interface.push_str(&major);
+            interface.push_str(major);
         }
 
         for segment in segments {
