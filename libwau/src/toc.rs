@@ -18,7 +18,7 @@ pub struct Toc {
     /// Required, `Interface`
     pub interface: GameVersion,
 
-    /// `Title`, usually same as folder name
+    /// `Title`
     pub title: Option<String>,
 
     /// `Notes`
@@ -41,7 +41,7 @@ pub struct Toc {
 
     /// `LoadOnDemand`
     pub load_on_demand: Option<i32>,
-    
+
     /// `Dependencies`/`RequiredDeps`
     pub dependencies: Vec<String>,
 
@@ -59,13 +59,13 @@ pub struct Toc {
 
     /// `SavedVariables`
     pub saved_variables: Option<String>,
-    
+
     /// `SavedVariablesPerCharacter`
     pub saved_variables_per_character: Option<String>,
-    
+
     /// `Author`
     pub author: Option<String>,
-    
+
     /// `Version`
     pub version: Option<String>,
 
@@ -74,7 +74,6 @@ pub struct Toc {
     pub files: Vec<String>,
 
     // Additional (custom X-) properties
-
     /// `X-Wago-ID`
     pub wago_id: Option<String>,
 
@@ -134,24 +133,36 @@ impl Toc {
 
             match key {
                 "Interface" => self.interface = GameVersion::from_interface(value),
-                "Title" => self.title = Some(Toc::get_title(value)),
-                "Notes" => self.notes = Some(Toc::get_notes(value)),
+                "Title" => self.title = Some(Toc::parse_colored_line(value)),
+                "Notes" => self.notes = Some(Toc::parse_colored_line(value)),
                 "IconTexture" => self.icon_texture = Some(value.to_string()),
                 "IconAtlas" => self.icon_atlas = Some(value.to_string()),
 
                 "AddonCompartmentFunc" => self.addon_compartment_func = Some(value.to_string()),
-                "AddonCompartmentFuncOnEnter" => self.addon_compartment_func_on_enter = Some(value.to_string()),
-                "AddonCompartmentFuncOnLeave" => self.addon_compartment_func_on_leave = Some(value.to_string()),
+                "AddonCompartmentFuncOnEnter" => {
+                    self.addon_compartment_func_on_enter = Some(value.to_string())
+                }
+                "AddonCompartmentFuncOnLeave" => {
+                    self.addon_compartment_func_on_leave = Some(value.to_string())
+                }
 
-                "LoadOnDemand" => self.load_on_demand = Some(value.parse::<i32>().unwrap_or_default()),
-                "Dependencies" | "RequiredDeps" => self.dependencies = Toc::get_dependencies_vec(value),
-                "OptionalDependencies" | "OptionalDeps" => self.optional_dependencies = Toc::get_dependencies_vec(value),
+                "LoadOnDemand" => {
+                    self.load_on_demand = Some(value.parse::<i32>().unwrap_or_default())
+                }
+                "Dependencies" | "RequiredDeps" => {
+                    self.dependencies = Toc::get_dependencies_vec(value)
+                }
+                "OptionalDependencies" | "OptionalDeps" => {
+                    self.optional_dependencies = Toc::get_dependencies_vec(value)
+                }
                 "LoadWith" => self.load_with = Some(value.to_string()),
                 "LoadManagers" => self.load_mangers = Some(value.to_string()),
                 "DefaultState" => self.default_state = Some(value.parse().unwrap_or_default()),
 
                 "SavedVariables" => self.saved_variables = Some(value.to_string()),
-                "SavedVariablesPerCharacter" => self.saved_variables_per_character = Some(value.to_string()),
+                "SavedVariablesPerCharacter" => {
+                    self.saved_variables_per_character = Some(value.to_string())
+                }
 
                 "Author" => self.author = Some(value.to_string()),
                 "Version" => self.version = Some(value.to_string()),
@@ -161,9 +172,10 @@ impl Toc {
                 "X-Tukui-ProjectID" => self.tukui_id = Some(value.to_string()),
                 "X-Curse-Project-ID" => self.curse_id = Some(value.parse::<usize>().unwrap()),
 
-                _ => { 
-                    self.unknown_properties.insert(key.to_string(), value.to_string());
-                },
+                _ => {
+                    self.unknown_properties
+                        .insert(key.to_string(), value.to_string());
+                }
             }
         }
     }
@@ -183,19 +195,51 @@ impl Toc {
             return vec![];
         }
 
-        dependencies_str.split([','].as_ref())
-             .map(|s| s.trim().to_string())
-             .collect()
+        dependencies_str
+            .split([','].as_ref())
+            .map(|s| s.trim().to_string())
+            .collect()
     }
 
-    // TODO: regex required I guess...
+    fn parse_colored_line(line: &str) -> String {
+        let mut result = String::new();
+        let mut temp_line = line.to_string();
 
-    fn get_title(title: &str) -> String {
-        title.replace("|c", "").replace("|r", "")
+        while let Some(start) = temp_line.find("|c") {
+            result.push_str(&temp_line[..start]);
+
+            if let Some(end) = temp_line[start..].find("|r") {
+                let escape_seq = &temp_line[start..start + end + 2];
+                result.push_str(&Toc::parse_escape_sequence(escape_seq));
+
+                temp_line = temp_line[start + end + 2..].to_string();
+            }
+            // no closing tag, add the rest of the string
+            else {
+                result.push_str(&temp_line[start..]);
+
+                break;
+            }
+        }
+
+        // add any remaining text after the last escape sequence
+        result.push_str(&temp_line);
+
+        result
     }
 
-    fn get_notes(notes: &str) -> String {
-        notes.replace("|c", "").replace("|r", "")
+    fn parse_escape_sequence(seq: &str) -> String {
+        // check if using global color notaion with name, |cnCOLOR:text|r
+        let is_glob = seq.chars().nth(2).unwrap().eq(&'n');
+        let text_end = seq.len() - 2;
+
+        if is_glob {
+            seq[..text_end].split(":").nth(1).unwrap().to_string()
+        }
+        // |cAARRGGBBtext|r
+        else {
+            seq[10..text_end].to_string()
+        }
     }
 }
 
@@ -214,7 +258,11 @@ impl GameVersion {
             &interface[major_len + 2..],
         );
 
-        let value = match (major.parse::<u8>(), minor.parse::<u8>(), patch.parse::<u8>()) {
+        let value = match (
+            major.parse::<u8>(),
+            minor.parse::<u8>(),
+            patch.parse::<u8>(),
+        ) {
             (Ok(major), Ok(minor), Ok(patch)) => format!("{}.{}.{}", major, minor, patch),
             _ => interface.to_owned(),
         };
