@@ -93,23 +93,17 @@ pub struct Toc {
     pub unknown_properties: HashMap<String, String>,
 }
 
-impl Toc {
-    pub fn load(path: &PathBuf) -> Result<Toc, Box<dyn Error>> {
-        let mut toc_file = std::fs::File::open(path)?;
-        let mut toc_str = String::new();
-        toc_file.read_to_string(&mut toc_str)?;
+impl FromStr for Toc {
+    type Err = Box<dyn Error>;
 
-        Toc::from_str(&toc_str)
-    }
-
-    pub fn from_str(content: &str) -> Result<Toc, Box<dyn Error>> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut toc = Toc::default();
         toc.dependencies = vec![];
         toc.comments = vec![];
         toc.files = vec![];
         toc.unknown_properties = HashMap::new();
 
-        for line in content.lines() {
+        for line in s.lines() {
             match line.chars().next() {
                 Some('#') => match line.chars().nth(1) {
                     Some('#') => toc.parse_toc_property(line),
@@ -121,6 +115,16 @@ impl Toc {
         }
 
         Ok(toc)
+    }
+}
+
+impl Toc {
+    pub fn load(path: &PathBuf) -> Result<Toc, Box<dyn Error>> {
+        let mut toc_file = std::fs::File::open(path)?;
+        let mut toc_str = String::new();
+        toc_file.read_to_string(&mut toc_str)?;
+
+        Toc::from_str(&toc_str)
     }
 
     fn parse_toc_property(&mut self, content: &str) {
