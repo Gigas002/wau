@@ -1,0 +1,30 @@
+name: style
+on:
+  workflow_dispatch:
+    inputs:
+      runs-on:
+        description: "The operating system to run the job on"
+        required: true
+        type: choice
+        options:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+  workflow_call:
+    inputs:
+      runs-on:
+        description: "The operating system to run the job on"
+        required: true
+        type: string
+
+jobs:
+  style:
+    runs-on: ${{inputs.runs-on}}
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo-fmt
+        run: cargo fmt --all -- --check --verbose
+      - name: cargo-clippy
+        run: cargo clippy
