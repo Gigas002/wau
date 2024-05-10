@@ -27,6 +27,7 @@ jobs:
   # check code style
 
   code-style-linux:
+    needs: build-linux
     uses: ./.github/workflows/style.yml
     with:
       runs-on: ubuntu-latest
