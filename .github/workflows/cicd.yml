@@ -57,9 +57,9 @@ jobs:
 
   # snyk security report
 
-  # snyk-check-code-linux:
-  #   uses: ./.github/workflows/snyk-check-code.yml
-  #   if: github.ref == 'refs/heads/master'
-  #   with:
-  #     runs-on: ubuntu-latest
-  #   secrets: inherit
+  snyk-check-code-linux:
+    uses: ./.github/workflows/snyk-check-code.yml
+    if: github.ref == 'refs/heads/master'
+    with:
+      runs-on: ubuntu-latest
+    secrets: inherit
