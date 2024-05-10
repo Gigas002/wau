@@ -1,0 +1,64 @@
+name: cicd
+
+on: [push, pull_request]
+
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: false
+
+jobs:
+  # building tasks
+
+  build-windows:
+    uses: ./.github/workflows/build.yml
+    with:
+      runs-on: windows-latest
+
+  build-linux:
+    uses: ./.github/workflows/build.yml
+    with:
+      runs-on: ubuntu-latest
+
+  build-macos:
+    uses: ./.github/workflows/build.yml
+    with:
+      runs-on: macos-latest
+
+  # check code style
+
+  code-style-linux:
+    uses: ./.github/workflows/style.yml
+    with:
+      runs-on: ubuntu-latest
+
+  # testing tasks
+
+  test-windows:
+    needs: build-windows
+    uses: ./.github/workflows/test.yml
+    with:
+      runs-on: windows-latest
+    secrets: inherit
+
+  test-linux:
+    needs: build-linux
+    uses: ./.github/workflows/test.yml
+    with:
+      runs-on: ubuntu-latest
+    secrets: inherit
+
+  test-macos:
+    needs: build-macos
+    uses: ./.github/workflows/test.yml
+    with:
+      runs-on: macos-latest
+    secrets: inherit
+
+  # snyk security report
+
+  # snyk-check-code-linux:
+  #   uses: ./.github/workflows/snyk-check-code.yml
+  #   if: github.ref == 'refs/heads/master'
+  #   with:
+  #     runs-on: ubuntu-latest
+  #   secrets: inherit
