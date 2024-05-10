@@ -17,12 +17,11 @@ on:
         required: true
         type: string
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   build:
     runs-on: ${{inputs.runs-on}}
+    env:
+      CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
       - name: cargo-build
