@@ -1,0 +1,25 @@
+# required settings to run wau
+[required]
+# your wow installation path
+wow = "~/games/wow"
+
+# optional settings with default parameters
+[optional]
+# your addon manifest path
+# default: ~/.config/manifest.toml
+manifest = "~/.config/manifest.toml"
+
+# providers you want to use to update/install addons
+# default: all
+# possible values: github, curse, all
+providers = [ "all" ]
+
+# game flavors you want to use with wau
+# default: all
+# possible values: retail, all
+flavors = [ "all" ]
+
+# latest versions of which channel do you want to use?
+# default: stable
+# possible values: stable, beta, alpha
+release_channel = "stable"
