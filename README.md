@@ -33,7 +33,7 @@ sub-commands:
 
 ### search
 
-`wau addon_name`/`wau search %addon_name%` -- search for addon on supported providers
+`wau %addon_name%`/`wau search %addon_name%` -- search for addon on supported providers
 
 ### install
 
