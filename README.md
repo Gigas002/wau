@@ -10,7 +10,7 @@ Wow Addon Updater
 
 ## configuration
 
-See the repo's `config.toml` and `manifest.toml` files for example with default values and explanations
+see the repo's `config.toml` and `manifest.toml` files for example with default values and explanations
 
 ## usage
 
@@ -23,7 +23,9 @@ running `wau` to install or update your addons **requires** first generating the
 optional args:
 - `--output %path%` -- path to your output `manifest.toml` file. By default will write or override one into `~/.config/wau/manifest.toml`
 - `--wow %path%` -- path to your wow installation. If wow root provided - flavor decided automatically. If flavor provided - specify flavor manually
-- `--install %path%` -- install addons from provided `manifest.toml` file
+
+sub-commands:
+- `install %path%` -- install addons from provided `manifest.toml` file
 
 ### update
 
