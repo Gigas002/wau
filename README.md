@@ -14,7 +14,7 @@ see the repo's `config.toml` and `manifest.toml` files for example with default 
 
 ## usage
 
-running `wau` to install or update your addons **requires** first generating the `manifest.toml` file, or copying it to default location (`~/.config/wau/manifest.toml`)
+running `wau` to install or update your addons **requires** first setting your `wow` directory path in `config.toml` and generating the `manifest.toml` file, or copying it to default location (`~/.config/wau/manifest.toml`)
 
 ### manifest
 
