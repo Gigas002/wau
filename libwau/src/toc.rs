@@ -4,6 +4,8 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use crate::Addon;
+
 // TOC spec:
 // https://wowpedia.fandom.com/wiki/TOC_format
 
@@ -244,6 +246,11 @@ impl Toc {
         else {
             seq[10..text_end].to_string()
         }
+    }
+
+    // TODO: better to make it trait and use on providers too
+    fn into_addon(&self) -> Result<Addon, Box<dyn Error>> {
+        todo!()
     }
 }
 
