@@ -1,0 +1,5 @@
+# requires setting flavor path in config file for each used flavor
+
+[addons]
+recount = { version = "1.0.0", provider = "curse", flavor = "retail" }
+bagnon = { version = "1.0.0", provider = "github", flavor = "classic_cata" }
