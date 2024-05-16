@@ -33,20 +33,13 @@ running `wau` to install or update your addons **requires** first setting requir
 - `--output %path%` -- the output path for `manifest.toml` file, in case you don't want to override one in your default location
 - `--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
 
-#### sub-commands
-
-- `install %path%` -- install addons from provided `manifest.toml` file
-
-#### optional args
-
-- `--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
-
 ### update
 
 `wau`/`wau update` -- updates (or installs non-existent) addons using `manifest.toml` data
 
 #### optional args
 
+- `--manifest %path%` -- path to your `manifest.toml` file in case it's not in default location or you want to use different manifest file. This is NOT recommended to do on an existing installation if you don't know what you're doing
 - `--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
 
 ### search
