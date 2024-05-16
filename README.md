@@ -10,38 +10,59 @@ Wow Addon Updater
 
 ## configuration
 
-see the repo's `config.toml` and `manifest.toml` files for example with default values and explanations
+see the repo's `config.toml` and `manifest.toml` files for example with default values and explanations. By default, config file doesn't exist, so you'll have to create it and pass the minimal required variables. Preferred `config.toml` locations depends on your runtime and decided with [dirs.rs](https://docs.rs/dirs/5.0.1/dirs/fn.config_local_dir.html):
+
+on linux: `$XDG_CONFIG_HOME/wau/config.toml` or `$HOME/.config/config.toml`
+on windows: `{FOLDERID_LocalAppData}\wau\config.toml`
+on macos: `$HOME/Library/Application Support/wau/config.toml`
+
+additionaly, you can specify config file with `--config` argument
+
+same path strategy is applied to `manifest.toml`
 
 ## usage
 
-running `wau` to install or update your addons **requires** first setting your `wow` directory path in `config.toml` and generating the `manifest.toml` file, or copying it to default location (`~/.config/wau/manifest.toml`)
+running `wau` to install or update your addons **requires** first setting required parameters in your `config.toml` and generating the `manifest.toml` file, or copying it to default location
 
 ### manifest
 
 `wau manifest` -- generates `manifest.toml` file. By default, uses `config.toml` values as arguments
 
+sub-commands:
+- `install %path%` -- install addons from provided `manifest.toml` file
+
 optional args:
 - `--output %path%` -- path to your output `manifest.toml` file. By default will write or override one into `~/.config/wau/manifest.toml`
 - `--wow %path%` -- path to your wow installation. If wow root provided - flavor decided automatically. If flavor provided - specify flavor manually
-
-sub-commands:
-- `install %path%` -- install addons from provided `manifest.toml` file
+- `--config %path%` -- path to your `config.toml` file in case it's not in default location
 
 ### update
 
 `wau`/`wau update` -- updates (or installs non-existent) addons using `manifest.toml` data
 
+optional args:
+- `--config %path%` -- path to your `config.toml` file in case it's not in default location
+
 ### search
 
 `wau %addon_name%`/`wau search %addon_name%` -- search for addon on supported providers
+
+optional args:
+- `--config %path%` -- path to your `config.toml` file in case it's not in default location
 
 ### install
 
 `wau install %addon_name%` -- install addon
 
+optional args:
+- `--config %path%` -- path to your `config.toml` file in case it's not in default location
+
 ### remove
 
 `wau remove %addon_name%` -- removes addon
+
+optional args:
+- `--config %path%` -- path to your `config.toml` file in case it's not in default location
 
 ## roadmap
 

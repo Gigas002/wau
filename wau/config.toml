@@ -1,27 +1,31 @@
-# required settings to run wau
 [required]
 # your wow installation path
 wow = "~/games/wow"
 
-# optional settings with default parameters
 [optional]
 # your addon manifest path
-# default: ~/.config/manifest.toml
-manifest = "~/.config/manifest.toml"
+# default values:
+# on linux: $XDG_CONFIG_HOME/wau/manifest.toml or $HOME/.config/wau/manifest.toml, e.g: /home/gigas/.config/wau/manifest.toml
+# on windows: {FOLDERID_LocalAppData}\wau\manifest.toml, e.g: C:\Users\Gigas\AppData\Local\wau\manifest.toml
+# on macos: $HOME/Library/Application Support/wau/manifest.toml, e.g: /Users/Gigas/Library/Application Support/wau/manifest.toml
+# manifest = ""
 
-# downloaded addons path before extractiong and installing
-# default: ~/.cache/wau
-cache = "~/.cache/wau"
+# downloaded addons path before extracting and installing
+# default values:
+# on linux: $XDG_CACHE_HOME/wau or $HOME/.cache/wau, e.g: /home/gigas/.cache/wau
+# on windows: {FOLDERID_LocalAppData}\wau, e.g: C:\Users\Gigas\AppData\Local\wau
+# on macos: $HOME/Library/Caches/wau, e.g: /Users/Gigas/Library/Caches/wau
+# cache = ""
 
 # game flavors you want to use with wau
 # default: all
 # possible values: retail, all
-flavors = [ "all" ]
+# flavors = [ "all" ]
 
 # latest versions of which channel do you want to use?
 # default: stable
 # possible values: stable, beta, alpha
-release_channel = "stable"
+# release_channel = "stable"
 
 [providers]
 # your curse API token,
