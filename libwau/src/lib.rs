@@ -3,6 +3,7 @@ use std::{fs, path::PathBuf};
 use providers::Provider;
 
 pub mod providers;
+pub mod toc;
 
 // TODO: providers can be hidden under features
 
@@ -76,6 +77,7 @@ impl Addon {
     }
 
     pub fn determine_addon(_path: &PathBuf) -> Addon {
+        // this requires parsing *.toc files
         panic!("aaa")
     }
 
