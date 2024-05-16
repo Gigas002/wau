@@ -30,8 +30,8 @@ running `wau` to install or update your addons **requires** first setting requir
 
 #### optional args
 
-- `--output %path%` -- the output path for `manifest.toml` file, in case you don't want to override one in your default location
-- `--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
+- `-o/--output %path%` -- the output path for `manifest.toml` file, in case you don't want to override one in your default location
+- `-c/--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
 
 ### update
 
@@ -39,8 +39,8 @@ running `wau` to install or update your addons **requires** first setting requir
 
 #### optional args
 
-- `--manifest %path%` -- path to your `manifest.toml` file in case it's not in default location or you want to use different manifest file. This is NOT recommended to do on an existing installation if you don't know what you're doing
-- `--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
+- `-m/--manifest %path%` -- path to your `manifest.toml` file in case it's not in default location or you want to use different manifest file. This is NOT recommended to do on an existing installation if you don't know what you're doing
+- `-c/--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
 
 ### search
 
@@ -48,7 +48,7 @@ running `wau` to install or update your addons **requires** first setting requir
 
 #### optional args
 
-- `--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
+- `-c/--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
 
 ### install
 
@@ -56,7 +56,7 @@ running `wau` to install or update your addons **requires** first setting requir
 
 #### optional args
 
-- `--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
+- `-c/--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
 
 ### remove
 
@@ -64,7 +64,7 @@ running `wau` to install or update your addons **requires** first setting requir
 
 #### optional args
 
-- `--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
+- `-c/--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
 
 ## roadmap
 
