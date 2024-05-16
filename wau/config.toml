@@ -9,6 +9,10 @@ wow = "~/games/wow"
 # default: ~/.config/manifest.toml
 manifest = "~/.config/manifest.toml"
 
+# downloaded addons path before extractiong and installing
+# default: ~/.cache/wau
+cache = "~/.cache/wau"
+
 # providers you want to use to update/install addons
 # default: all
 # possible values: github, curse, all
