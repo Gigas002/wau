@@ -10,11 +10,11 @@ Wow Addon Updater
 
 ## configuration
 
-see the repo's `config.toml` and `manifest.toml` files for example with default values and explanations. By default, config file doesn't exist, so you'll have to create it and pass the minimal required variables. Preferred `config.toml` locations depends on your runtime and decided with [dirs.rs](https://docs.rs/dirs/5.0.1/dirs/fn.config_local_dir.html):
+see the repo's `config.toml` and `manifest.toml` files for example with default values and explanations. By default, config file doesn't exist, so you'll have to create it and pass the minimal required variables. Preferred `config.toml` locations depends on your runtime and decided with [dirs.rs](https://docs.rs/dirs/latest/dirs/fn.config_local_dir.html):
 
-on linux: `$XDG_CONFIG_HOME/wau/config.toml` or `$HOME/.config/config.toml`
-on windows: `{FOLDERID_LocalAppData}\wau\config.toml`
-on macos: `$HOME/Library/Application Support/wau/config.toml`
+on linux: `$XDG_CONFIG_HOME/wau/config.toml` or `$HOME/.config/config.toml`, e.g: `/home/gigas/.config/wau/config.toml`
+on windows: `{FOLDERID_RoamingAppData}\wau\config.toml`, e.g: `C:\Users\Gigas\AppData\Roaming\wau\config.toml`
+on macos: `$HOME/Library/Application Support/wau/config.toml`, e.g: `/Users/Gigas/Library/Application Support/wau/manifest.toml`
 
 additionaly, you can specify config file with `--config` argument
 

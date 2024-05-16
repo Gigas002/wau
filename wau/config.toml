@@ -6,7 +6,7 @@ wow = "~/games/wow"
 # your addon manifest path
 # default values:
 # on linux: $XDG_CONFIG_HOME/wau/manifest.toml or $HOME/.config/wau/manifest.toml, e.g: /home/gigas/.config/wau/manifest.toml
-# on windows: {FOLDERID_LocalAppData}\wau\manifest.toml, e.g: C:\Users\Gigas\AppData\Local\wau\manifest.toml
+# on windows: {FOLDERID_RoamingAppData}\wau\manifest.toml, e.g: C:\Users\Gigas\AppData\Roaming\wau\manifest.toml
 # on macos: $HOME/Library/Application Support/wau/manifest.toml, e.g: /Users/Gigas/Library/Application Support/wau/manifest.toml
 # manifest = ""
 
