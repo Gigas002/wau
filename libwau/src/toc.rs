@@ -247,9 +247,10 @@ impl Toc {
             seq[10..text_end].to_string()
         }
     }
+}
 
-    // TODO: better to make it trait and use on providers too
-    fn into_addon(&self) -> Result<Addon, Box<dyn Error>> {
+impl From<Toc> for Addon {
+    fn from(value: Toc) -> Self {
         todo!()
     }
 }
