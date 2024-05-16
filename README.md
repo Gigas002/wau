@@ -26,43 +26,52 @@ running `wau` to install or update your addons **requires** first setting requir
 
 ### manifest
 
-`wau manifest` -- generates `manifest.toml` file. By default, uses `config.toml` values as arguments
+`wau manifest` -- generates `manifest.toml` file in default location (see configuration section above)
 
-sub-commands:
+#### optional args
+
+- `--output %path%` -- the output path for `manifest.toml` file, in case you don't want to override one in your default location
+- `--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
+
+#### sub-commands
+
 - `install %path%` -- install addons from provided `manifest.toml` file
 
-optional args:
-- `--output %path%` -- path to your output `manifest.toml` file. By default will write or override one into `~/.config/wau/manifest.toml`
-- `--wow %path%` -- path to your wow installation. If wow root provided - flavor decided automatically. If flavor provided - specify flavor manually
-- `--config %path%` -- path to your `config.toml` file in case it's not in default location
+#### optional args
+
+- `--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
 
 ### update
 
 `wau`/`wau update` -- updates (or installs non-existent) addons using `manifest.toml` data
 
-optional args:
-- `--config %path%` -- path to your `config.toml` file in case it's not in default location
+#### optional args
+
+- `--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
 
 ### search
 
 `wau %addon_name%`/`wau search %addon_name%` -- search for addon on supported providers
 
-optional args:
-- `--config %path%` -- path to your `config.toml` file in case it's not in default location
+#### optional args
+
+- `--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
 
 ### install
 
 `wau install %addon_name%` -- install addon
 
-optional args:
-- `--config %path%` -- path to your `config.toml` file in case it's not in default location
+#### optional args
+
+- `--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
 
 ### remove
 
 `wau remove %addon_name%` -- removes addon
 
-optional args:
-- `--config %path%` -- path to your `config.toml` file in case it's not in default location
+#### optional args
+
+- `--config %path%` -- path to your `config.toml` file in case it's not in default location or you want to use different config file
 
 ## roadmap
 
