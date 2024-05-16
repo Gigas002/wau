@@ -13,11 +13,6 @@ manifest = "~/.config/manifest.toml"
 # default: ~/.cache/wau
 cache = "~/.cache/wau"
 
-# providers you want to use to update/install addons
-# default: all
-# possible values: github, curse, all
-providers = [ "all" ]
-
 # game flavors you want to use with wau
 # default: all
 # possible values: retail, all
@@ -27,3 +22,9 @@ flavors = [ "all" ]
 # default: stable
 # possible values: stable, beta, alpha
 release_channel = "stable"
+
+[providers]
+# your curse API token,
+# see: https://docs.curseforge.com/?http#accessing-the-service
+# this is required, if you use curse provider
+curse_token = "ABCD..."
