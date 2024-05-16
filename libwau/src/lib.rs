@@ -1,4 +1,7 @@
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use providers::Provider;
 
@@ -23,7 +26,7 @@ impl Wow {
         }
     }
 
-    pub fn get_installed_addons(flavor_path: &PathBuf) -> Option<Vec<Addon>> {
+    pub fn get_installed_addons(flavor_path: &Path) -> Option<Vec<Addon>> {
         let addons_directory = "Interface/AddOns";
         let addons_directory = flavor_path.join(addons_directory);
 
@@ -75,7 +78,7 @@ impl Addon {
         addons
     }
 
-    pub fn determine_addon(_path: &PathBuf) -> Addon {
+    pub fn determine_addon(_path: &Path) -> Addon {
         panic!("aaa")
     }
 

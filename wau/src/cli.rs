@@ -8,7 +8,6 @@ pub struct Cli {
     // pub search
     // pub update
     // pub get
-
     /// Path to your config file
     #[arg(short, long, verbatim_doc_comment)]
     pub config: Option<PathBuf>,
