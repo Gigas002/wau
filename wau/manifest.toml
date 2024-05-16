@@ -1,5 +1,7 @@
-# requires setting flavor path in config file for each used flavor
+# requires setting wow path in config file
 
-[addons]
-recount = { version = "1.0.0", provider = "curse", flavor = "retail" }
-bagnon = { version = "1.0.0", provider = "github", flavor = "classic_cata" }
+[retail]
+dbm = { version = "10.2.40-20-g383fc80", provider = "curse", release_channel = "alpha" }
+
+[classic_cata]
+bagnon = { version = "10.2.30", provider = "github", release_channel = "stable" }
