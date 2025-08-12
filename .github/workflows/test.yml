@@ -23,6 +23,6 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: cargo-test
         run: cargo test --verbose
