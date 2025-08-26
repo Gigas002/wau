@@ -1,0 +1,7 @@
+# requires setting wow path in config file
+
+[retail]
+dbm = { version = "10.2.40-20-g383fc80", provider = "curse", release_channel = "alpha" }
+
+[classic_cata]
+bagnon = { version = "10.2.30", provider = "github", release_channel = "stable" }
