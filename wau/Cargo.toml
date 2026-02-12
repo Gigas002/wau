@@ -14,7 +14,7 @@ libwau = { path = "../libwau" }
 
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
-toml = { version = "0", default-features = false, features = ["parse"] }
+toml = { version = "1", default-features = false, features = ["parse"] }
 dirs = "6"
 # shellexpand = "3"
 
