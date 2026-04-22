@@ -25,6 +25,6 @@ TODO
 
 ## thanks to
 
-- [ajour](https://github.com/ajour/ajour), some implementations are inhereted from there
+- [ajour](https://github.com/ajour/ajour), some implementations are inherited from there
 - [instawow](https://github.com/layday/instawow)
 - [wowup](https://github.com/WowUp)

@@ -1,13 +1,13 @@
 [workspace]
-members = ["libwau", "wau", "tests"]
-resolver = "2"
+members = ["libwau", "wau"]
+resolver = "3"
 
 [workspace.package]
+edition = "2024"
+license = "GPL-3.0-only"
 authors = ["gigas002 <gigas002@pm.me>"]
 homepage = "https://github.com/Gigas002/wau"
 description = "World of Warcraft Addon Updater"
 keywords = ["wow", "warcraft", "cli", "addon", "updater"]
-license = "GPL-3.0-only"
 repository = "https://github.com/Gigas002/wau"
 version = "0.1.0"
-edition = "2021"

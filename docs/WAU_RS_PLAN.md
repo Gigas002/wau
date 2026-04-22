@@ -33,12 +33,12 @@ CLI UX inspiration and “power-user” ergonomics:
 - **Two-crate workspace**:
   - **`libwau`**: addon domain model, manifest/lock/config resolution, provider abstraction, filesystem operations (install/update/remove), and tests.
   - **`wau`**: thin CLI wrapper (arg parsing, printing, interactive prompts).
-- **Multi-provider**: support multiple addon sources via a stable provider trait (CurseForge, GitHub releases, WowInterface, Wago, etc.). Providers are *pluggable*, not hardcoded.
+- **Multi-provider**: support multiple addon sources via a stable provider trait (CurseForge, GitHub releases, WowInterface, Wago, etc.). Providers are _pluggable_, not hardcoded.
 - **Multi-flavor**: support multiple WoW installs and “flavors” (retail/classic-era/classic-cata/etc.) in a uniform way.
 - **Multi-channel**: support update channels (e.g. `stable`, `beta`, `alpha`, `git`) and per-addon overrides.
 - **Own manifest + package management**:
-  - **Manifest** defines *desired state* (what addons, which provider, channel, flavor constraints, optional pinning).
-  - **Lock** records *resolved state* (exact release/build, download URL, checksums, installed folders, timestamps).
+  - **Manifest** defines _desired state_ (what addons, which provider, channel, flavor constraints, optional pinning).
+  - **Lock** records _resolved state_ (exact release/build, download URL, checksums, installed folders, timestamps).
 - **Settings backup/restore**:
   - Support backup/restore of addon settings (WoW `WTF/Account/.../SavedVariables/*.lua` plus per-character SavedVariables where applicable).
   - Store backups in a wau-managed location (in cache or user-specified backup dir) with retention policy (e.g. keep last \(N\) per addon).
@@ -61,8 +61,10 @@ CLI UX inspiration and “power-user” ergonomics:
 ### 1.1.1 Discipline (non-negotiable)
 
 - **Library-first**: all business logic and I/O is in `libwau`; `wau` is a thin presentation/wiring layer.
-- **Step sizing**: follow “small, verifiable steps” (imgvwr/geotiles) rather than big-bang refactors.
-- **Release hygiene**: keep `main` clean of “planning diary noise” and migration-era scaffolding (tofi-rs). Plans live in `docs/`, and historical plans can be moved to a branch/tag when stable.
+- **Step sizing**: follow "small, verifiable steps" (imgvwr/geotiles) rather than big-bang refactors.
+- **Release hygiene**: keep `main` clean of "planning diary noise" and migration-era scaffolding (tofi-rs). Plans live in `docs/`, and historical plans can be moved to a branch/tag when stable.
+- **Stay slim**: keep each module, function, and file focused and minimal. Prefer many small, clear units over few large ones.
+- **Naming**: short but descriptive names; optimize for the reader, not the writer.
 
 ### 1.2 Non-goals
 
@@ -111,9 +113,19 @@ wau/
   wau/
     Cargo.toml
     src/
-      main.rs                 # CLI entrypoint
-      cli.rs                  # clap definitions
-      output.rs               # printing, tables, color decisions
+      main.rs                 # slim entrypoint: init logger, resolve settings, dispatch to app
+      app/
+        mod.rs                # main helpers and top-level dispatch
+      cli/
+        mod.rs                # clap definitions and argument parsing
+      config/
+        mod.rs                # config file loading and XDG path resolution
+      logger/
+        mod.rs                # tracing subscriber init and control
+      output/
+        mod.rs                # printing, tables, color decisions
+      settings/
+        mod.rs                # resolved runtime settings (cli > config merge)
   docs/
     WAU_RS_PLAN.md            # this plan
 ```
@@ -122,10 +134,12 @@ Crate boundary rules:
 
 - `libwau` contains **no clap** and does not print.
 - `wau` contains **no addon logic** beyond calling `libwau`.
+- `cli` and `config` are consumed only inside `settings`; after `Settings` is constructed, only `Settings` is passed around — `cli` and `config` must not be used downstream.
+- `main` is the minimal entrypoint: init logger, resolve settings, call `app`. Helpers live in `app/` (and optionally `utils/`).
 
 ### 2.0 Module + tests file policy (mandatory)
 
-All `libwau` modules are directory modules with a sibling test file. **Tests must NEVER live in the same `.rs` file as logic.**
+All modules across the workspace are directory modules with a sibling test file. **Tests must NEVER live in the same `.rs` file as logic.**
 
 Example pattern (required):
 
@@ -371,6 +385,16 @@ Inventory is best-effort: `.toc` formats vary; parsing must be robust and non-pa
 
 ## 6. CLI (paru-like)
 
+### 6.0 wau module architecture
+
+- **`cli/mod.rs`**: clap definitions and raw argument parsing only. No resolution logic.
+- **`config/mod.rs`**: config file loading (XDG path resolution, TOML parse). No logic beyond deserialization.
+- **`settings/mod.rs`**: merges `cli` args over `config` into a `Settings` struct. The only place `cli` and `config` are consumed. After construction, only `Settings` flows through the app.
+- **`logger/mod.rs`**: tracing subscriber initialization and runtime control.
+- **`output/mod.rs`**: printing helpers, tables, color decisions.
+- **`app/mod.rs`**: main orchestration helpers; `main` delegates here. Utilities may also live in `utils/`.
+- **`main.rs`**: as slim as possible — init logger, resolve settings, call `app`.
+
 The CLI should feel like “a real package manager”:
 
 - concise defaults
@@ -455,9 +479,9 @@ The goal is a predictable set of workflows, with feature matrices, cached builds
 
 ### Phase 0 — Workspace + hygiene
 
-- [ ] Restructure workspace to match §2
-- [ ] Add error types (`thiserror`) + `tracing` foundation
-- [ ] Replace placeholder CI with matrixed build/fmt/clippy/test + typos + deny + dependabot
+- [x] Restructure workspace to match §2
+- [x] Add error types (`thiserror`) + `tracing` foundation
+- [x] Replace placeholder CI with matrixed build/fmt/clippy/test + typos + deny + dependabot
 
 **Verify**: all gates in §7 pass on a clean tree.
 
@@ -540,8 +564,7 @@ Update this plan whenever:
 
 ### Revision history
 
-| Date       | Change |
-| ---------- | ------ |
-| 2026-04-22 | Initial plan created for `wau` rewrite |
+| Date       | Change                                                                                                            |
+| ---------- | ----------------------------------------------------------------------------------------------------------------- |
+| 2026-04-22 | Initial plan created for `wau` rewrite                                                                            |
 | 2026-04-22 | Expanded into a playbook: schema examples, CI blueprint, test discipline, paru mapping, and release hygiene phase |
-

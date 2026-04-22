@@ -1,28 +1,55 @@
-name: test
+name: Test and coverage
+
 on:
-  workflow_dispatch:
-    inputs:
-      runs-on:
-        description: "The operating system to run the job on"
-        required: true
-        type: choice
-        options:
-          - ubuntu-latest
-          - windows-latest
-          - macos-latest
-  workflow_call:
-    inputs:
-      runs-on:
-        description: "The operating system to run the job on"
-        required: true
-        type: string
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
 
 jobs:
-  test:
-    runs-on: ${{inputs.runs-on}}
-    env:
-      CARGO_TERM_COLOR: always
+  test-coverage:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: cargo-test
-        run: cargo test --verbose
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - name: Build cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Run tests
+        run: cargo test --all-features --verbose
+      - name: Generate coverage report (libwau)
+        run: |
+          cargo llvm-cov --all-features -p libwau --lcov --output-path lcov-libwau.info
+      - name: Generate coverage report (wau)
+        run: |
+          cargo llvm-cov --all-features -p wau --lcov --output-path lcov-wau.info
+      - name: Upload libwau coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          files: ./lcov-libwau.info
+          flags: libwau
+          name: libwau
+          fail_ci_if_error: false
+          verbose: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload wau coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          files: ./lcov-wau.info
+          flags: wau
+          name: wau
+          fail_ci_if_error: false
+          verbose: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
