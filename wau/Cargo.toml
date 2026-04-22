@@ -12,11 +12,6 @@ repository.workspace = true
 [dependencies]
 libwau = { path = "../libwau" }
 
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-toml = { version = "0", default-features = false, features = ["parse"] }
-dirs = "6"
-# shellexpand = "3"
-
-# colors feature can be used for pretty output
 clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"

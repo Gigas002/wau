@@ -1,28 +1,41 @@
-name: build
+name: Build
+
 on:
-  workflow_dispatch:
-    inputs:
-      runs-on:
-        description: "The operating system to run the job on"
-        required: true
-        type: choice
-        options:
-          - ubuntu-latest
-          - windows-latest
-          - macos-latest
-  workflow_call:
-    inputs:
-      runs-on:
-        description: "The operating system to run the job on"
-        required: true
-        type: string
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
 
 jobs:
   build:
-    runs-on: ${{inputs.runs-on}}
-    env:
-      CARGO_TERM_COLOR: always
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: all-features
+            cargo_args: --workspace --release --all-features
+          - name: default
+            cargo_args: --workspace --release
+          - name: minimal
+            cargo_args: --workspace --release --no-default-features
+
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v6
-      - name: cargo-build
-        run: cargo build --verbose
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.name }}
+
+      - name: Build (${{ matrix.name }})
+        run: cargo build ${{ matrix.cargo_args }}
