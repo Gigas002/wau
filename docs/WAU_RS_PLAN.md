@@ -24,6 +24,13 @@ CLI UX inspiration and “power-user” ergonomics:
 
 - [paru](https://github.com/morganamilo/paru)
 
+**Example artifacts (schemas + CLI sketch)** live under `examples/` so this plan stays readable and reviewers can diff concrete shapes without embedding TOML here:
+
+- `examples/config.toml` — paths, defaults, **install tags**, **`[logging]`**, provider secrets
+- `examples/manifest.toml` — desired addons, channels, flavor constraints; **pin** shapes are **forward-looking** (late phase), see §1.1.1
+- `examples/lock.toml` — resolved artifacts + install bookkeeping
+- `examples/cli.md` — command names, flags, paru mapping, deferred commands
+
 ---
 
 ## 1. Goals and constraints
@@ -33,23 +40,19 @@ CLI UX inspiration and “power-user” ergonomics:
 - **Two-crate workspace**:
   - **`libwau`**: addon domain model, manifest/lock/config resolution, provider abstraction, filesystem operations (install/update/remove), and tests.
   - **`wau`**: thin CLI wrapper (arg parsing, printing, interactive prompts).
-- **Multi-provider**: support multiple addon sources via a stable provider trait (CurseForge, GitHub releases, WowInterface, Wago, etc.). Providers are _pluggable_, not hardcoded.
-- **Multi-flavor**: support multiple WoW installs and “flavors” (retail/classic-era/classic-cata/etc.) in a uniform way.
-- **Multi-channel**: support update channels (e.g. `stable`, `beta`, `alpha`, `git`) and per-addon overrides.
+- **Multi-provider**: multiple addon sources behind a **stable provider trait** and registry. Providers are pluggable; **first release** ships a **small, high-value set** (see §4.2); more sources are added in **post-release** phases after surveying what players actually use.
+- **Multi-flavor + install disambiguation**:
+  - Support Blizzard-style **flavor ids** (retail, classic-era, classic-cata, …) for resolution metadata.
+  - Support **multiple physical installs** that share the same flavor id (private / “pirate” servers, duplicate clients, experimental trees) via a user-defined **`install_tag`** (or equivalent) in config so manifests/locks/commands target the intended tree without ambiguity.
+- **Community and private ecosystems**:
+  - **Killer feature (architecture)**: custom realms and their addon ecosystems must be supportable **without forking** `libwau`: third-party **provider plugins** (or in-process registration from wrapper binaries) and **custom flavor / channel semantics** where the core only treats them as opaque ids + paths passed to providers.
+  - **Not** a promise to ship every exotic host out of the box — a promise that the **crate boundaries** (provider trait, config-driven install roots, flavor/tag typing) do not hard-code “only official Blizzard.”
+- **Multi-channel**: stable / beta / alpha / git-style streams and per-addon overrides where providers support them.
 - **Own manifest + package management**:
-  - **Manifest** defines _desired state_ (what addons, which provider, channel, flavor constraints, optional pinning).
+  - **Manifest** defines _desired state_ (what addons, which provider, channel, flavor constraints; **pinning / specific versions are late**, see §1.1.1).
   - **Lock** records _resolved state_ (exact release/build, download URL, checksums, installed folders, timestamps).
-- **Settings backup/restore**:
-  - Support backup/restore of addon settings (WoW `WTF/Account/.../SavedVariables/*.lua` plus per-character SavedVariables where applicable).
-  - Store backups in a wau-managed location (in cache or user-specified backup dir) with retention policy (e.g. keep last \(N\) per addon).
-  - Backups are taken automatically on update/remove (configurable), and can be invoked manually.
-- **Previous-version installation**:
-  - Support installing an older version (“downgrade”) and reinstalling any prior resolved version from lock history.
-  - Support “pinning” an addon to a specific version/release id in the manifest.
-- **Provider switching (source migration)**:
-  - Allow a logical addon to switch providers (e.g. CurseForge → Wago) while keeping its installed folder identity and settings intact.
-  - Switching is explicit and recorded (manifest change + lock records previous provider resolution).
-- **Paru-like CLI design**: terse defaults for power users, clear subcommands and short flags, consistent exit codes, useful `--help`, optional color, non-interactive mode.
+- **First-release resolution rule**: **install and update only ever fetch the single “latest” artifact** the provider returns for that manifest row’s identifiers + **channel** + install flavor context. There is **no** “install this semver / this file id / this commit” behavior in the resolver until the late **version-selection** work (§1.1.1, Phase 8). Schemas may still **parse** optional `pin` fields for forward compatibility, but the engine treats them as **unsupported** (reject manifest with pins, or ignore with a loud warning—pick one policy in implementation docs).
+- **Paru-like CLI design**: terse defaults, clear subcommands and short flags, consistent exit codes, useful `--help`, optional color, non-interactive mode. **Concrete command drafts**: `examples/cli.md`.
 - **Safe installs**:
   - Never corrupt `Interface/AddOns` on partial failure.
   - Staging installs in a temp dir; only “swap in” on success.
@@ -58,7 +61,25 @@ CLI UX inspiration and “power-user” ergonomics:
   - **v0 target**: Linux.
   - Post-v0: Windows and macOS.
 
-### 1.1.1 Discipline (non-negotiable)
+#### 1.1.1 Explicitly phased later (not required to ship the first pipeline)
+
+The **data model and file schemas** should still **reserve** optional fields / extension points (e.g. lock history tables, backup metadata hooks, manifest `pin` tables) so these features land without invasive refactors:
+
+- **SavedVariables backup / restore** automation, retention policies, and CLI around them.
+- **Specific-version installation** of any kind: manifest **`pin`** (semver, `file_id`, tag, commit, sha, …), **git ref pinning** beyond “whatever latest means for that provider”, CLI **`--version` / `--rollback`**, and **rollback / downgrade UX** (rich lock history, reinstall older resolution, interactive pickers). **First release** remains **latest-only** (§1.1, §4.1.1).
+- **Shell completions** for **bash**, **zsh**, **fish**, and **Nushell** (generate or ship completion scripts; document install paths per shell). Tracked as **Phase 10** — not required for the first UX-polish milestone (Phase 5).
+
+These are **late roadmap steps** with their own verification stories once core sync is stable.
+
+#### 1.1.2 Provider switching — out of scope for first release (design only)
+
+**User-visible “migrate this addon from provider A to provider B while preserving identity”** is **deferred**: it couples install layout, settings, and **cross-provider identity**, which we **cannot** infer reliably today.
+
+- There is **no built-in, queryable, trustworthy database** mapping “CurseForge project X ≡ GitHub repo Y ≡ WowInterface file Z.” Without that, “switch provider for the same logical addon” is either **manual** (user edits manifest and accepts a new identity) or **heuristic** (fragile).
+- **Research note**: investigate whether projects like **[instawow](https://github.com/layday/instawow)** (or others) maintain an **open**, reusable crosswalk. If a community-maintained mapping exists and is license-compatible, **future** automation becomes realistic; if not, switching remains an **explicit manifest edit** and reinstall, not a magic core feature.
+- **Engineering requirement**: still design `libwau` so a **future** “switch” or “alias” layer could exist (stable internal ids, provider-agnostic install records, clear separation between “manifest row” and “installed artifact record”) — but **do not** implement migration orchestration in early phases.
+
+### 1.2 Discipline (non-negotiable)
 
 - **Library-first**: all business logic and I/O is in `libwau`; `wau` is a thin presentation/wiring layer.
 - **Step sizing**: follow "small, verifiable steps" (imgvwr/geotiles) rather than big-bang refactors.
@@ -66,21 +87,24 @@ CLI UX inspiration and “power-user” ergonomics:
 - **Stay slim**: keep each module, function, and file focused and minimal. Prefer many small, clear units over few large ones.
 - **Naming**: short but descriptive names; optimize for the reader, not the writer.
 
-### 1.2 Non-goals
+### 1.3 Non-goals
 
 - GUI, background daemon, tray integration.
 - Full “catalog browser” UI; CLI only.
 - Syncing addons across machines automatically (can be layered later via manifest + lock).
-- Supporting every provider immediately: the architecture must make it easy, but v0 ships with a minimal set of working providers.
+- **First-class automated provider switching** in early releases (see §1.1.2).
+- **Non-latest installs** in early releases: no provider-backed “install exactly this version / this file / this commit” in the **resolution engine** (see §1.1.1).
+- Supporting **every** provider immediately: architecture must allow addition; **first release** focuses on **CurseForge + WoWInterface + GitHub** (plus a **Local** path/URL provider for tests and power users). Additional hosts are **post-release** work after demand research.
 
-### 1.3 Definitions
+### 1.4 Definitions
 
 - **Addon**: an installed package in `Interface/AddOns/` (usually multiple folders) described by one or more `.toc` files.
-- **Provider**: remote index + artifact distribution service (CurseForge, GitHub, …).
-- **Flavor**: a WoW “product” install folder (e.g. `_retail_`, `_classic_`).
-- **Channel**: release stream preference (stable/beta/alpha/git).
+- **Provider**: remote index + artifact distribution service (CurseForge, GitHub, WowInterface, …) implementing the provider trait.
+- **Flavor**: logical WoW product line used in resolution metadata (e.g. retail vs classic-era vs classic-cata).
+- **Install tag**: user-defined label in config identifying **one** WoW root + addons tree; disambiguates multiple installs (same or different flavor ids). See `examples/config.toml`.
+- **Channel**: release stream preference (stable/beta/alpha/git-style) interpreted per provider.
 
-### 1.4 Compatibility targets (behavioral reference only)
+### 1.5 Compatibility targets (behavioral reference only)
 
 The following projects are referenced for **semantics and UX ideas**, not for architecture replication:
 
@@ -97,12 +121,17 @@ The following projects are referenced for **semantics and UX ideas**, not for ar
 wau/
   Cargo.toml                  # workspace
   Cargo.lock                  # committed
+  examples/                   # illustrative schemas + CLI draft (not embedded in this plan)
+    config.toml
+    manifest.toml
+    lock.toml
+    cli.md
   libwau/
     Cargo.toml
     src/
       lib.rs
       error.rs
-      model/                  # Flavor, Channel, ProviderId, AddonId, etc.
+      model/                  # Flavor, Channel, ProviderId, AddonId, InstallTag, etc.
       config/                 # config.toml types + XDG resolution
       manifest/               # manifest.toml schema + validation
       lock/                   # lockfile schema + read/write
@@ -169,13 +198,27 @@ mod tests;
   - network + downloads: async (`reqwest`)
   - filesystem + extraction: synchronous, but orchestrated safely (staging + atomic rename)
 
+### 2.2 Provider feature gating (mandatory)
+
+Providers differ wildly in **protocols, credentials, optional system tools, and transitive deps** (e.g. a git-snapshot provider may shell out to **`git`** or link VCS libraries; another may pull a heavy SDK). To keep **minimal builds**, **predictable CI**, and **clear optional dependencies**, the following rules apply:
+
+- **Every concrete provider** in `libwau` lives behind its **own Cargo `feature`** (one feature per provider, or per small provider group if truly inseparable — document the exception). No provider-specific dependencies compile into the default graph unless that feature is enabled.
+- **`wau`** passes through the same feature flags to `libwau` (thin `wau` features that enable `libwau` features). Downstream packagers can ship `wau` with a subset of providers.
+- **Registry / trait wiring** in `libwau` must remain **buildable** with `--no-default-features` (core types + empty or Local-only registry, as defined for that mode).
+- **Community or third-party providers** follow the same rule: **separate feature** and/or **separate workspace crate** that depends on `libwau` and registers through a single supported extension path — never “always on” hidden imports.
+- **CI** (see §7.2) must keep exercising **default features**, **`--no-default-features`**, and **`--all-features`** so optional provider deps do not bitrot.
+
+Rationale: avoids forcing every user to pay for Curse + Git + WowInterface + future hosts; documents “this binary was built without provider X” at compile time where possible.
+
 ---
 
 ## 3. Data model
 
+Illustrative **TOML shapes** are maintained in `examples/*.toml` so contributors can review and propose edits without bloating this document. The plan only states **intent** and **invariants**.
+
 ### 3.1 Config (`config.toml`)
 
-Purpose: machine-local paths, defaults, and secrets.
+Purpose: machine-local paths, defaults, **install tags** (multiple roots / private servers), **default log level**, and secrets.
 
 Target location resolution:
 
@@ -183,106 +226,34 @@ Target location resolution:
 - `$XDG_CONFIG_HOME/wau/config.toml` (fallback `~/.config/wau/config.toml`)
 - `--config <path>` override
 
-Includes:
+Includes (see `examples/config.toml`):
 
-- WoW root(s) or explicit flavor paths
-- default flavor(s)
+- one or more **tagged** WoW install roots + associated flavor id
+- default install tag / flavor / channel for commands
 - cache dir
+- **`[logging].level`** — default tracing verbosity when CLI does not override (`trace` / `debug` / `info` / `warn` / `error`; exact allowed set in schema)
 - provider credentials (e.g. CurseForge API token)
-
-**Target shape (illustrative):**
-
-```toml
-[paths]
-# Optional: explicit per-flavor install roots (preferred; avoids guessing).
-retail = "/games/World of Warcraft/_retail_"
-classic = "/games/World of Warcraft/_classic_"
-
-# Where wau stores downloads, extracted staging dirs, and metadata.
-cache = "~/.cache/wau"
-
-[defaults]
-flavor = "retail"
-channel = "stable"
-
-[providers.curseforge]
-api_key = "..."
-```
 
 ### 3.2 Manifest (`manifest.toml`)
 
 Purpose: desired addons, provider selection, per-addon overrides. Shareable.
 
-Includes:
+Includes (see `examples/manifest.toml`):
 
-- `[[addon]] name = "..."`
-- `provider = "curse" | "github" | ...`
-- provider-specific identifiers
-- optional `channel`, optional pin constraints, optional flavor constraints
-
-**Target shape (illustrative):**
-
-```toml
-schema = 1
-
-[[addon]]
-name = "Bagnon"
-provider = "curseforge"
-project_id = 12345
-channel = "stable"            # optional override
-flavors = ["retail"]          # optional restriction
-pin = { version = "10.0.0" }  # optional; provider-specific pins also allowed (file_id/tag/sha)
-
-[[addon]]
-name = "SomeAddon"
-provider = "github"
-repo = "owner/repo"
-asset_regex = "SomeAddon-.*\\.zip"
-channel = "beta"
-```
+- repeated addon tables with `name`, `provider`, provider-specific ids
+- optional `channel`, flavor constraints
+- **First release**: rows are interpreted as “this addon from this provider/channel for these flavors”; resolution is **latest-only** (§4.1.1).
+- **Late / forward-looking in examples**: `pin`, git-ref modes, duplicate-name edge cases — types may parse them, **resolver must not** honor them until Phase 8.
 
 ### 3.3 Lock (`lock.toml`)
 
 Purpose: reproducibility + speed; records resolved artifacts and installed folders.
 
-Includes per addon:
+Includes per addon (see `examples/lock.toml`):
 
-- resolved version/release id
-- download URL + sha256 (when available)
-- installed folder list
-- timestamps, provider metadata
-
-**Target shape (illustrative):**
-
-```toml
-schema = 1
-generated_at = "2026-04-22T00:00:00Z"
-
-[[addon]]
-name = "Bagnon"
-provider = "curseforge"
-project_id = 12345
-flavor = "retail"
-channel = "stable"
-
-# Resolution / reproducibility
-resolved_version = "10.0.0"
-resolved_id = "cf-file-999999"
-download_url = "https://..."
-sha256 = "..."
-
-# Install bookkeeping
-installed_dirs = ["Bagnon", "Bagnon_Config"]
-installed_at = "2026-04-22T00:00:00Z"
-
-# Optional: keep last-known-good resolutions to enable easy rollback/downgrade.
-[[addon.history]]
-resolved_version = "9.9.0"
-resolved_id = "cf-file-888888"
-download_url = "https://..."
-sha256 = "..."
-installed_at = "2026-03-01T00:00:00Z"
-```
+- resolved version/release id, download URL, sha256 when available
+- installed folder list, timestamps, provider metadata
+- optional **history** sections (shaped in examples, implemented in late phases for rollback UX)
 
 ---
 
@@ -292,62 +263,68 @@ installed_at = "2026-03-01T00:00:00Z"
 
 Each provider must support, at minimum:
 
-- search (optional for v0, but encouraged)
-- resolve a manifest entry to a concrete downloadable artifact for a given flavor + channel
+- search (optional for early releases, but encouraged)
+- **resolve latest** — given a manifest row + `(install context → flavor metadata, channel)`, return the **single current “latest”** artifact that provider defines for that channel (no pin arguments in **first release**)
 - download artifact to a path (or provide URL + checksum)
 
-Providers must be written so new providers can be added without changing core orchestration logic.
+Providers must be written so **new providers can be added without changing core orchestration logic** — including **community-maintained** providers for private servers, as long as they implement the trait and are registered behind **Cargo features** per §2.2 (static registration in code is fine; **no** always-on provider deps).
 
 ### 4.1.1 Resolution rules (provider-agnostic)
 
-Given a manifest entry + `(flavor, channel)`:
+**First release — latest only**
 
-- Provider resolves to a **single** artifact (zip) plus identity metadata:
-  - **provider-scoped ID** (file id / release tag / commit sha)
+Given a manifest entry + install context (tag → paths + flavor id) + channel:
+
+- Provider resolves to a **single** artifact (zip or archive) — the **latest** offering for that addon identity and channel the provider exposes — plus identity metadata:
+  - **provider-scoped ID** (file id / release tag / commit sha, …)
   - **version string** (human readable)
   - **download URL** (or a streaming body)
   - optional **checksum** (sha256)
   - optional “supported flavors/game versions” metadata used to avoid wrong installs
-- Lockfile records the resolution exactly so re-running installs is deterministic.
-- If the manifest specifies a **pin**:
-  - Providers must attempt to resolve the pinned target; failing that, the operation errors with a clear message (no silent “closest match”).
-- If the manifest changes **provider** for the same logical addon name:
-  - Treat as a **provider switch**; resolve from the new provider; install flow runs normally.
-  - Preserve settings backups and installed directory tracking across the switch (see §5.3).
+- Lockfile records whatever was installed so the next run can detect **“still latest vs newer available”** for updates; **reproducible non-latest installs** are a **late** concern (Phase 8).
 
-### 4.2 v0 providers
+**Late phase — pins and specific versions**
 
-Ship at least:
+- If the manifest specifies a **pin** (or CLI requests a version): providers resolve that exact target; failing that, error clearly (no silent “closest match”). Implemented together with Phase 8 / manifest policy.
 
-- **Local** provider (file path or URL): enables end-to-end install/update pipeline without external API dependencies.
-- **CurseForge** provider skeleton: types + auth + minimal “resolve latest file” path; real install support can land incrementally.
+**Future** (if provider switching / aliases exist): any migration rules must be explicit and identity-backed — not implied from addon display names.
 
-Future (explicitly planned):
+### 4.2 First-release vs post-release providers
 
-- GitHub Releases
-- WowInterface
-- Wago
+**First public release (target set)** — ship working, tested integrations for:
+
+- **CurseForge**
+- **WoWInterface**
+- **GitHub** (releases + git-archive style as sketched in examples)
+- **Local** (path or `file://` / HTTP URL to a zip): end-to-end tests and power-user workflows without catalog APIs
+
+**Post-release (research-driven)**:
+
+- Survey usage (forums, Discord, existing launchers) and add providers such as **Wago**, other CDNs, or community indexes — each behind the same trait + registry.
+- Re-evaluate **provider switching** only if a **maintainable cross-provider identity story** exists (§1.1.2).
 
 ---
 
 ## 5. Operations
+
+Core loop (early phases):
 
 - **Inventory**: scan installed addons from `Interface/AddOns` by reading `.toc` metadata; group folders belonging to the same addon.
 - **Install**: resolve manifest → download → extract → determine top-level addon dirs → stage → swap into `AddOns` → update lock.
 - **Update**: compare lock to provider latest for chosen channel; apply install flow; update lock.
 - **Remove**: remove all directories recorded in lock (or discovered) for an addon; update lock.
 - **List/status**: show installed addons, manifest addons, and update availability.
-- **Backup/restore**: backup addon settings before destructive operations; allow restore from a chosen backup.
-- **Downgrade/rollback**: install a previous version using manifest pin or lock history.
+
+**Late phases** (see §1.1.1): backup/restore, downgrade/rollback UX, richer history — keep types and file layout **forward-compatible** from day one.
 
 Safety rules:
 
-- Always install into a staging directory under the target flavor, then rename into place.
-- Keep a rollback directory for a single operation (optional for v0; required before 1.0).
+- Always install into a staging directory under the target install tag’s addons path, then rename into place.
+- Keep a rollback directory for a single operation (optional for v0; tighten before 1.0).
 
 ### 5.1 Install semantics (zip handling)
 
-- Treat provider artifacts as **zip** bundles by default.
+- Treat provider artifacts as **zip** bundles by default (or provider-defined archive format with explicit support).
 - Extract into a **staging directory** under cache.
 - Determine which top-level folders are addon directories (contains at least one `.toc`).
 - Install by copying/renaming those directories into `Interface/AddOns` atomically.
@@ -364,80 +341,29 @@ Inventory is defined by scanning `Interface/AddOns/*/*.toc` and parsing at minim
 
 Inventory is best-effort: `.toc` formats vary; parsing must be robust and non-panicking.
 
-### 5.3 Settings backup semantics (SavedVariables)
+### 5.3 Settings backup semantics (SavedVariables) — late phase
 
-- Back up settings from:
-  - account-wide SavedVariables: `WTF/Account/<AccountName>/SavedVariables/*.lua`
-  - character-specific SavedVariables (if present): `WTF/Account/<AccountName>/<Realm>/<Character>/SavedVariables/*.lua`
-- Backups are stored per logical addon and timestamped.
-- Default behavior for v0:
-  - **On update**: create backup before replacing addon directories.
-  - **On remove**: create backup before deletion.
-  - Provide `--no-backup` to opt out per command; config controls defaults and retention.
+Deferred feature set; when implemented:
 
-### 5.4 Previous version install semantics
+- Back up settings from account-wide and character-specific `SavedVariables` trees.
+- Timestamped backups per logical addon; configurable retention and `--no-backup` escapes.
 
-- Allow selecting a specific version via manifest `pin` or CLI flag.
-- Prefer re-installing from lock history (already-known URL/checksum) when possible; otherwise resolve from provider for that version.
-- If the selected version is unavailable from the current provider, fail clearly and suggest switching provider or unpinning.
+### 5.4 Previous version install semantics — late phase (Phase 8)
+
+Deferred feature set; when implemented:
+
+- Prefer re-installing from lock history when URLs/checksums are still valid.
+- Honor CLI and manifest pins as drafted in `examples/cli.md` and `examples/manifest.toml`.
 
 ---
 
 ## 6. CLI (paru-like)
 
-### 6.0 wau module architecture
+**Draft command surface, flags, paru mapping, and explicitly deferred commands** live in:
 
-- **`cli/mod.rs`**: clap definitions and raw argument parsing only. No resolution logic.
-- **`config/mod.rs`**: config file loading (XDG path resolution, TOML parse). No logic beyond deserialization.
-- **`settings/mod.rs`**: merges `cli` args over `config` into a `Settings` struct. The only place `cli` and `config` are consumed. After construction, only `Settings` flows through the app.
-- **`logger/mod.rs`**: tracing subscriber initialization and runtime control.
-- **`output/mod.rs`**: printing helpers, tables, color decisions.
-- **`app/mod.rs`**: main orchestration helpers; `main` delegates here. Utilities may also live in `utils/`.
-- **`main.rs`**: as slim as possible — init logger, resolve settings, call `app`.
+- `examples/cli.md`
 
-The CLI should feel like “a real package manager”:
-
-- concise defaults
-- short flags
-- a “sync/update” command that can do `--refresh` + `--sysupgrade` style behavior
-
-Target commands (names may evolve, but ergonomics are the goal):
-
-- `wau sync` (install/update; analogous to `paru -S`)
-  - `wau sync <addon...>` install
-  - `wau sync --update` update from manifest/lock
-  - `wau sync --manifest <path>` override
-  - `wau sync --flavor <retail|classic...>`
-  - `wau sync --channel <stable|beta|alpha|git>`
-- `wau search <query>` (analogous to `paru -Ss`)
-- `wau remove <addon...>` (analogous to `paru -R`)
-- `wau list` (installed + manifest status; analogous to `paru -Q`)
-- `wau info <addon>` (details; analogous to `paru -Qi`)
-
-### 6.1 Paru-like command mapping (intent)
-
-- **Sync/install/update**
-  - `paru -S <pkg>` ⇢ `wau sync <addon>`
-  - `paru -Syu` ⇢ `wau sync --refresh --update` (refresh provider caches + update)
-  - `--noconfirm` ⇢ same meaning in `wau`
-- **Search**
-  - `paru -Ss <query>` ⇢ `wau search <query>`
-- **Query installed**
-  - `paru -Q` / `-Qi` ⇢ `wau list` / `wau info`
-- **Remove**
-  - `paru -R <pkg>` ⇢ `wau remove <addon>`
-
-### 6.2 Additional commands/flags (for goals in §1.1)
-
-- **Backup/restore**
-  - `wau backup [addon...]` (create settings backup now)
-  - `wau restore <addon> [--backup <id|timestamp>]`
-- **Version selection**
-  - `wau sync <addon> --version <...>` (install/downgrade)
-  - `wau sync <addon> --rollback` (reinstall last-known-good from lock history)
-- **Provider switching**
-  - `wau sync <addon> --provider <...>` (override provider for one operation)
-  - Manifest remains the canonical desired provider; CLI overrides are for one-off actions unless persisted.
+This section only fixes **architecture rules** (see §2 and the top of `examples/cli.md`): clap stays in `wau`, logic in `libwau`, `Settings` is the merged view.
 
 ---
 
@@ -487,9 +413,9 @@ The goal is a predictable set of workflows, with feature matrices, cached builds
 
 ### Phase 1 — Core model + config/manifest/lock schemas
 
-- [ ] Implement `Flavor`, `Channel`, provider ids, and typed keys
-- [ ] Implement XDG config resolution and parse `config.toml`
-- [ ] Implement `manifest.toml` and `lock.toml` read/write + validation
+- [ ] Implement `Flavor`, `Channel`, provider ids, **install tag** / multi-root config model, and typed keys
+- [ ] Implement XDG config resolution and parse `config.toml` (paths, defaults, **`[logging].level`**, provider tables; keep forward-compatible optional sections)
+- [ ] Implement `manifest.toml` and `lock.toml` read/write + validation aligned with `examples/*.toml` (optional `pin` keys may parse for forward compat; **reject or warn** if pins present until Phase 8 — document the chosen policy)
 
 **Verify**: unit tests for parse/merge/validation.
 
@@ -497,7 +423,7 @@ The goal is a predictable set of workflows, with feature matrices, cached builds
 
 - [ ] `.toc` parser (minimal but robust)
 - [ ] `Interface/AddOns` scanner and grouping
-- [ ] `wau list` shows installed addons
+- [ ] `wau list` shows installed addons for a selected install tag / flavor
 
 **Verify**: tests with fixture addon folders + `.toc` samples.
 
@@ -506,37 +432,68 @@ The goal is a predictable set of workflows, with feature matrices, cached builds
 - [ ] Download/extract zip
 - [ ] Staging install + atomic swap
 - [ ] Lock updates
-- [ ] `wau sync <path-or-url>` and `wau remove`
+- [ ] `wau sync` from local path/URL and `wau remove`
 
 **Verify**: integration tests with local zip fixtures.
 
-### Phase 4 — Providers + resolution engine
+### Phase 4 — First-release providers + resolution engine
 
-- [ ] Provider trait and registry
-- [ ] CurseForge minimal “resolve latest file for flavor+channel” path (auth via token)
-- [ ] Manifest -> resolution -> plan engine
+- [ ] Provider trait and registry; **each provider behind a Cargo `feature`** in `libwau` with matching passthrough in `wau` (§2.2)
+- [ ] **CurseForge**: auth + **resolve latest** for flavor+channel + download
+- [ ] **WoWInterface**: **resolve latest** + download path
+- [ ] **GitHub**: **resolve latest** matching row (releases asset regex and/or git-ref “tip” mode per examples) — **no** honoring `pin` / non-tip refs until Phase 8
+- [ ] Manifest → resolution → lock plan engine (**latest-only** semantics)
 
-**Verify**: unit tests with mocked provider; manual smoke test against CurseForge.
+**Verify**: unit tests with mocked HTTP; smoke tests per provider as feasible in CI (may be manual + documented for keys).
 
 ### Phase 5 — Paru-like UX polish
 
+- [ ] Commands per `examples/cli.md` (iterate the file as reality diverges)
 - [ ] interactive confirmation prompts (opt-out `--noconfirm`)
 - [ ] `--quiet`, `--verbose`, consistent exit codes
-- [ ] shell completions (optional; similar to tofi-rs approach)
 
 ### Phase 6 — Release discipline + cleanup (tofi-rs style)
 
 - [ ] Ensure `main` does not carry migration-era scaffolding (temporary notes, “TODO diaries”, stale docs)
-- [ ] Ensure docs point to the current behavior and current schema versions
+- [ ] Ensure docs and `examples/` reflect current schema versions
 - [ ] Tag a v0 release and document compatibility expectations
+
+### Phase 7 — Backup / restore + retention (late)
+
+- [ ] SavedVariables backup on destructive ops (opt-out flags)
+- [ ] `wau backup` / `wau restore` as in `examples/cli.md` once stabilized
+
+**Verify**: integration tests with synthetic `WTF` trees.
+
+### Phase 8 — Pins, specific versions, history, downgrade / rollback (late)
+
+- [ ] Honor manifest **`pin`** and equivalent provider-specific selection (semver, `file_id`, tag, commit, …)
+- [ ] Lock **history** sections + CLI flows (`--version`, `--rollback`) as drafted in examples
+- [ ] GitHub git-ref modes that are not “track tip” / latest-only, if still desired
+
+**Verify**: fixture-driven tests for non-latest resolution and reinstall from history.
+
+### Phase 9 — Provider switching / cross-provider identity (future, conditional)
+
+- [ ] Only revisit after §1.1.2 research; may remain “manual manifest edit only” permanently if no trustworthy mapping exists.
+
+### Phase 10 — Shell completions (late)
+
+- [ ] **bash** completion (`wau` subcommands, flags, static values where feasible)
+- [ ] **zsh** completion (same surface; `_wau`-style script or generated equivalent)
+- [ ] **fish** completion
+- [ ] **Nushell** completion (export or hand-maintained completions file per nu conventions)
+- [ ] Document installation (system package vs `wau completion <shell>`-style generator — pick one approach and test on Linux first)
+
+**Verify**: manual smoke in each shell; optional CI smoke only where cheap (e.g. bash `-n` / `compgen` checks).
 
 ---
 
 ## 9. Definition of done (v0)
 
-- [ ] `wau list` prints installed addons for a selected flavor
-- [ ] `wau sync` installs addons from `manifest.toml` using at least one working provider
-- [ ] `wau sync --update` updates according to channel rules
+- [ ] `wau list` prints installed addons for a selected install tag / flavor
+- [ ] `wau sync` installs addons from `manifest.toml` using **Local** and at least **one** remote provider end-to-end (expand toward full first-release set in Phase 4); **only latest** provider resolution, **no** pin / specific-version paths
+- [ ] `wau sync --update` updates to **latest** per channel rules (same constraint)
 - [ ] `wau remove` removes installed addon dirs safely
 - [ ] Lockfile correctly tracks installed dirs and resolved artifact identity
 - [ ] CI green on pushes/PRs
@@ -546,11 +503,13 @@ The goal is a predictable set of workflows, with feature matrices, cached builds
 
 ## 10. Post-v0 roadmap (toward 1.0)
 
-- **Provider expansion**: GitHub Releases, WowInterface, Wago; define stable provider IDs and normalization rules.
-- **Platform expansion**: add Windows + macOS support (paths, extraction quirks, filesystem semantics, and CI coverage).
-- **Lock stability**: stable lock schema with forward-compatible parsing; ensure upgrades preserve data.
-- **Rollback**: implement a real rollback strategy for install/update failures (required before 1.0).
-- **Performance**: cache provider metadata and downloads; avoid redundant unzip/work when lock indicates no change.
+- **Provider expansion (post-release)**: additional hosts by demand (e.g. Wago); stable provider IDs and normalization rules in `examples/manifest.toml` + docs.
+- **Private / custom servers**: document a **cookbook** pattern: custom `install_tag`, flavor id strategy, and a small custom provider crate or module.
+- **Platform expansion**: Windows + macOS (paths, extraction quirks, CI).
+- **Lock stability**: forward-compatible parsing; migrations preserve data.
+- **Rollback**: operational rollback for failed install/update (required before 1.0).
+- **Performance**: metadata and download caches; skip redundant work when lock shows no change.
+- **Shell completions**: bash / zsh / fish / Nushell (see **Phase 10**).
 
 ---
 
@@ -562,9 +521,12 @@ Update this plan whenever:
 - phases are reordered or new ones are added
 - CI/tooling layout changes
 
+When **example shapes** change, update `examples/*.toml` / `examples/cli.md` first (or in the same PR), then adjust prose here if invariants moved.
+
 ### Revision history
 
-| Date       | Change                                                                                                            |
-| ---------- | ----------------------------------------------------------------------------------------------------------------- |
-| 2026-04-22 | Initial plan created for `wau` rewrite                                                                            |
+| Date       | Change |
+| ---------- | ------ |
+| 2026-04-22 | Initial plan created for `wau` rewrite |
 | 2026-04-22 | Expanded into a playbook: schema examples, CI blueprint, test discipline, paru mapping, and release hygiene phase |
+| 2026-04-23 | Re-scoped first release providers (Curse + WoWInterface + GitHub + Local); **latest-only** resolution (pins → Phase 8); deferred backup/switching; install tags + private-server extensibility; moved TOML/CLI drafts to `examples/`; late phases 7–10; **§2.2** per-provider Cargo features; **`[logging].level`** in config + §3.1 |
