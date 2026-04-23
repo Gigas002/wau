@@ -1,0 +1,40 @@
+# Example `config.toml` (machine-local). Schema is illustrative until implemented.
+# Canonical narrative lives in `docs/WAU_RS_PLAN.md`; edit shapes here first, then sync the plan’s prose if needed.
+
+# Config format version for forward-compatible parsing.
+schema = 1
+
+# Default install context when a command omits `--install` / `--tag` (exact flag TBD; see examples/cli.md).
+[defaults]
+flavor = "retail"
+channel = "stable"
+install_tag = "retail-main"
+
+# Default tracing filter for `wau` / `libwau` (CLI flags or env may override; exact merge order TBD).
+[logging]
+level = "info"
+
+# Global cache: downloads, staging, local provider metadata cache.
+[paths]
+cache = "~/.cache/wau"
+
+# Multiple WoW roots: same base `flavor` may appear more than once; `tag` disambiguates (private server, second retail copy, etc.).
+[[paths.installs]]
+tag = "retail-main"
+flavor = "retail"
+wow_root = "/games/World of Warcraft"
+
+[[paths.installs]]
+tag = "classic-official"
+flavor = "classic-era"
+wow_root = "/games/World of Warcraft"
+
+[[paths.installs]]
+tag = "classic-turtle"
+# Illustrative: third-party / pirate / custom client; still a `flavor` id the resolver understands for API metadata, but paths are yours.
+flavor = "classic-era"
+wow_root = "/games/TurtleWoW/World of Warcraft"
+
+[providers.curseforge]
+# Prefer env var in real setups; placeholder only.
+api_key = "your-curseforge-api-token"

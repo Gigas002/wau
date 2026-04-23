@@ -1,0 +1,153 @@
+# This file packs several patterns in one place for schema and resolver design.
+# First-release product behavior is latest-only: the resolver must ignore `pin` / non-tip selection until Phase 8 (see docs/WAU_RS_PLAN.md). Rows with pins remain as forward-looking examples.
+# Edge cases covered here (by section below):
+# - Baseline CurseForge row: stable channel, single flavor, version pin (distinct addon name).
+# - Same human-readable name twice: disjoint flavors, different pin policies (retail latest vs classic pinned).
+# - Omit flavors and pin: use config default flavor; resolve latest for channel.
+# - One row targeting multiple flavors: artifact must satisfy every listed flavor or resolution errors.
+# - Provider-specific pins: CurseForge file_id; GitHub release tag; sha256 alongside tag when desired.
+# - Channel overrides: stable vs beta vs alpha on different rows.
+# - GitHub provider: repo + asset_regex + channel.
+# - GitHub “-git” style: repo snapshot from a moving git ref (branch); no release asset; lockfile holds resolved commit.
+# - Git commit pin: exact 40-char sha; reproducible until you change the pin.
+# - Provider switch is modeled by editing the manifest (replace provider fields), not by two concurrent rows for the same name+flavor; see closing comment block.
+
+# Manifest format version; parsers use this for forward compatibility.
+schema = 1
+
+# --- Baseline: CurseForge, one flavor, stable, explicit version pin ---
+[[addon]]
+# Distinct name avoids colliding with the multi-row Bagnon example below.
+name = "DeadlyBossMods"
+# CurseForge-backed addon.
+provider = "curseforge"
+# Placeholder project id (replace with the real id from search or the site URL).
+project_id = 90001
+# Stable author release line.
+channel = "stable"
+# Install only when syncing the retail client.
+flavors = ["retail"]
+# Exact version string the provider resolves to a single file.
+pin = { version = "11.0.0" }
+
+# --- Same display name, disjoint flavors: retail “latest” vs classic pinned (stable both) ---
+[[addon]]
+# Tooling must not assume `name` is globally unique; pair with `flavors` (or a future row `id`).
+name = "Bagnon"
+provider = "curseforge"
+project_id = 12345
+channel = "stable"
+flavors = ["retail"]
+# No `pin`: newest stable file for retail on each update-capable sync.
+
+[[addon]]
+# Second row for the same Curse project: different flavor set, different pin policy.
+name = "Bagnon"
+provider = "curseforge"
+project_id = 12345
+channel = "stable"
+# Classic-era only; flavors must not overlap the other Bagnon row’s set.
+flavors = ["classic-era"]
+# Classic stays on a known-good build while retail floats above.
+pin = { version = "5.4.3" }
+
+# --- Defaults from wau config: no `flavors` means “default flavor from config.toml” ---
+[[addon]]
+# Handy when the manifest is personal and only one WoW install is in use.
+name = "MythicDungeonTools"
+provider = "curseforge"
+project_id = 90002
+channel = "stable"
+# Omitting `flavors` and `pin`: default flavor from config; resolve latest stable.
+
+# --- Multi-flavor single row: one download must declare support for all listed flavors ---
+[[addon]]
+# Rare; resolver should reject if the chosen file metadata does not cover every flavor here.
+name = "SharedDataPack"
+provider = "curseforge"
+project_id = 99999
+channel = "stable"
+# More than one flavor in one row: one artifact must satisfy all of them.
+flavors = ["classic-era", "classic-cata"]
+pin = { version = "2.0.0" }
+
+# --- CurseForge-specific pin: exact file id from the API ---
+[[addon]]
+name = "WeakAuras"
+provider = "curseforge"
+project_id = 90003
+channel = "stable"
+flavors = ["retail"]
+# Pin to one uploaded zip regardless of semver labeling on the site.
+pin = { file_id = 99887766 }
+
+# --- Beta channel on CurseForge ---
+[[addon]]
+name = "AddonDevPreview"
+provider = "curseforge"
+project_id = 11111
+# Beta uploads; newest matching file for flavor when updating.
+channel = "beta"
+flavors = ["retail"]
+
+# --- Alpha / experimental channel ---
+[[addon]]
+name = "BleedingEdgeUI"
+provider = "curseforge"
+project_id = 22222
+# Highest-churn channel; same resolution rules, different upload bucket.
+channel = "alpha"
+flavors = ["retail"]
+
+# --- GitHub releases: asset pattern + beta channel + tag pin ---
+[[addon]]
+name = "SomeAddon"
+provider = "github"
+# Repository slug without host.
+repo = "owner/repo"
+# Pick which release asset to download.
+asset_regex = "SomeAddon-.*\\.zip"
+channel = "beta"
+# Immutable tag pin; fails if tag or matching asset is missing.
+pin = { tag = "v2.1.0-beta.1" }
+
+# --- GitHub: stable, tag pin, optional sha256 for byte-identical reproducibility ---
+[[addon]]
+name = "CommunityFork"
+provider = "github"
+repo = "org/wow-addon"
+asset_regex = "release-.*\\.zip"
+channel = "stable"
+flavors = ["retail"]
+# `sha256` is illustrative hex (replace with a real digest from the release you trust).
+pin = { tag = "v3.0.0", sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }
+
+# --- GitHub: repo archive / “-git” style — track branch tip (no release zip, no asset_regex) ---
+[[addon]]
+# Like AUR `pkgname-git`: always resolve to the latest commit on the tracked ref when updating.
+name = "TipOfTreeAddon"
+provider = "github"
+repo = "org/tip-addon"
+# Mutually exclusive with `asset_regex` in this illustrative schema: pick releases XOR raw tree.
+# Branch or any git ref that GitHub serves as `…/archive/<ref>.tar.gz`.
+git_ref = "main"
+channel = "stable"
+flavors = ["retail"]
+# No `pin`: manifest intent is “follow the ref”; exact commit is recorded only in lock.toml after resolve.
+
+# --- GitHub: same repo pattern, exact commit pin (reproducible; ref below is optional human context) ---
+[[addon]]
+# Different `name` from the moving-ref row so both can coexist in one manifest without overlap.
+name = "TipOfTreeAddonPinned"
+provider = "github"
+repo = "org/tip-addon"
+git_ref = "main"
+channel = "stable"
+flavors = ["retail"]
+# Full 40 hex chars; overrides any movement of `git_ref` until you edit the manifest.
+pin = { commit = "deadbeef0123456789deadbeef0123456789abcd" }
+
+# --- Provider switch (documentation only; keep a single live row in real manifests) ---
+# If `CompanionTool` was `provider = "curseforge"` + `project_id = …`, switching to GitHub means
+# replacing that row with `provider = "github"` + `repo` + `asset_regex` (same `name` allowed).
+# Two rows with the same `name` and overlapping `flavors` but different providers should be a validation error.
