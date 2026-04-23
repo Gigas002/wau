@@ -1,0 +1,31 @@
+# Example `lock.toml` (resolved + install bookkeeping). Illustrative only.
+# Heavy optional sections (e.g. long per-addon history) are intentionally deferred in the roadmap; shape here reserves room.
+
+schema = 1
+generated_at = "2026-04-22T00:00:00Z"
+
+# Which tagged install this lock belongs to (when using per-install manifests/locks; exact layout TBD).
+install_tag = "retail-main"
+
+[[addon]]
+name = "Bagnon"
+provider = "curseforge"
+project_id = 12345
+flavor = "retail"
+channel = "stable"
+
+resolved_version = "10.0.0"
+resolved_id = "cf-file-999999"
+download_url = "https://example.invalid/Bagnon.zip"
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+
+installed_dirs = ["Bagnon", "Bagnon_Config"]
+installed_at = "2026-04-22T00:00:00Z"
+
+# Deferred feature in the roadmap: multiple resolved generations per addon for rollback UX.
+# [[addon.history]]
+# resolved_version = "9.9.0"
+# resolved_id = "cf-file-888888"
+# download_url = "https://example.invalid/Bagnon-old.zip"
+# sha256 = "1111111111111111111111111111111111111111111111111111111111111111"
+# installed_at = "2026-03-01T00:00:00Z"
