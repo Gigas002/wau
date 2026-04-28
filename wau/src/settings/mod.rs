@@ -46,6 +46,7 @@ pub struct SyncSettings {
     pub manifest_path: PathBuf,
     pub lock_path: PathBuf,
     pub update: bool,
+    pub provider_config: libwau::providers::ProviderConfig,
 }
 
 /// Resolved settings for `wau remove`.
@@ -111,6 +112,19 @@ impl SyncSettings {
         let manifest_path = manifest_override.unwrap_or_else(|| config_dir.join("manifest.toml"));
         let lock_path = config_dir.join(format!("{}.lock.toml", tag.as_str()));
 
+        let provider_config = libwau::providers::ProviderConfig {
+            curseforge_api_key: config
+                .providers
+                .curseforge
+                .as_ref()
+                .map(|c| c.api_key.clone()),
+            github_token: config
+                .providers
+                .github
+                .as_ref()
+                .and_then(|g| g.token.clone()),
+        };
+
         Ok(SyncSettings {
             tag,
             flavor: config.defaults.flavor,
@@ -120,6 +134,7 @@ impl SyncSettings {
             manifest_path,
             lock_path,
             update,
+            provider_config,
         })
     }
 }

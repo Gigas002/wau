@@ -90,7 +90,7 @@ async fn sync(cli: &Cli) -> Result<(), AppError> {
             continue;
         }
 
-        let provider = providers::for_provider(&addon.provider)?;
+        let provider = providers::for_provider(&addon.provider, &settings.provider_config)?;
         ops::install(provider.as_ref(), addon, &ctx, &mut lock).await?;
         output::print_installed(&addon.name);
         installed += 1;

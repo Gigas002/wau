@@ -54,11 +54,18 @@ pub struct Install {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Providers {
     pub curseforge: Option<CurseForgeProvider>,
+    pub github: Option<GitHubProvider>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CurseForgeProvider {
     pub api_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitHubProvider {
+    /// Personal access token for higher API rate limits (optional).
+    pub token: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]

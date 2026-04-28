@@ -57,9 +57,22 @@ pub trait Provider: Send + Sync {
     async fn download(&self, artifact: &ResolvedArtifact, dest: &Path) -> Result<()>;
 }
 
+/// Runtime credentials and options passed when constructing a provider.
+///
+/// All fields are optional; providers that require a credential (e.g. CurseForge API key)
+/// will return [`crate::Error::MissingApiKey`] from [`for_provider`] when absent.
+#[derive(Debug, Clone, Default)]
+pub struct ProviderConfig {
+    pub curseforge_api_key: Option<String>,
+    pub github_token: Option<String>,
+}
+
 /// Returns the provider implementation for `provider`, or an error if it is
-/// not compiled into this build.
-pub fn for_provider(provider: &crate::model::Provider) -> Result<Box<dyn Provider>> {
+/// not compiled into this build or required credentials are absent.
+pub fn for_provider(
+    provider: &crate::model::Provider,
+    _config: &ProviderConfig,
+) -> Result<Box<dyn Provider>> {
     match provider {
         #[cfg(feature = "local")]
         crate::model::Provider::Local => Ok(Box::new(local::LocalProvider::new())),

@@ -33,7 +33,7 @@ fn resolved_artifact_fields_accessible() {
 #[test]
 #[cfg(not(feature = "local"))]
 fn for_provider_returns_error_when_no_features() {
-    let result = for_provider(&crate::model::Provider::Local);
+    let result = for_provider(&crate::model::Provider::Local, &ProviderConfig::default());
     assert!(matches!(
         result,
         Err(crate::Error::ProviderNotSupported { .. })
