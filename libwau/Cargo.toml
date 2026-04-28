@@ -9,9 +9,10 @@ repository.workspace = true
 edition.workspace = true
 
 [features]
-default = ["local", "curseforge"]
+default = ["local", "curseforge", "wowinterface"]
 local = []
 curseforge = ["dep:reqwest"]
+wowinterface = ["dep:reqwest"]
 
 [dependencies]
 thiserror = "2"

@@ -21,6 +21,9 @@ pub mod local;
 #[cfg(feature = "curseforge")]
 pub mod curseforge;
 
+#[cfg(feature = "wowinterface")]
+pub mod wowinterface;
+
 /// Install-time context passed to every provider call.
 #[derive(Debug, Clone)]
 pub struct InstallContext {
@@ -88,6 +91,10 @@ pub fn for_provider(
                     provider: crate::model::Provider::CurseForge,
                 })?;
             Ok(Box::new(curseforge::CurseForgeProvider::new(api_key)))
+        }
+        #[cfg(feature = "wowinterface")]
+        crate::model::Provider::WoWInterface => {
+            Ok(Box::new(wowinterface::WoWInterfaceProvider::new()))
         }
         _ => Err(crate::Error::ProviderNotSupported {
             provider: provider.clone(),

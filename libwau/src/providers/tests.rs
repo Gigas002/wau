@@ -465,3 +465,184 @@ mod local_tests {
         assert_eq!(std::fs::read(&dest).unwrap(), b"test data");
     }
 }
+
+// ---------------------------------------------------------------------------
+// WoWInterface provider (gated on the "wowinterface" feature)
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "wowinterface")]
+mod wowinterface_tests {
+    use std::path::PathBuf;
+
+    use crate::{
+        manifest::ManifestAddon,
+        model::{Channel, Flavor, Provider as ModelProvider, Tag},
+        providers::{
+            InstallContext, Provider, ResolvedArtifact, wowinterface::WoWInterfaceProvider,
+        },
+    };
+
+    fn make_ctx() -> InstallContext {
+        InstallContext {
+            tag: Tag::new("test"),
+            flavor: Flavor::Retail,
+            channel: Channel::Stable,
+            addons_path: PathBuf::from("/wow/Interface/AddOns"),
+            cache_dir: PathBuf::from("/tmp/wau-cache"),
+        }
+    }
+
+    fn make_addon(wowi_id: Option<u64>) -> ManifestAddon {
+        ManifestAddon {
+            name: "WeakAuras".into(),
+            provider: ModelProvider::WoWInterface,
+            channel: None,
+            flavors: None,
+            pin: None,
+            project_id: None,
+            wowi_id,
+            repo: None,
+            asset_regex: None,
+            git_ref: None,
+            url: None,
+        }
+    }
+
+    fn file_details_response() -> &'static str {
+        r#"[{
+            "UID": "12345",
+            "UIName": "WeakAuras",
+            "UIVersion": "4.5.0",
+            "UIDownload": "https://cdn.wowinterface.com/downloads/file12345/WeakAuras-4.5.0.zip",
+            "UIFileName": "WeakAuras-4.5.0.zip",
+            "UIDate": "04-01-26 12:00 PM"
+        }]"#
+    }
+
+    // resolve
+
+    #[tokio::test]
+    async fn resolve_returns_file_details() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/filedetails/12345.json")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(file_details_response())
+            .create_async()
+            .await;
+
+        let provider = WoWInterfaceProvider::with_base_url(server.url());
+        let artifact = provider
+            .resolve(&make_addon(Some(12345)), &make_ctx())
+            .await
+            .unwrap();
+
+        assert_eq!(artifact.version, "4.5.0");
+        assert_eq!(artifact.id, "12345");
+        assert_eq!(
+            artifact.url,
+            "https://cdn.wowinterface.com/downloads/file12345/WeakAuras-4.5.0.zip"
+        );
+        assert!(artifact.sha256.is_none());
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn resolve_error_when_wowi_id_missing() {
+        let server = mockito::Server::new_async().await;
+        let provider = WoWInterfaceProvider::with_base_url(server.url());
+        let result = provider.resolve(&make_addon(None), &make_ctx()).await;
+        assert!(matches!(result, Err(crate::Error::MissingWowiId { .. })));
+    }
+
+    #[tokio::test]
+    async fn resolve_error_when_data_empty() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/filedetails/12345.json")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("[]")
+            .create_async()
+            .await;
+
+        let provider = WoWInterfaceProvider::with_base_url(server.url());
+        let result = provider
+            .resolve(&make_addon(Some(12345)), &make_ctx())
+            .await;
+        assert!(matches!(result, Err(crate::Error::NoRelease { .. })));
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn resolve_error_on_http_failure() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/filedetails/12345.json")
+            .with_status(404)
+            .create_async()
+            .await;
+
+        let provider = WoWInterfaceProvider::with_base_url(server.url());
+        let result = provider
+            .resolve(&make_addon(Some(12345)), &make_ctx())
+            .await;
+        assert!(matches!(result, Err(crate::Error::Http(_))));
+        mock.assert_async().await;
+    }
+
+    // download
+
+    #[tokio::test]
+    async fn download_writes_bytes_to_dest() {
+        let mut server = mockito::Server::new_async().await;
+        let fake_zip = b"PK\x03\x04fake zip content";
+        let mock = server
+            .mock("GET", "/files/WeakAuras.zip")
+            .with_status(200)
+            .with_body(fake_zip.as_slice())
+            .create_async()
+            .await;
+
+        let provider = WoWInterfaceProvider::with_base_url(server.url());
+        let artifact = ResolvedArtifact {
+            version: "4.5.0".into(),
+            id: "12345".into(),
+            url: format!("{}/files/WeakAuras.zip", server.url()),
+            sha256: None,
+        };
+
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("out.zip");
+        provider.download(&artifact, &dest).await.unwrap();
+
+        assert_eq!(std::fs::read(&dest).unwrap(), fake_zip);
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn download_error_on_http_failure() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/files/bad.zip")
+            .with_status(404)
+            .create_async()
+            .await;
+
+        let provider = WoWInterfaceProvider::with_base_url(server.url());
+        let artifact = ResolvedArtifact {
+            version: "1.0".into(),
+            id: "1".into(),
+            url: format!("{}/files/bad.zip", server.url()),
+            sha256: None,
+        };
+
+        let dir = tempfile::tempdir().unwrap();
+        let result = provider
+            .download(&artifact, &dir.path().join("out.zip"))
+            .await;
+        assert!(matches!(result, Err(crate::Error::Http(_))));
+        mock.assert_async().await;
+    }
+}

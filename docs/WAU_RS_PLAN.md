@@ -441,7 +441,7 @@ The goal is a predictable set of workflows, with feature matrices, cached builds
 - [x] **4a** — Async infrastructure: `async-trait` + `tokio` deps; `Provider` trait → `async fn`; `LocalProvider`, `ops`, and all tests updated to async; `wowi_id` added to `ManifestAddon`; `wau` binary uses `#[tokio::main]`
 - [x] **4b** — `ProviderConfig` (CurseForge API key, GitHub token); new error variants (`MissingApiKey`, `MissingProjectId`, `MissingWowiId`, `MissingRepo`, `Http`, `NoRelease`, `NoMatchingAsset`); `for_provider` accepts config; settings + app wired to pass config
 - [x] **4c** — **CurseForge** provider behind `curseforge` feature: auth header, resolve latest file for flavor+channel, HTTP download; mocked-HTTP unit tests
-- [ ] **4d** — **WoWInterface** provider behind `wowinterface` feature: MMOUI API resolve latest, HTTP download; mocked-HTTP unit tests
+- [x] **4d** — **WoWInterface** provider behind `wowinterface` feature: MMOUI API resolve latest, HTTP download; mocked-HTTP unit tests
 - [ ] **4e** — **GitHub** provider behind `github` feature: release-asset mode (asset regex) + git-ref tip mode (zipball); mocked-HTTP unit tests
 - [ ] **4f** — `resolve/` module (manifest filtering layer); `wau` feature passthroughs per §2.2; all quality gates green; update `WAU_RS_PLAN.md`
 
@@ -534,4 +534,5 @@ When **example shapes** change, update `examples/*.toml` / `examples/cli.md` fir
 | 2026-04-28 | Phase 3 complete: `libwau/src/providers/` (Provider trait + Local impl behind `local` feature); `libwau/src/ops/` (install/remove orchestration, zip extraction, staging); `wau sync` + `wau remove` commands; lock updates; integration tests with local zip fixtures; all quality gates green |
 | 2026-04-28 | Phase 4a complete: `async-trait` + `tokio` deps added; `Provider` trait and all impls converted to `async fn`; `ops::install`/`remove` async; all unit + integration tests updated to `#[tokio::test]`; `wowi_id` field added to `ManifestAddon`; `wau` binary uses `#[tokio::main]` |
 | 2026-04-28 | Phase 4b complete: `ProviderConfig` struct in `libwau::providers`; 7 new error variants; `for_provider` takes `&ProviderConfig`; `wau` config adds `GitHubProvider`; `SyncSettings` carries `provider_config` built from config file |
+| 2026-04-28 | Phase 4d complete: `libwau/src/providers/wowinterface.rs` — `WoWInterfaceProvider` behind `wowinterface` Cargo feature; public MMOUI v4 API (no auth); resolve takes first entry from `filedetails/{id}.json`; HTTP download; 6 mocked-HTTP tests; all quality gates green |
 | 2026-04-28 | Phase 4c complete: `libwau/src/providers/curseforge/` — `CurseForgeProvider` behind `curseforge` Cargo feature; `x-api-key` auth; resolve selects latest file by flavor (version-prefix) + channel (releaseType); sha256 extracted from `hashes`; HTTP download to dest; 14 mocked-HTTP tests (mockito); all quality gates green |
