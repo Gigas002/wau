@@ -2,6 +2,102 @@ use super::*;
 use crate::toc::TocFile;
 
 // ---------------------------------------------------------------------------
+// extract_addon_zip
+// ---------------------------------------------------------------------------
+
+fn write_zip(dir: &std::path::Path, entries: &[(&str, &[u8])]) -> std::path::PathBuf {
+    let zip_bytes = make_test_zip(entries);
+    let path = dir.join("test.zip");
+    std::fs::write(&path, zip_bytes).unwrap();
+    path
+}
+
+#[test]
+fn extract_addon_zip_finds_addon_dirs() {
+    let dir = tempfile::tempdir().unwrap();
+    let zip_path = write_zip(
+        dir.path(),
+        &[
+            ("MyAddon/", &[]),
+            ("MyAddon/MyAddon.toc", b"## Interface: 110200\n"),
+            ("MyAddon/main.lua", b""),
+            ("MyAddonHelper/", &[]),
+            ("MyAddonHelper/MyAddonHelper.toc", b"## Interface: 110200\n"),
+        ],
+    );
+    let extract_dir = dir.path().join("extracted");
+    std::fs::create_dir_all(&extract_dir).unwrap();
+    let addon_dirs = extract_addon_zip(&zip_path, &extract_dir).unwrap();
+    let names: Vec<&str> = addon_dirs
+        .iter()
+        .map(|p| p.file_name().unwrap().to_str().unwrap())
+        .collect();
+    assert_eq!(names, vec!["MyAddon", "MyAddonHelper"]);
+}
+
+#[test]
+fn extract_addon_zip_skips_dirs_without_toc() {
+    let dir = tempfile::tempdir().unwrap();
+    let zip_path = write_zip(
+        dir.path(),
+        &[
+            ("README.md", b"# hello"),
+            ("MyAddon/", &[]),
+            ("MyAddon/MyAddon.toc", b"## Interface: 110200\n"),
+        ],
+    );
+    let extract_dir = dir.path().join("extracted");
+    std::fs::create_dir_all(&extract_dir).unwrap();
+    let addon_dirs = extract_addon_zip(&zip_path, &extract_dir).unwrap();
+    assert_eq!(addon_dirs.len(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// install_addon_dirs / remove_addon_dirs
+// ---------------------------------------------------------------------------
+
+#[test]
+fn install_addon_dirs_copies_and_replaces() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("src");
+    let addons = dir.path().join("AddOns");
+
+    // Create a source addon dir.
+    let addon_src = src.join("TestAddon");
+    std::fs::create_dir_all(&addon_src).unwrap();
+    std::fs::write(addon_src.join("TestAddon.toc"), b"## Interface: 110200\n").unwrap();
+
+    let installed = install_addon_dirs(std::slice::from_ref(&addon_src), &addons).unwrap();
+    assert_eq!(installed, vec!["TestAddon"]);
+    assert!(addons.join("TestAddon").join("TestAddon.toc").exists());
+
+    // Second call replaces the existing dir.
+    std::fs::write(addon_src.join("new.lua"), b"").unwrap();
+    install_addon_dirs(std::slice::from_ref(&addon_src), &addons).unwrap();
+    assert!(addons.join("TestAddon").join("new.lua").exists());
+}
+
+#[test]
+fn remove_addon_dirs_deletes_dirs() {
+    let dir = tempfile::tempdir().unwrap();
+    let addons = dir.path().join("AddOns");
+    std::fs::create_dir_all(addons.join("TestAddon")).unwrap();
+
+    remove_addon_dirs(&["TestAddon".to_owned()], &addons).unwrap();
+    assert!(!addons.join("TestAddon").exists());
+}
+
+#[test]
+fn remove_addon_dirs_tolerates_missing() {
+    let dir = tempfile::tempdir().unwrap();
+    let addons = dir.path().join("AddOns");
+    std::fs::create_dir_all(&addons).unwrap();
+
+    // Should not error even though the dir doesn't exist.
+    remove_addon_dirs(&["Ghost".to_owned()], &addons).unwrap();
+}
+
+// ---------------------------------------------------------------------------
 // InstalledAddon helpers
 // ---------------------------------------------------------------------------
 
