@@ -43,13 +43,13 @@ static STAGING_COUNTER: AtomicU64 = AtomicU64::new(0);
 ///
 /// Downloads the artifact, extracts the zip, copies addon directories into
 /// `ctx.addons_path`, and records the result in `lock`.
-pub fn install(
+pub async fn install(
     provider: &dyn Provider,
     addon: &ManifestAddon,
     ctx: &InstallContext,
     lock: &mut Lock,
 ) -> Result<()> {
-    let artifact = provider.resolve(addon, ctx)?;
+    let artifact = provider.resolve(addon, ctx).await?;
     tracing::debug!(name = %addon.name, version = %artifact.version, "resolved artifact");
 
     let staging_base = ctx.cache_dir.join("staging");
@@ -60,7 +60,7 @@ pub fn install(
     let staging_dir = staging_base.join(format!("{}_{pid}_{n:06}", addon.name));
     fs::create_dir_all(&staging_dir)?;
 
-    let result = install_inner(provider, addon, ctx, lock, &artifact, &staging_dir);
+    let result = install_inner(provider, addon, ctx, lock, &artifact, &staging_dir).await;
 
     // Always clean up staging, even on failure.
     if let Err(e) = fs::remove_dir_all(&staging_dir) {
@@ -74,7 +74,7 @@ pub fn install(
 ///
 /// Each directory listed in `lock` for `addon_name` + `ctx.flavor` is removed
 /// from `ctx.addons_path`. The lock entry is then deleted.
-pub fn remove(addon_name: &str, ctx: &InstallContext, lock: &mut Lock) -> Result<()> {
+pub async fn remove(addon_name: &str, ctx: &InstallContext, lock: &mut Lock) -> Result<()> {
     let pos = lock
         .addon
         .iter()
@@ -96,7 +96,7 @@ pub fn remove(addon_name: &str, ctx: &InstallContext, lock: &mut Lock) -> Result
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-fn install_inner(
+async fn install_inner(
     provider: &dyn Provider,
     addon: &ManifestAddon,
     ctx: &InstallContext,
@@ -105,7 +105,7 @@ fn install_inner(
     staging_dir: &Path,
 ) -> Result<()> {
     let zip_path = staging_dir.join("addon.zip");
-    provider.download(artifact, &zip_path)?;
+    provider.download(artifact, &zip_path).await?;
     tracing::debug!(path = %zip_path.display(), "downloaded");
 
     let extract_dir = staging_dir.join("extracted");

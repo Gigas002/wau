@@ -44,12 +44,17 @@ pub struct ResolvedArtifact {
 }
 
 /// Minimum interface every provider must implement.
+#[async_trait::async_trait]
 pub trait Provider: Send + Sync {
     /// Resolve the manifest row to a single latest artifact given the install context.
-    fn resolve(&self, addon: &ManifestAddon, ctx: &InstallContext) -> Result<ResolvedArtifact>;
+    async fn resolve(
+        &self,
+        addon: &ManifestAddon,
+        ctx: &InstallContext,
+    ) -> Result<ResolvedArtifact>;
 
     /// Download (or copy) the artifact to `dest`, which should not exist yet.
-    fn download(&self, artifact: &ResolvedArtifact, dest: &Path) -> Result<()>;
+    async fn download(&self, artifact: &ResolvedArtifact, dest: &Path) -> Result<()>;
 }
 
 /// Returns the provider implementation for `provider`, or an error if it is

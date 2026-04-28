@@ -438,11 +438,12 @@ The goal is a predictable set of workflows, with feature matrices, cached builds
 
 ### Phase 4 — First-release providers + resolution engine
 
-- [ ] Provider trait and registry; **each provider behind a Cargo `feature`** in `libwau` with matching passthrough in `wau` (§2.2)
-- [ ] **CurseForge**: auth + **resolve latest** for flavor+channel + download
-- [ ] **WoWInterface**: **resolve latest** + download path
-- [ ] **GitHub**: **resolve latest** matching row (releases asset regex and/or git-ref “tip” mode per examples) — **no** honoring `pin` / non-tip refs until Phase 8
-- [ ] Manifest → resolution → lock plan engine (**latest-only** semantics)
+- [x] **4a** — Async infrastructure: `async-trait` + `tokio` deps; `Provider` trait → `async fn`; `LocalProvider`, `ops`, and all tests updated to async; `wowi_id` added to `ManifestAddon`; `wau` binary uses `#[tokio::main]`
+- [ ] **4b** — `ProviderConfig` (CurseForge API key, GitHub token); new error variants (`MissingApiKey`, `MissingProjectId`, `MissingWowiId`, `MissingRepo`, `Http`, `NoRelease`, `NoMatchingAsset`); `for_provider` accepts config; settings + app wired to pass config
+- [ ] **4c** — **CurseForge** provider behind `curseforge` feature: auth header, resolve latest file for flavor+channel, HTTP download; mocked-HTTP unit tests
+- [ ] **4d** — **WoWInterface** provider behind `wowinterface` feature: MMOUI API resolve latest, HTTP download; mocked-HTTP unit tests
+- [ ] **4e** — **GitHub** provider behind `github` feature: release-asset mode (asset regex) + git-ref tip mode (zipball); mocked-HTTP unit tests
+- [ ] **4f** — `resolve/` module (manifest filtering layer); `wau` feature passthroughs per §2.2; all quality gates green; update `WAU_RS_PLAN.md`
 
 **Verify**: unit tests with mocked HTTP; smoke tests per provider as feasible in CI (may be manual + documented for keys).
 
@@ -531,3 +532,4 @@ When **example shapes** change, update `examples/*.toml` / `examples/cli.md` fir
 | 2026-04-22 | Expanded into a playbook: schema examples, CI blueprint, test discipline, paru mapping, and release hygiene phase                                                                                                                                                                                                                    |
 | 2026-04-23 | Re-scoped first release providers (Curse + WoWInterface + GitHub + Local); **latest-only** resolution (pins → Phase 8); deferred backup/switching; install tags + private-server extensibility; moved TOML/CLI drafts to `examples/`; late phases 7–10; **§2.2** per-provider Cargo features; **`[logging].level`** in config + §3.1 |
 | 2026-04-28 | Phase 3 complete: `libwau/src/providers/` (Provider trait + Local impl behind `local` feature); `libwau/src/ops/` (install/remove orchestration, zip extraction, staging); `wau sync` + `wau remove` commands; lock updates; integration tests with local zip fixtures; all quality gates green |
+| 2026-04-28 | Phase 4a complete: `async-trait` + `tokio` deps added; `Provider` trait and all impls converted to `async fn`; `ops::install`/`remove` async; all unit + integration tests updated to `#[tokio::test]`; `wowi_id` field added to `ManifestAddon`; `wau` binary uses `#[tokio::main]` |

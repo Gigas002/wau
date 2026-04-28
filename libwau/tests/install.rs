@@ -53,6 +53,7 @@ fn make_addon(name: &str, zip_path: &std::path::Path) -> ManifestAddon {
         flavors: Some(vec![Flavor::Retail]),
         pin: None,
         project_id: None,
+        wowi_id: None,
         repo: None,
         asset_regex: None,
         git_ref: None,
@@ -72,8 +73,8 @@ fn write_zip(dir: &std::path::Path, filename: &str, entries: &[(&str, &[u8])]) -
 // Basic install / remove cycle
 // ---------------------------------------------------------------------------
 
-#[test]
-fn install_and_remove_single_addon() {
+#[tokio::test]
+async fn install_and_remove_single_addon() {
     let dir = tempfile::tempdir().unwrap();
     let zip = write_zip(
         dir.path(),
@@ -98,7 +99,9 @@ fn install_and_remove_single_addon() {
     let mut lock = Lock::new(Tag::new("test"));
 
     // Install
-    ops::install(&provider, &addon, &ctx, &mut lock).unwrap();
+    ops::install(&provider, &addon, &ctx, &mut lock)
+        .await
+        .unwrap();
 
     assert_eq!(lock.addon.len(), 1);
     let entry = &lock.addon[0];
@@ -114,7 +117,7 @@ fn install_and_remove_single_addon() {
     assert_eq!(reloaded.addon[0].name, "WeakAuras");
 
     // Remove
-    ops::remove("WeakAuras", &ctx, &mut lock).unwrap();
+    ops::remove("WeakAuras", &ctx, &mut lock).await.unwrap();
 
     assert!(lock.addon.is_empty());
     assert!(!addons_dir.join("WeakAuras").exists());
@@ -124,8 +127,8 @@ fn install_and_remove_single_addon() {
 // Multi-folder addon zip
 // ---------------------------------------------------------------------------
 
-#[test]
-fn install_multi_folder_addon() {
+#[tokio::test]
+async fn install_multi_folder_addon() {
     let dir = tempfile::tempdir().unwrap();
     let zip = write_zip(
         dir.path(),
@@ -157,7 +160,9 @@ fn install_multi_folder_addon() {
     let ctx = make_ctx(addons_dir.clone(), cache_dir);
     let mut lock = Lock::new(Tag::new("test"));
 
-    ops::install(&provider, &addon, &ctx, &mut lock).unwrap();
+    ops::install(&provider, &addon, &ctx, &mut lock)
+        .await
+        .unwrap();
 
     let entry = &lock.addon[0];
     assert_eq!(entry.installed_dirs.len(), 3);
@@ -170,8 +175,8 @@ fn install_multi_folder_addon() {
 // Reinstall (update) replaces existing files + lock entry
 // ---------------------------------------------------------------------------
 
-#[test]
-fn reinstall_replaces_existing_dirs_and_lock_entry() {
+#[tokio::test]
+async fn reinstall_replaces_existing_dirs_and_lock_entry() {
     let dir = tempfile::tempdir().unwrap();
     let zip = write_zip(
         dir.path(),
@@ -192,8 +197,12 @@ fn reinstall_replaces_existing_dirs_and_lock_entry() {
     let ctx = make_ctx(addons_dir.clone(), cache_dir);
     let mut lock = Lock::new(Tag::new("test"));
 
-    ops::install(&provider, &addon, &ctx, &mut lock).unwrap();
-    ops::install(&provider, &addon, &ctx, &mut lock).unwrap();
+    ops::install(&provider, &addon, &ctx, &mut lock)
+        .await
+        .unwrap();
+    ops::install(&provider, &addon, &ctx, &mut lock)
+        .await
+        .unwrap();
 
     assert_eq!(lock.addon.len(), 1, "should not grow on reinstall");
     assert!(addons_dir.join("MyAddon").exists());
@@ -203,8 +212,8 @@ fn reinstall_replaces_existing_dirs_and_lock_entry() {
 // file:// URL support
 // ---------------------------------------------------------------------------
 
-#[test]
-fn install_via_file_url() {
+#[tokio::test]
+async fn install_via_file_url() {
     let dir = tempfile::tempdir().unwrap();
     let zip_path = write_zip(
         dir.path(),
@@ -224,7 +233,9 @@ fn install_via_file_url() {
     let ctx = make_ctx(addons_dir.clone(), dir.path().join("cache"));
     let mut lock = Lock::new(Tag::new("test"));
 
-    ops::install(&provider, &addon, &ctx, &mut lock).unwrap();
+    ops::install(&provider, &addon, &ctx, &mut lock)
+        .await
+        .unwrap();
     assert!(addons_dir.join("TestAddon").exists());
 }
 
@@ -232,8 +243,8 @@ fn install_via_file_url() {
 // Error paths
 // ---------------------------------------------------------------------------
 
-#[test]
-fn install_fails_when_url_missing() {
+#[tokio::test]
+async fn install_fails_when_url_missing() {
     let dir = tempfile::tempdir().unwrap();
     let provider = LocalProvider::new();
     let mut addon = make_addon("NoUrl", std::path::Path::new("/nonexistent.zip"));
@@ -242,12 +253,12 @@ fn install_fails_when_url_missing() {
     let ctx = make_ctx(dir.path().join("AddOns"), dir.path().join("cache"));
     let mut lock = Lock::new(Tag::new("test"));
 
-    let result = ops::install(&provider, &addon, &ctx, &mut lock);
+    let result = ops::install(&provider, &addon, &ctx, &mut lock).await;
     assert!(matches!(result, Err(libwau::Error::LocalMissingUrl { .. })));
 }
 
-#[test]
-fn install_fails_when_zip_not_found() {
+#[tokio::test]
+async fn install_fails_when_zip_not_found() {
     let dir = tempfile::tempdir().unwrap();
     let provider = LocalProvider::new();
     let addon = make_addon("Missing", std::path::Path::new("/nonexistent/missing.zip"));
@@ -255,17 +266,17 @@ fn install_fails_when_zip_not_found() {
     let ctx = make_ctx(dir.path().join("AddOns"), dir.path().join("cache"));
     let mut lock = Lock::new(Tag::new("test"));
 
-    let result = ops::install(&provider, &addon, &ctx, &mut lock);
+    let result = ops::install(&provider, &addon, &ctx, &mut lock).await;
     assert!(result.is_err());
 }
 
-#[test]
-fn remove_fails_when_addon_not_in_lock() {
+#[tokio::test]
+async fn remove_fails_when_addon_not_in_lock() {
     let dir = tempfile::tempdir().unwrap();
     let ctx = make_ctx(dir.path().join("AddOns"), dir.path().join("cache"));
     let mut lock = Lock::new(Tag::new("test"));
 
-    let result = ops::remove("NotInstalled", &ctx, &mut lock);
+    let result = ops::remove("NotInstalled", &ctx, &mut lock).await;
     assert!(matches!(result, Err(libwau::Error::AddonNotInLock { .. })));
 }
 
@@ -273,8 +284,8 @@ fn remove_fails_when_addon_not_in_lock() {
 // Lock persistence across install + remove
 // ---------------------------------------------------------------------------
 
-#[test]
-fn lock_round_trip_after_install() {
+#[tokio::test]
+async fn lock_round_trip_after_install() {
     let dir = tempfile::tempdir().unwrap();
     let zip = write_zip(
         dir.path(),
@@ -304,7 +315,9 @@ fn lock_round_trip_after_install() {
     };
     let mut lock = Lock::new(Tag::new("era"));
 
-    ops::install(&provider, &addon, &ctx, &mut lock).unwrap();
+    ops::install(&provider, &addon, &ctx, &mut lock)
+        .await
+        .unwrap();
     lock::save(&lock, &lock_path).unwrap();
 
     let reloaded = lock::load(&lock_path).unwrap();

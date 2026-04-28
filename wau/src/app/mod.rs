@@ -24,11 +24,11 @@ pub enum AppError {
 }
 
 /// Dispatches the parsed CLI command and returns an exit code (0 = success).
-pub fn run(cli: &Cli) -> Result<(), AppError> {
+pub async fn run(cli: &Cli) -> Result<(), AppError> {
     match &cli.command {
         Command::List(_) => list(cli),
-        Command::Sync(_) => sync(cli),
-        Command::Remove(_) => remove(cli),
+        Command::Sync(_) => sync(cli).await,
+        Command::Remove(_) => remove(cli).await,
     }
 }
 
@@ -41,7 +41,7 @@ fn list(cli: &Cli) -> Result<(), AppError> {
     Ok(())
 }
 
-fn sync(cli: &Cli) -> Result<(), AppError> {
+async fn sync(cli: &Cli) -> Result<(), AppError> {
     let settings = SyncSettings::for_sync(cli)?;
     tracing::debug!(
         tag = %settings.tag,
@@ -61,7 +61,7 @@ fn sync(cli: &Cli) -> Result<(), AppError> {
         Err(e) => return Err(e.into()),
     };
 
-    let ctx = libwau::providers::InstallContext {
+    let ctx = providers::InstallContext {
         tag: settings.tag.clone(),
         flavor: settings.flavor.clone(),
         channel: settings.channel.clone(),
@@ -91,7 +91,7 @@ fn sync(cli: &Cli) -> Result<(), AppError> {
         }
 
         let provider = providers::for_provider(&addon.provider)?;
-        ops::install(provider.as_ref(), addon, &ctx, &mut lock)?;
+        ops::install(provider.as_ref(), addon, &ctx, &mut lock).await?;
         output::print_installed(&addon.name);
         installed += 1;
     }
@@ -101,7 +101,7 @@ fn sync(cli: &Cli) -> Result<(), AppError> {
     Ok(())
 }
 
-fn remove(cli: &Cli) -> Result<(), AppError> {
+async fn remove(cli: &Cli) -> Result<(), AppError> {
     let settings = RemoveSettings::for_remove(cli)?;
     tracing::debug!(
         tag = %settings.tag,
@@ -112,7 +112,7 @@ fn remove(cli: &Cli) -> Result<(), AppError> {
 
     let mut lock = lock::load(&settings.lock_path)?;
 
-    let ctx = libwau::providers::InstallContext {
+    let ctx = providers::InstallContext {
         tag: settings.tag.clone(),
         flavor: settings.flavor.clone(),
         channel: libwau::model::Channel::Stable,
@@ -121,7 +121,7 @@ fn remove(cli: &Cli) -> Result<(), AppError> {
     };
 
     for addon_name in &settings.addons {
-        ops::remove(addon_name, &ctx, &mut lock)?;
+        ops::remove(addon_name, &ctx, &mut lock).await?;
         output::print_removed(addon_name);
     }
 

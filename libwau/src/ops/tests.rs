@@ -29,6 +29,7 @@ fn make_addon(name: &str, url: &str) -> ManifestAddon {
         flavors: None,
         pin: None,
         project_id: None,
+        wowi_id: None,
         repo: None,
         asset_regex: None,
         git_ref: None,
@@ -41,8 +42,9 @@ struct ZipFileProvider {
     zip_path: PathBuf,
 }
 
+#[async_trait::async_trait]
 impl Provider for ZipFileProvider {
-    fn resolve(
+    async fn resolve(
         &self,
         _addon: &ManifestAddon,
         _ctx: &InstallContext,
@@ -55,7 +57,7 @@ impl Provider for ZipFileProvider {
         })
     }
 
-    fn download(&self, _artifact: &ResolvedArtifact, dest: &Path) -> crate::Result<()> {
+    async fn download(&self, _artifact: &ResolvedArtifact, dest: &Path) -> crate::Result<()> {
         fs::copy(&self.zip_path, dest)?;
         Ok(())
     }
@@ -72,8 +74,8 @@ fn make_addon_zip(dir: &Path, entries: &[(&str, &[u8])]) -> PathBuf {
 // install
 // ---------------------------------------------------------------------------
 
-#[test]
-fn install_updates_lock_and_copies_dirs() {
+#[tokio::test]
+async fn install_updates_lock_and_copies_dirs() {
     let dir = tempfile::tempdir().unwrap();
     let zip_path = make_addon_zip(
         dir.path(),
@@ -95,7 +97,7 @@ fn install_updates_lock_and_copies_dirs() {
     let ctx = make_ctx(addons_dir.clone(), cache_dir);
     let mut lock = Lock::new(Tag::new("test"));
 
-    install(&provider, &addon, &ctx, &mut lock).unwrap();
+    install(&provider, &addon, &ctx, &mut lock).await.unwrap();
 
     assert_eq!(lock.addon.len(), 1);
     let entry = &lock.addon[0];
@@ -105,8 +107,8 @@ fn install_updates_lock_and_copies_dirs() {
     assert!(addons_dir.join("WeakAuras").join("WeakAuras.toc").exists());
 }
 
-#[test]
-fn install_twice_replaces_lock_entry() {
+#[tokio::test]
+async fn install_twice_replaces_lock_entry() {
     let dir = tempfile::tempdir().unwrap();
     let zip_path = make_addon_zip(
         dir.path(),
@@ -124,8 +126,8 @@ fn install_twice_replaces_lock_entry() {
     let ctx = make_ctx(addons_dir.clone(), cache_dir);
     let mut lock = Lock::new(Tag::new("test"));
 
-    install(&provider, &addon, &ctx, &mut lock).unwrap();
-    install(&provider, &addon, &ctx, &mut lock).unwrap();
+    install(&provider, &addon, &ctx, &mut lock).await.unwrap();
+    install(&provider, &addon, &ctx, &mut lock).await.unwrap();
 
     assert_eq!(
         lock.addon.len(),
@@ -134,8 +136,8 @@ fn install_twice_replaces_lock_entry() {
     );
 }
 
-#[test]
-fn install_fails_when_zip_has_no_addon_dirs() {
+#[tokio::test]
+async fn install_fails_when_zip_has_no_addon_dirs() {
     let dir = tempfile::tempdir().unwrap();
     let zip_path = make_addon_zip(dir.path(), &[("README.md", b"no addons here")]);
 
@@ -147,7 +149,7 @@ fn install_fails_when_zip_has_no_addon_dirs() {
     let ctx = make_ctx(addons_dir, cache_dir);
     let mut lock = Lock::new(Tag::new("test"));
 
-    let result = install(&provider, &addon, &ctx, &mut lock);
+    let result = install(&provider, &addon, &ctx, &mut lock).await;
     assert!(matches!(
         result,
         Err(crate::Error::NoInstallableDirs { .. })
@@ -159,8 +161,8 @@ fn install_fails_when_zip_has_no_addon_dirs() {
 // remove
 // ---------------------------------------------------------------------------
 
-#[test]
-fn remove_deletes_dirs_and_updates_lock() {
+#[tokio::test]
+async fn remove_deletes_dirs_and_updates_lock() {
     let dir = tempfile::tempdir().unwrap();
     let addons_dir = dir.path().join("AddOns");
     fs::create_dir_all(&addons_dir).unwrap();
@@ -193,24 +195,24 @@ fn remove_deletes_dirs_and_updates_lock() {
         cache_dir: dir.path().join("cache"),
     };
 
-    remove("Questie", &ctx, &mut lock).unwrap();
+    remove("Questie", &ctx, &mut lock).await.unwrap();
 
     assert!(lock.addon.is_empty());
     assert!(!addons_dir.join("Questie").exists());
 }
 
-#[test]
-fn remove_returns_error_when_not_in_lock() {
+#[tokio::test]
+async fn remove_returns_error_when_not_in_lock() {
     let dir = tempfile::tempdir().unwrap();
     let ctx = make_ctx(dir.path().join("AddOns"), dir.path().join("cache"));
     let mut lock = Lock::new(Tag::new("test"));
 
-    let result = remove("NoSuchAddon", &ctx, &mut lock);
+    let result = remove("NoSuchAddon", &ctx, &mut lock).await;
     assert!(matches!(result, Err(crate::Error::AddonNotInLock { .. })));
 }
 
-#[test]
-fn remove_tolerates_missing_dir() {
+#[tokio::test]
+async fn remove_tolerates_missing_dir() {
     let dir = tempfile::tempdir().unwrap();
     let addons_dir = dir.path().join("AddOns");
     fs::create_dir_all(&addons_dir).unwrap();
@@ -231,7 +233,6 @@ fn remove_tolerates_missing_dir() {
     });
 
     let ctx = make_ctx(addons_dir, dir.path().join("cache"));
-    // Should not error even though the dir is already absent.
-    remove("Gone", &ctx, &mut lock).unwrap();
+    remove("Gone", &ctx, &mut lock).await.unwrap();
     assert!(lock.addon.is_empty());
 }

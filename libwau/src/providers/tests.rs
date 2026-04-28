@@ -75,6 +75,7 @@ mod local_tests {
             flavors: None,
             pin: None,
             project_id: None,
+            wowi_id: None,
             repo: None,
             asset_regex: None,
             git_ref: None,
@@ -82,30 +83,30 @@ mod local_tests {
         }
     }
 
-    #[test]
-    fn resolve_returns_error_when_url_missing() {
+    #[tokio::test]
+    async fn resolve_returns_error_when_url_missing() {
         let provider = LocalProvider::new();
         let addon = make_addon(None);
-        let result = provider.resolve(&addon, &make_ctx());
+        let result = provider.resolve(&addon, &make_ctx()).await;
         assert!(matches!(result, Err(crate::Error::LocalMissingUrl { .. })));
     }
 
-    #[test]
-    fn resolve_plain_path() {
+    #[tokio::test]
+    async fn resolve_plain_path() {
         let provider = LocalProvider::new();
         let addon = make_addon(Some("/tmp/addon.zip"));
-        let artifact = provider.resolve(&addon, &make_ctx()).unwrap();
+        let artifact = provider.resolve(&addon, &make_ctx()).await.unwrap();
         assert_eq!(artifact.version, "local");
         assert!(artifact.id.contains("/tmp/addon.zip"));
         assert_eq!(artifact.url, "/tmp/addon.zip");
         assert!(artifact.sha256.is_none());
     }
 
-    #[test]
-    fn resolve_file_url() {
+    #[tokio::test]
+    async fn resolve_file_url() {
         let provider = LocalProvider::new();
         let addon = make_addon(Some("file:///tmp/addon.zip"));
-        let artifact = provider.resolve(&addon, &make_ctx()).unwrap();
+        let artifact = provider.resolve(&addon, &make_ctx()).await.unwrap();
         assert!(artifact.id.contains("/tmp/addon.zip"));
         assert_eq!(artifact.url, "file:///tmp/addon.zip");
     }
@@ -123,8 +124,8 @@ mod local_tests {
         );
     }
 
-    #[test]
-    fn download_copies_file() {
+    #[tokio::test]
+    async fn download_copies_file() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("src.zip");
         std::fs::write(&src, b"test data").unwrap();
@@ -137,7 +138,7 @@ mod local_tests {
             url: src.to_str().unwrap().to_owned(),
             sha256: None,
         };
-        provider.download(&artifact, &dest).unwrap();
+        provider.download(&artifact, &dest).await.unwrap();
         assert_eq!(std::fs::read(&dest).unwrap(), b"test data");
     }
 }

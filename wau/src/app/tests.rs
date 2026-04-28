@@ -12,27 +12,27 @@ fn missing_config_cli(command: Command) -> Cli {
     }
 }
 
-#[test]
-fn list_returns_settings_error_when_config_missing() {
+#[tokio::test]
+async fn list_returns_settings_error_when_config_missing() {
     let cli = missing_config_cli(Command::List(ListArgs { tag: None }));
-    assert!(run(&cli).is_err());
+    assert!(run(&cli).await.is_err());
 }
 
-#[test]
-fn sync_returns_settings_error_when_config_missing() {
+#[tokio::test]
+async fn sync_returns_settings_error_when_config_missing() {
     let cli = missing_config_cli(Command::Sync(SyncArgs {
         tag: None,
         manifest: None,
         update: false,
     }));
-    assert!(run(&cli).is_err());
+    assert!(run(&cli).await.is_err());
 }
 
-#[test]
-fn remove_returns_settings_error_when_config_missing() {
+#[tokio::test]
+async fn remove_returns_settings_error_when_config_missing() {
     let cli = missing_config_cli(Command::Remove(RemoveArgs {
         tag: None,
         addons: vec!["WeakAuras".into()],
     }));
-    assert!(run(&cli).is_err());
+    assert!(run(&cli).await.is_err());
 }
