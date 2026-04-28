@@ -646,3 +646,285 @@ mod wowinterface_tests {
         mock.assert_async().await;
     }
 }
+
+// ---------------------------------------------------------------------------
+// GitHub provider (gated on the "github" feature)
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "github")]
+mod github_tests {
+    use std::path::PathBuf;
+
+    use crate::{
+        manifest::ManifestAddon,
+        model::{Channel, Flavor, Provider as ModelProvider, Tag},
+        providers::{InstallContext, Provider, ResolvedArtifact, github::GitHubProvider},
+    };
+
+    fn make_ctx() -> InstallContext {
+        InstallContext {
+            tag: Tag::new("test"),
+            flavor: Flavor::Retail,
+            channel: Channel::Stable,
+            addons_path: PathBuf::from("/wow/Interface/AddOns"),
+            cache_dir: PathBuf::from("/tmp/wau-cache"),
+        }
+    }
+
+    fn make_addon(
+        repo: Option<&str>,
+        asset_regex: Option<&str>,
+        git_ref: Option<&str>,
+    ) -> ManifestAddon {
+        ManifestAddon {
+            name: "TestAddon".into(),
+            provider: ModelProvider::GitHub,
+            channel: None,
+            flavors: None,
+            pin: None,
+            project_id: None,
+            wowi_id: None,
+            repo: repo.map(str::to_owned),
+            asset_regex: asset_regex.map(str::to_owned),
+            git_ref: git_ref.map(str::to_owned),
+            url: None,
+        }
+    }
+
+    fn releases_response(prerelease: bool) -> String {
+        format!(
+            r#"[{{
+                "tag_name": "v4.5.0",
+                "prerelease": {prerelease},
+                "draft": false,
+                "assets": [{{
+                    "id": 11111,
+                    "name": "TestAddon-4.5.0.zip",
+                    "browser_download_url": "https://github.com/owner/repo/releases/download/v4.5.0/TestAddon-4.5.0.zip"
+                }}]
+            }}]"#
+        )
+    }
+
+    // resolve — release asset mode
+
+    #[tokio::test]
+    async fn resolve_release_asset_returns_matching_asset() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/repos/owner/repo/releases")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(releases_response(false))
+            .create_async()
+            .await;
+
+        let provider = GitHubProvider::with_base_url(None, server.url());
+        let addon = make_addon(Some("owner/repo"), Some(r"TestAddon-.*\.zip"), None);
+        let artifact = provider.resolve(&addon, &make_ctx()).await.unwrap();
+
+        assert_eq!(artifact.version, "v4.5.0");
+        assert_eq!(artifact.id, "11111");
+        assert_eq!(
+            artifact.url,
+            "https://github.com/owner/repo/releases/download/v4.5.0/TestAddon-4.5.0.zip"
+        );
+        assert!(artifact.sha256.is_none());
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn resolve_release_asset_skips_prerelease_for_stable() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/repos/owner/repo/releases")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"[
+                {"tag_name":"v5.0.0-beta","prerelease":true,"draft":false,"assets":[
+                    {"id":2,"name":"TestAddon-5.0.0-beta.zip","browser_download_url":"https://cdn/beta.zip"}
+                ]},
+                {"tag_name":"v4.5.0","prerelease":false,"draft":false,"assets":[
+                    {"id":1,"name":"TestAddon-4.5.0.zip","browser_download_url":"https://cdn/stable.zip"}
+                ]}
+            ]"#)
+            .create_async()
+            .await;
+
+        let provider = GitHubProvider::with_base_url(None, server.url());
+        let addon = make_addon(Some("owner/repo"), Some(r"TestAddon-.*\.zip"), None);
+        let artifact = provider.resolve(&addon, &make_ctx()).await.unwrap();
+
+        assert_eq!(artifact.version, "v4.5.0");
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn resolve_release_asset_includes_prerelease_for_beta() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/repos/owner/repo/releases")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(releases_response(true))
+            .create_async()
+            .await;
+
+        let provider = GitHubProvider::with_base_url(None, server.url());
+        let mut addon = make_addon(Some("owner/repo"), Some(r"TestAddon-.*\.zip"), None);
+        addon.channel = Some(Channel::Beta);
+
+        let artifact = provider.resolve(&addon, &make_ctx()).await.unwrap();
+        assert_eq!(artifact.version, "v4.5.0");
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn resolve_release_asset_error_when_no_matching_asset() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/repos/owner/repo/releases")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(releases_response(false))
+            .create_async()
+            .await;
+
+        let provider = GitHubProvider::with_base_url(None, server.url());
+        let addon = make_addon(Some("owner/repo"), Some(r"OtherAddon-.*\.zip"), None);
+        let result = provider.resolve(&addon, &make_ctx()).await;
+
+        assert!(matches!(result, Err(crate::Error::NoMatchingAsset { .. })));
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn resolve_release_asset_error_on_http_failure() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/repos/owner/repo/releases")
+            .with_status(403)
+            .create_async()
+            .await;
+
+        let provider = GitHubProvider::with_base_url(None, server.url());
+        let addon = make_addon(Some("owner/repo"), Some(r"TestAddon-.*\.zip"), None);
+        let result = provider.resolve(&addon, &make_ctx()).await;
+
+        assert!(matches!(result, Err(crate::Error::Http(_))));
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn resolve_error_when_repo_missing() {
+        let server = mockito::Server::new_async().await;
+        let provider = GitHubProvider::with_base_url(None, server.url());
+        let addon = make_addon(None, Some(r"TestAddon-.*\.zip"), None);
+        let result = provider.resolve(&addon, &make_ctx()).await;
+        assert!(matches!(result, Err(crate::Error::MissingRepo { .. })));
+    }
+
+    #[tokio::test]
+    async fn resolve_error_when_neither_asset_regex_nor_git_ref() {
+        let server = mockito::Server::new_async().await;
+        let provider = GitHubProvider::with_base_url(None, server.url());
+        let addon = make_addon(Some("owner/repo"), None, None);
+        let result = provider.resolve(&addon, &make_ctx()).await;
+        assert!(matches!(result, Err(crate::Error::NoRelease { .. })));
+    }
+
+    // resolve — git-ref mode
+
+    #[tokio::test]
+    async fn resolve_git_ref_returns_commit_sha() {
+        let mut server = mockito::Server::new_async().await;
+        let sha = "deadbeef0123456789abcdef01234567deadbeef";
+        let mock = server
+            .mock("GET", "/repos/owner/repo/commits/main")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(format!(r#"{{"sha":"{sha}"}}"#))
+            .create_async()
+            .await;
+
+        let provider = GitHubProvider::with_base_url(None, server.url());
+        let addon = make_addon(Some("owner/repo"), None, Some("main"));
+        let artifact = provider.resolve(&addon, &make_ctx()).await.unwrap();
+
+        assert_eq!(artifact.version, &sha[..7]);
+        assert_eq!(artifact.id, sha);
+        assert!(artifact.url.contains(sha));
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn resolve_git_ref_error_on_http_failure() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/repos/owner/repo/commits/main")
+            .with_status(404)
+            .create_async()
+            .await;
+
+        let provider = GitHubProvider::with_base_url(None, server.url());
+        let addon = make_addon(Some("owner/repo"), None, Some("main"));
+        let result = provider.resolve(&addon, &make_ctx()).await;
+
+        assert!(matches!(result, Err(crate::Error::Http(_))));
+        mock.assert_async().await;
+    }
+
+    // download
+
+    #[tokio::test]
+    async fn download_writes_bytes_to_dest() {
+        let mut server = mockito::Server::new_async().await;
+        let fake_zip = b"PK\x03\x04fake zip content";
+        let mock = server
+            .mock("GET", "/files/TestAddon.zip")
+            .with_status(200)
+            .with_body(fake_zip.as_slice())
+            .create_async()
+            .await;
+
+        let provider = GitHubProvider::with_base_url(None, server.url());
+        let artifact = ResolvedArtifact {
+            version: "v4.5.0".into(),
+            id: "11111".into(),
+            url: format!("{}/files/TestAddon.zip", server.url()),
+            sha256: None,
+        };
+
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("out.zip");
+        provider.download(&artifact, &dest).await.unwrap();
+
+        assert_eq!(std::fs::read(&dest).unwrap(), fake_zip);
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn download_error_on_http_failure() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/files/bad.zip")
+            .with_status(404)
+            .create_async()
+            .await;
+
+        let provider = GitHubProvider::with_base_url(None, server.url());
+        let artifact = ResolvedArtifact {
+            version: "v1.0".into(),
+            id: "1".into(),
+            url: format!("{}/files/bad.zip", server.url()),
+            sha256: None,
+        };
+
+        let dir = tempfile::tempdir().unwrap();
+        let result = provider
+            .download(&artifact, &dir.path().join("out.zip"))
+            .await;
+        assert!(matches!(result, Err(crate::Error::Http(_))));
+        mock.assert_async().await;
+    }
+}

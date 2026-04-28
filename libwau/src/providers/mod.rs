@@ -24,6 +24,9 @@ pub mod curseforge;
 #[cfg(feature = "wowinterface")]
 pub mod wowinterface;
 
+#[cfg(feature = "github")]
+pub mod github;
+
 /// Install-time context passed to every provider call.
 #[derive(Debug, Clone)]
 pub struct InstallContext {
@@ -79,6 +82,7 @@ pub fn for_provider(
     provider: &crate::model::Provider,
     config: &ProviderConfig,
 ) -> Result<Box<dyn Provider>> {
+    #[allow(unreachable_patterns)]
     match provider {
         #[cfg(feature = "local")]
         crate::model::Provider::Local => Ok(Box::new(local::LocalProvider::new())),
@@ -96,6 +100,10 @@ pub fn for_provider(
         crate::model::Provider::WoWInterface => {
             Ok(Box::new(wowinterface::WoWInterfaceProvider::new()))
         }
+        #[cfg(feature = "github")]
+        crate::model::Provider::GitHub => Ok(Box::new(github::GitHubProvider::new(
+            config.github_token.clone(),
+        ))),
         _ => Err(crate::Error::ProviderNotSupported {
             provider: provider.clone(),
         }),

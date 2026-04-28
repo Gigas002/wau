@@ -924,6 +924,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "mockito",
+ "regex",
  "reqwest",
  "serde",
  "tempfile",
