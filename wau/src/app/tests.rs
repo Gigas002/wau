@@ -1,38 +1,74 @@
-use super::*;
-use crate::cli::{Cli, Command, ListArgs, RemoveArgs, SyncArgs};
+// Integration-level tests that exercise the full pipeline live in libwau/tests/.
+// These unit tests cover the app module's dependency on settings resolution.
+// Settings::resolve is the gate that catches missing/invalid config before run;
+// app::run itself no longer surfaces settings errors.
+use std::path::PathBuf;
 
-// Integration-level tests require a real config file + addons directory on disk,
-// so they live in libwau/tests/ once the full pipeline is wired (Phase 3+).
-// These unit tests only cover error-path behaviour that can be exercised without I/O.
+use crate::cli::{Cli, Command, InfoArgs, ListArgs, RemoveArgs, SearchArgs, SyncArgs};
+use crate::settings::Settings;
 
-fn missing_config_cli(command: Command) -> Cli {
+fn cli_with_missing_config(command: Command) -> Cli {
     Cli {
-        config: Some(std::path::PathBuf::from("/nonexistent/config.toml")),
+        config: Some(PathBuf::from("/nonexistent/config.toml")),
+        noconfirm: false,
+        quiet: false,
+        verbose: false,
         command,
     }
 }
 
-#[tokio::test]
-async fn list_returns_settings_error_when_config_missing() {
-    let cli = missing_config_cli(Command::List(ListArgs { tag: None }));
-    assert!(run(&cli).await.is_err());
+#[test]
+fn list_settings_error_when_config_missing() {
+    let cli = cli_with_missing_config(Command::List(ListArgs { tag: None }));
+    assert!(Settings::resolve(&cli).is_err());
 }
 
-#[tokio::test]
-async fn sync_returns_settings_error_when_config_missing() {
-    let cli = missing_config_cli(Command::Sync(SyncArgs {
+#[test]
+fn sync_settings_error_when_config_missing() {
+    let cli = cli_with_missing_config(Command::Sync(SyncArgs {
         tag: None,
         manifest: None,
         update: false,
+        flavor: None,
+        channel: None,
     }));
-    assert!(run(&cli).await.is_err());
+    assert!(Settings::resolve(&cli).is_err());
 }
 
-#[tokio::test]
-async fn remove_returns_settings_error_when_config_missing() {
-    let cli = missing_config_cli(Command::Remove(RemoveArgs {
+#[test]
+fn remove_settings_error_when_config_missing() {
+    let cli = cli_with_missing_config(Command::Remove(RemoveArgs {
         tag: None,
         addons: vec!["WeakAuras".into()],
     }));
-    assert!(run(&cli).await.is_err());
+    assert!(Settings::resolve(&cli).is_err());
+}
+
+#[test]
+fn search_settings_error_when_config_missing() {
+    let cli = cli_with_missing_config(Command::Search(SearchArgs {
+        query: "aura".into(),
+        tag: None,
+    }));
+    assert!(Settings::resolve(&cli).is_err());
+}
+
+#[test]
+fn info_settings_error_when_config_missing() {
+    let cli = cli_with_missing_config(Command::Info(InfoArgs {
+        addon: "WeakAuras".into(),
+        tag: None,
+    }));
+    assert!(Settings::resolve(&cli).is_err());
+}
+
+#[test]
+fn init_settings_error_when_config_missing() {
+    use crate::cli::InitArgs;
+    let cli = cli_with_missing_config(Command::Init(InitArgs {
+        tag: None,
+        manifest: None,
+        force: false,
+    }));
+    assert!(Settings::resolve(&cli).is_err());
 }
