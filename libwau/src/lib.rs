@@ -1,7 +1,9 @@
 pub mod error;
+pub mod fs;
 pub mod lock;
 pub mod manifest;
 pub mod model;
+pub mod toc;
 
 pub use error::Error;
 

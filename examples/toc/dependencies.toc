@@ -1,0 +1,17 @@
+## Interface: 110200
+## Title: DependentAddon
+## Version: 2.0.0
+## Author: DepDev
+## Notes: Demonstrates dependency, load-control, and saved-variable directives.
+## Group: MyAddonSuite
+## Dependencies: CoreAddon, SharedLib
+## OptionalDeps: Ace3, LibSharedMedia-3.0
+## LoadWith: SomeOtherAddon
+## LoadManagers: AddonLoader
+## LoadOnDemand: 1
+## DefaultState: enabled
+## SavedVariables: DepDB
+## SavedVariablesPerCharacter: DepCharDB
+## AllowLoadGameType: mainline, classic
+
+Module.lua
