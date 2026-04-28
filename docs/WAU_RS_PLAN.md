@@ -421,9 +421,9 @@ The goal is a predictable set of workflows, with feature matrices, cached builds
 
 ### Phase 2 — Addon inventory
 
-- [ ] `.toc` parser (minimal but robust)
-- [ ] `Interface/AddOns` scanner and grouping
-- [ ] `wau list` shows installed addons for a selected install tag / flavor
+- [x] `.toc` parser (full standard per spec: `libwau/src/toc/`, `examples/toc/` fixtures)
+- [x] `Interface/AddOns` scanner and grouping
+- [x] `wau list` shows installed addons for a selected install tag / flavor
 
 **Verify**: tests with fixture addon folders + `.toc` samples.
 

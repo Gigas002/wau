@@ -1,0 +1,20 @@
+## Interface: 110200
+## Category: DBM
+## Title:|cffffe00a<|r|cffff7d0aDBM|r|cffffe00a>|r |cff10ff10Core|r
+## Title-deDE:|cffffe00a<|r|cffff7d0aDBM|r|cffffe00a>|r |cff10ff10Kern|r
+## Title-frFR:|cffffe00a<|r|cffff7d0aDBM|r|cffffe00a>|r |cff10ff10Noyau|r
+## Title-zhCN:|cffffe00a<|r|cffff7d0aDBM|r|cffffe00a>|r |cff10ff10核心|r
+## Notes: Core module for Deadly Boss Mods.
+## Notes-deDE: Kernmodul für Deadly Boss Mods.
+## Notes-frFR: Module principal de Deadly Boss Mods.
+## Version: 10.1.23
+## Author: MysticalOS
+## RequiredDeps: SomeBaseAddon
+## SavedVariables: DBMData
+## SavedVariablesPerCharacter: DBMStatsDB
+
+## X-Curse-Project-ID: 3358
+## X-Wago-ID: kYNBnQGd
+
+Core.lua
+DBM-Core.lua

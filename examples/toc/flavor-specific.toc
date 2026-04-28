@@ -1,0 +1,12 @@
+## Interface-Mainline: 120001
+## Interface-Vanilla: 11508
+## Interface-TBC: 20505
+## Interface-Wrath: 30405
+## Interface-Cata: 40402
+## Interface-Mists: 50503
+## Title: FlavorSpecific
+## Version: 3.0.0
+## Author: DevCore
+## Notes: Uses per-flavor Interface keys instead of a single combined list.
+
+Core.lua

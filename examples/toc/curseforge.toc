@@ -1,0 +1,17 @@
+## Interface: 110207
+## Title: CurseForgeAddon
+## Version: 11.2.0.6
+## Author: SomeAuthor
+## Notes: Example addon with CurseForge and Wago provider metadata.
+## Category: Auction & Economy
+## SavedVariables: CurseForgeAddonDB
+## OptionalDeps: Ace3, LibStub, LibSharedMedia-3.0
+## IconTexture: Interface\AddOns\CurseForgeAddon\icon.tga
+
+## X-Curse-Project-ID: 274066
+## X-Wago-ID: nQN5aoNB
+
+Core.lua
+Options.lua
+Modules\Module1.lua
+Modules\Module2.lua

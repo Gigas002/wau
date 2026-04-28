@@ -1,0 +1,7 @@
+## Interface: 120001
+## Title: SimpleAddon
+## Version: 1.0.0
+## Author: Anon
+## Notes: A minimal example addon with just the core required fields.
+
+SimpleAddon.lua
