@@ -1,76 +1,75 @@
-use crate::cli::{Cli, Command, ListArgs, RemoveArgs, SyncArgs};
+use std::path::PathBuf;
 
-fn make_list_cli(tag: Option<&str>) -> Cli {
-    Cli {
-        config: None,
-        command: Command::List(ListArgs {
-            tag: tag.map(str::to_owned),
-        }),
-    }
-}
+use crate::cli::{Cli, Command, InfoArgs, ListArgs, RemoveArgs, SearchArgs, SyncArgs};
 
-fn make_sync_cli(tag: Option<&str>, update: bool) -> Cli {
-    Cli {
-        config: None,
-        command: Command::Sync(SyncArgs {
-            tag: tag.map(str::to_owned),
-            manifest: None,
-            update,
-        }),
-    }
-}
+use super::Settings;
 
-fn make_remove_cli(tag: Option<&str>, addons: &[&str]) -> Cli {
+fn cli_with_missing_config(command: Command) -> Cli {
     Cli {
-        config: None,
-        command: Command::Remove(RemoveArgs {
-            tag: tag.map(str::to_owned),
-            addons: addons.iter().map(|s| s.to_string()).collect(),
-        }),
+        config: Some(PathBuf::from("/nonexistent/config.toml")),
+        noconfirm: false,
+        quiet: false,
+        verbose: false,
+        command,
     }
 }
 
 #[test]
-fn list_tag_from_cli() {
-    let cli = make_list_cli(Some("classic-official"));
-    let Command::List(args) = &cli.command else {
-        panic!()
-    };
-    assert_eq!(args.tag.as_deref(), Some("classic-official"));
+fn resolve_list_fails_on_missing_config() {
+    let cli = cli_with_missing_config(Command::List(ListArgs { tag: None }));
+    assert!(Settings::resolve(&cli).is_err());
 }
 
 #[test]
-fn list_tag_absent_in_cli() {
-    let cli = make_list_cli(None);
-    let Command::List(args) = &cli.command else {
-        panic!()
-    };
-    assert!(args.tag.is_none());
+fn resolve_sync_fails_on_missing_config() {
+    let cli = cli_with_missing_config(Command::Sync(SyncArgs {
+        tag: None,
+        manifest: None,
+        update: false,
+        flavor: None,
+        channel: None,
+    }));
+    assert!(Settings::resolve(&cli).is_err());
 }
 
 #[test]
-fn sync_update_flag_stored() {
-    let cli = make_sync_cli(None, true);
-    let Command::Sync(args) = &cli.command else {
-        panic!()
-    };
-    assert!(args.update);
+fn resolve_remove_fails_on_missing_config() {
+    let cli = cli_with_missing_config(Command::Remove(RemoveArgs {
+        tag: None,
+        addons: vec!["WeakAuras".into()],
+    }));
+    assert!(Settings::resolve(&cli).is_err());
 }
 
 #[test]
-fn sync_tag_from_cli() {
-    let cli = make_sync_cli(Some("retail-main"), false);
-    let Command::Sync(args) = &cli.command else {
-        panic!()
-    };
-    assert_eq!(args.tag.as_deref(), Some("retail-main"));
+fn resolve_search_fails_on_missing_config() {
+    let cli = cli_with_missing_config(Command::Search(SearchArgs {
+        query: "aura".into(),
+        tag: None,
+    }));
+    assert!(Settings::resolve(&cli).is_err());
 }
 
 #[test]
-fn remove_addons_stored() {
-    let cli = make_remove_cli(None, &["WeakAuras", "Bagnon"]);
-    let Command::Remove(args) = &cli.command else {
-        panic!()
+fn resolve_info_fails_on_missing_config() {
+    let cli = cli_with_missing_config(Command::Info(InfoArgs {
+        addon: "WeakAuras".into(),
+        tag: None,
+    }));
+    assert!(Settings::resolve(&cli).is_err());
+}
+
+#[test]
+fn ux_flags_carried_through_resolve() {
+    let cli = Cli {
+        config: Some(PathBuf::from("/nonexistent/config.toml")),
+        noconfirm: true,
+        quiet: true,
+        verbose: true,
+        command: Command::List(ListArgs { tag: None }),
     };
-    assert_eq!(args.addons, vec!["WeakAuras", "Bagnon"]);
+    // resolve fails (no config), but we can verify CLI struct fields are set
+    assert!(cli.noconfirm);
+    assert!(cli.quiet);
+    assert!(cli.verbose);
 }

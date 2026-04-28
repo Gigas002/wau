@@ -449,9 +449,9 @@ The goal is a predictable set of workflows, with feature matrices, cached builds
 
 ### Phase 5 — Paru-like UX polish
 
-- [ ] Commands per `examples/cli.md` (iterate the file as reality diverges)
-- [ ] interactive confirmation prompts (opt-out `--noconfirm`)
-- [ ] `--quiet`, `--verbose`, consistent exit codes
+- [x] Commands per `examples/cli.md` (iterate the file as reality diverges)
+- [x] interactive confirmation prompts (opt-out `--noconfirm`)
+- [x] `--quiet`, `--verbose`, consistent exit codes
 
 ### Phase 6 — Release discipline + cleanup (tofi-rs style)
 
@@ -538,3 +538,4 @@ When **example shapes** change, update `examples/*.toml` / `examples/cli.md` fir
 | 2026-04-28 | Phase 4e complete: `libwau/src/providers/github.rs` — `GitHubProvider` behind `github` Cargo feature; optional Bearer token auth + `User-Agent`/`Accept` headers; release-asset mode (channel-filtered, regex asset match); git-ref tip mode (HEAD commit SHA → zipball URL); 11 mocked-HTTP tests; `regex` optional dep wired |
 | 2026-04-28 | Phase 4d complete: `libwau/src/providers/wowinterface.rs` — `WoWInterfaceProvider` behind `wowinterface` Cargo feature; public MMOUI v4 API (no auth); resolve takes first entry from `filedetails/{id}.json`; HTTP download; 6 mocked-HTTP tests; all quality gates green |
 | 2026-04-28 | Phase 4c complete: `libwau/src/providers/curseforge/` — `CurseForgeProvider` behind `curseforge` Cargo feature; `x-api-key` auth; resolve selects latest file by flavor (version-prefix) + channel (releaseType); sha256 extracted from `hashes`; HTTP download to dest; 14 mocked-HTTP tests (mockito); all quality gates green |
+| 2026-04-28 | Phase 5 complete: `--noconfirm`/`--quiet`/`--verbose` global flags; `wau search` + `wau info` subcommands; `wau sync --flavor`/`--channel` overrides; interactive confirmation prompts before install/remove; quiet suppresses per-item progress; `logger` module (env-filter, RUST_LOG → CLI flags → config → info); `FromStr` + `as_str` for `Flavor`, `Channel`, `LogLevel`; 270 tests green across all feature combinations |

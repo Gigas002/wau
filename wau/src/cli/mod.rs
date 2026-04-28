@@ -12,6 +12,18 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "PATH")]
     pub config: Option<PathBuf>,
 
+    /// Skip interactive confirmation prompts.
+    #[arg(long, global = true)]
+    pub noconfirm: bool,
+
+    /// Suppress non-essential output.
+    #[arg(long, short = 'q', global = true)]
+    pub quiet: bool,
+
+    /// Increase output verbosity (sets log level to debug).
+    #[arg(long, short = 'v', global = true)]
+    pub verbose: bool,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -24,6 +36,10 @@ pub enum Command {
     Sync(SyncArgs),
     /// Remove installed addons recorded in the lock.
     Remove(RemoveArgs),
+    /// Search installed addons and manifest entries.
+    Search(SearchArgs),
+    /// Show details for an addon from the manifest and lock.
+    Info(InfoArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -46,6 +62,14 @@ pub struct SyncArgs {
     /// Re-install addons already present in the lock (apply updates).
     #[arg(long)]
     pub update: bool,
+
+    /// Override the default flavor for this sync (e.g. retail, classic-era).
+    #[arg(long, value_name = "FLAVOR")]
+    pub flavor: Option<String>,
+
+    /// Override the default channel for this sync (stable, beta, alpha).
+    #[arg(long, value_name = "CHANNEL")]
+    pub channel: Option<String>,
 }
 
 #[derive(Debug, clap::Args)]
@@ -57,4 +81,26 @@ pub struct RemoveArgs {
     /// Names of addons to remove (as listed in the manifest/lock).
     #[arg(required = true, value_name = "ADDON")]
     pub addons: Vec<String>,
+}
+
+#[derive(Debug, clap::Args)]
+pub struct SearchArgs {
+    /// Search query (matches addon name, title, or folder).
+    #[arg(value_name = "QUERY")]
+    pub query: String,
+
+    /// Install tag to use (default: config `defaults.install_tag`).
+    #[arg(short, long, value_name = "TAG")]
+    pub tag: Option<String>,
+}
+
+#[derive(Debug, clap::Args)]
+pub struct InfoArgs {
+    /// Addon name as listed in the manifest or lock.
+    #[arg(value_name = "ADDON")]
+    pub addon: String,
+
+    /// Install tag to use (default: config `defaults.install_tag`).
+    #[arg(short, long, value_name = "TAG")]
+    pub tag: Option<String>,
 }
