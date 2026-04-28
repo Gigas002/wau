@@ -8,12 +8,18 @@ license.workspace = true
 repository.workspace = true
 edition.workspace = true
 
+[features]
+default = ["local"]
+local = []
+
 [dependencies]
 thiserror = "2"
 tracing = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 toml = "1.1"
 chrono = { version = "0.4", features = ["serde"] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
-tempfile = "3.27"
+tempfile = "3"
+zip = { version = "8", default-features = false, features = ["deflate"] }

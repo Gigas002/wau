@@ -27,6 +27,25 @@ pub fn print_addon_list(addons: &[InstalledAddon]) {
     }
 }
 
+/// Prints a confirmation that an addon was installed.
+pub fn print_installed(name: &str) {
+    println!("installed  {name}");
+}
+
+/// Prints a confirmation that an addon was removed.
+pub fn print_removed(name: &str) {
+    println!("removed    {name}");
+}
+
+/// Prints the sync operation summary.
+pub fn print_sync_summary(installed: u32, skipped: u32) {
+    println!("sync done: {installed} installed, {skipped} skipped");
+}
+
+// ---------------------------------------------------------------------------
+// Test-only helpers
+// ---------------------------------------------------------------------------
+
 /// Formats one addon row as a plain string (used in tests without capturing stdout).
 #[cfg(test)]
 pub fn format_addon_row(addon: &InstalledAddon) -> String {

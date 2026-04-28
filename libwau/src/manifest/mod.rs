@@ -39,6 +39,8 @@ pub struct ManifestAddon {
     pub repo: Option<String>,
     pub asset_regex: Option<String>,
     pub git_ref: Option<String>,
+    // Local: file:// path or absolute filesystem path to a zip
+    pub url: Option<String>,
 }
 
 /// Version pin — parsed for forward compatibility, ignored by the resolver until Phase 8.

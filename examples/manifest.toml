@@ -1,6 +1,7 @@
 # This file packs several patterns in one place for schema and resolver design.
 # First-release product behavior is latest-only: the resolver must ignore `pin` / non-tip selection until Phase 8 (see docs/WAU_RS_PLAN.md). Rows with pins remain as forward-looking examples.
 # Edge cases covered here (by section below):
+# - Local provider: path or file:// URL to a zip — used for tests and power users without catalog APIs.
 # - Baseline CurseForge row: stable channel, single flavor, version pin (distinct addon name).
 # - Same human-readable name twice: disjoint flavors, different pin policies (retail latest vs classic pinned).
 # - Omit flavors and pin: use config default flavor; resolve latest for channel.
@@ -14,6 +15,17 @@
 
 # Manifest format version; parsers use this for forward compatibility.
 schema = 1
+
+# --- Local provider: install directly from a zip on disk or via file:// URL ---
+[[addon]]
+# Useful for testing, air-gapped setups, or privately distributed addons.
+name = "LocalTestAddon"
+provider = "local"
+# Absolute path or file:// URL to the addon zip archive.
+url = "/path/to/LocalTestAddon.zip"
+channel = "stable"
+flavors = ["retail"]
+# No pin: the local provider always installs exactly what the url points to.
 
 # --- Baseline: CurseForge, one flavor, stable, explicit version pin ---
 [[addon]]

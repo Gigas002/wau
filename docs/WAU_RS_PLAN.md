@@ -429,10 +429,10 @@ The goal is a predictable set of workflows, with feature matrices, cached builds
 
 ### Phase 3 — Install/remove pipeline (Local provider first)
 
-- [ ] Download/extract zip
-- [ ] Staging install + atomic swap
-- [ ] Lock updates
-- [ ] `wau sync` from local path/URL and `wau remove`
+- [x] Download/extract zip
+- [x] Staging install + atomic swap
+- [x] Lock updates
+- [x] `wau sync` from local path/URL and `wau remove`
 
 **Verify**: integration tests with local zip fixtures.
 
@@ -530,3 +530,4 @@ When **example shapes** change, update `examples/*.toml` / `examples/cli.md` fir
 | 2026-04-22 | Initial plan created for `wau` rewrite                                                                                                                                                                                                                                                                                               |
 | 2026-04-22 | Expanded into a playbook: schema examples, CI blueprint, test discipline, paru mapping, and release hygiene phase                                                                                                                                                                                                                    |
 | 2026-04-23 | Re-scoped first release providers (Curse + WoWInterface + GitHub + Local); **latest-only** resolution (pins → Phase 8); deferred backup/switching; install tags + private-server extensibility; moved TOML/CLI drafts to `examples/`; late phases 7–10; **§2.2** per-provider Cargo features; **`[logging].level`** in config + §3.1 |
+| 2026-04-28 | Phase 3 complete: `libwau/src/providers/` (Provider trait + Local impl behind `local` feature); `libwau/src/ops/` (install/remove orchestration, zip extraction, staging); `wau sync` + `wau remove` commands; lock updates; integration tests with local zip fixtures; all quality gates green |
