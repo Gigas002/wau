@@ -9,8 +9,15 @@ keywords.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = ["local", "curseforge", "wowinterface", "github"]
+local = ["libwau/local"]
+curseforge = ["libwau/curseforge"]
+wowinterface = ["libwau/wowinterface"]
+github = ["libwau/github"]
+
 [dependencies]
-libwau = { path = "../libwau" }
+libwau = { path = "../libwau", default-features = false }
 
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"

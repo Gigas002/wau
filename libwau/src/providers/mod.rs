@@ -80,7 +80,7 @@ pub struct ProviderConfig {
 /// not compiled into this build or required credentials are absent.
 pub fn for_provider(
     provider: &crate::model::Provider,
-    config: &ProviderConfig,
+    _config: &ProviderConfig,
 ) -> Result<Box<dyn Provider>> {
     #[allow(unreachable_patterns)]
     match provider {
@@ -88,12 +88,13 @@ pub fn for_provider(
         crate::model::Provider::Local => Ok(Box::new(local::LocalProvider::new())),
         #[cfg(feature = "curseforge")]
         crate::model::Provider::CurseForge => {
-            let api_key = config
-                .curseforge_api_key
-                .clone()
-                .ok_or(crate::Error::MissingApiKey {
-                    provider: crate::model::Provider::CurseForge,
-                })?;
+            let api_key =
+                _config
+                    .curseforge_api_key
+                    .clone()
+                    .ok_or(crate::Error::MissingApiKey {
+                        provider: crate::model::Provider::CurseForge,
+                    })?;
             Ok(Box::new(curseforge::CurseForgeProvider::new(api_key)))
         }
         #[cfg(feature = "wowinterface")]
@@ -102,7 +103,7 @@ pub fn for_provider(
         }
         #[cfg(feature = "github")]
         crate::model::Provider::GitHub => Ok(Box::new(github::GitHubProvider::new(
-            config.github_token.clone(),
+            _config.github_token.clone(),
         ))),
         _ => Err(crate::Error::ProviderNotSupported {
             provider: provider.clone(),

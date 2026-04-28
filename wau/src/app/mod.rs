@@ -69,27 +69,10 @@ async fn sync(cli: &Cli) -> Result<(), AppError> {
         cache_dir: settings.cache_dir.clone(),
     };
 
+    let plan = libwau::resolve::plan(&manifest, &lock, &ctx.flavor, settings.update);
+
     let mut installed = 0u32;
-    let mut skipped = 0u32;
-
-    for addon in &manifest.addon {
-        // Filter: skip entries whose flavor list does not include this context's flavor.
-        if let Some(flavors) = &addon.flavors
-            && !flavors.contains(&ctx.flavor)
-        {
-            continue;
-        }
-
-        // Skip if already in lock and --update is not set.
-        let already_locked = lock
-            .addon
-            .iter()
-            .any(|a| a.name == addon.name && a.flavor == ctx.flavor);
-        if already_locked && !settings.update {
-            skipped += 1;
-            continue;
-        }
-
+    for addon in plan.to_install {
         let provider = providers::for_provider(&addon.provider, &settings.provider_config)?;
         ops::install(provider.as_ref(), addon, &ctx, &mut lock).await?;
         output::print_installed(&addon.name);
@@ -97,7 +80,7 @@ async fn sync(cli: &Cli) -> Result<(), AppError> {
     }
 
     lock::save(&lock, &settings.lock_path)?;
-    output::print_sync_summary(installed, skipped);
+    output::print_sync_summary(installed, plan.skipped as u32);
     Ok(())
 }
 
