@@ -413,9 +413,9 @@ The goal is a predictable set of workflows, with feature matrices, cached builds
 
 ### Phase 1 — Core model + config/manifest/lock schemas
 
-- [ ] Implement `Flavor`, `Channel`, provider ids, **install tag** / multi-root config model, and typed keys
-- [ ] Implement XDG config resolution and parse `config.toml` (paths, defaults, **`[logging].level`**, provider tables; keep forward-compatible optional sections)
-- [ ] Implement `manifest.toml` and `lock.toml` read/write + validation aligned with `examples/*.toml` (optional `pin` keys may parse for forward compat; **reject or warn** if pins present until Phase 8 — document the chosen policy)
+- [x] Implement `Flavor`, `Channel`, provider ids, **install tag** / multi-root config model, and typed keys
+- [x] Implement XDG config resolution and parse `config.toml` (paths, defaults, **`[logging].level`**, provider tables; keep forward-compatible optional sections)
+- [x] Implement `manifest.toml` and `lock.toml` read/write + validation aligned with `examples/*.toml` (optional `pin` keys may parse for forward compat; **reject or warn** if pins present until Phase 8 — document the chosen policy)
 
 **Verify**: unit tests for parse/merge/validation.
 
@@ -525,8 +525,8 @@ When **example shapes** change, update `examples/*.toml` / `examples/cli.md` fir
 
 ### Revision history
 
-| Date       | Change |
-| ---------- | ------ |
-| 2026-04-22 | Initial plan created for `wau` rewrite |
-| 2026-04-22 | Expanded into a playbook: schema examples, CI blueprint, test discipline, paru mapping, and release hygiene phase |
+| Date       | Change                                                                                                                                                                                                                                                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-04-22 | Initial plan created for `wau` rewrite                                                                                                                                                                                                                                                                                               |
+| 2026-04-22 | Expanded into a playbook: schema examples, CI blueprint, test discipline, paru mapping, and release hygiene phase                                                                                                                                                                                                                    |
 | 2026-04-23 | Re-scoped first release providers (Curse + WoWInterface + GitHub + Local); **latest-only** resolution (pins → Phase 8); deferred backup/switching; install tags + private-server extensibility; moved TOML/CLI drafts to `examples/`; late phases 7–10; **§2.2** per-provider Cargo features; **`[logging].level`** in config + §3.1 |
