@@ -27,8 +27,13 @@ impl LocalProvider {
     }
 }
 
+#[async_trait::async_trait]
 impl Provider for LocalProvider {
-    fn resolve(&self, addon: &ManifestAddon, _ctx: &InstallContext) -> Result<ResolvedArtifact> {
+    async fn resolve(
+        &self,
+        addon: &ManifestAddon,
+        _ctx: &InstallContext,
+    ) -> Result<ResolvedArtifact> {
         let url = addon
             .url
             .as_deref()
@@ -47,7 +52,7 @@ impl Provider for LocalProvider {
         })
     }
 
-    fn download(&self, artifact: &ResolvedArtifact, dest: &Path) -> Result<()> {
+    async fn download(&self, artifact: &ResolvedArtifact, dest: &Path) -> Result<()> {
         let src = url_to_path(&artifact.url);
         fs::copy(&src, dest)?;
         Ok(())

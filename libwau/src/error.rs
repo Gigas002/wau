@@ -24,8 +24,33 @@ pub enum Error {
     #[error("provider '{provider}' is not supported in this build")]
     ProviderNotSupported { provider: Provider },
 
+    #[error("no API key configured for provider '{provider}'")]
+    MissingApiKey { provider: Provider },
+
     #[error("local provider addon '{name}' has no url field")]
     LocalMissingUrl { name: String },
+
+    #[error("CurseForge addon '{name}' has no project_id")]
+    MissingProjectId { name: String },
+
+    #[error("WoWInterface addon '{name}' has no wowi_id")]
+    MissingWowiId { name: String },
+
+    #[error("GitHub addon '{name}' has no repo")]
+    MissingRepo { name: String },
+
+    #[error("HTTP error: {0}")]
+    Http(String),
+
+    #[error("no release found for addon '{name}'")]
+    NoRelease { name: String },
+
+    #[error("no asset matching '{pattern}' in release '{tag}' for addon '{name}'")]
+    NoMatchingAsset {
+        name: String,
+        tag: String,
+        pattern: String,
+    },
 
     #[error("zip extraction failed: {0}")]
     ZipExtract(#[from] zip::result::ZipError),

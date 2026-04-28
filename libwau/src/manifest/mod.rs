@@ -35,6 +35,8 @@ pub struct ManifestAddon {
     pub pin: Option<Pin>,
     // CurseForge
     pub project_id: Option<u64>,
+    // WoWInterface
+    pub wowi_id: Option<u64>,
     // GitHub
     pub repo: Option<String>,
     pub asset_regex: Option<String>,

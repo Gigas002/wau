@@ -9,8 +9,11 @@ repository.workspace = true
 edition.workspace = true
 
 [features]
-default = ["local"]
+default = ["local", "curseforge", "wowinterface", "github"]
 local = []
+curseforge = ["dep:reqwest"]
+wowinterface = ["dep:reqwest"]
+github = ["dep:reqwest", "dep:regex"]
 
 [dependencies]
 thiserror = "2"
@@ -19,7 +22,12 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "1.1"
 chrono = { version = "0.4", features = ["serde"] }
 zip = { version = "8", default-features = false, features = ["deflate"] }
+async-trait = "0.1"
+reqwest = { version = "0.13", features = ["json", "query"], optional = true }
+regex = { version = "1", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
 zip = { version = "8", default-features = false, features = ["deflate"] }
+tokio = { version = "1", features = ["full"] }
+mockito = "1"
