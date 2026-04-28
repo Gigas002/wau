@@ -36,5 +36,11 @@ flavor = "classic-era"
 wow_root = "/games/TurtleWoW/World of Warcraft"
 
 [providers.curseforge]
-# Prefer env var in real setups; placeholder only.
-api_key = "your-curseforge-api-token"
+# How to obtain your CurseForge API key:
+#   1. Go to https://console.curseforge.com and sign in (or create an account).
+#   2. In the left sidebar, click "API Keys".
+#   3. Click "Generate API Key", give it a name (e.g. "wau"), and confirm.
+#   4. Copy the generated key and paste it below (or export as WAU_CF_API_KEY and
+#      reference it via an env-var substitution mechanism once that is wired up).
+# Keep this file out of version control — treat the key as a secret.
+api_key = "your-curseforge-api-key"

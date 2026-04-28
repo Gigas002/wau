@@ -18,6 +18,9 @@ mod tests;
 #[cfg(feature = "local")]
 pub mod local;
 
+#[cfg(feature = "curseforge")]
+pub mod curseforge;
+
 /// Install-time context passed to every provider call.
 #[derive(Debug, Clone)]
 pub struct InstallContext {
@@ -71,11 +74,21 @@ pub struct ProviderConfig {
 /// not compiled into this build or required credentials are absent.
 pub fn for_provider(
     provider: &crate::model::Provider,
-    _config: &ProviderConfig,
+    config: &ProviderConfig,
 ) -> Result<Box<dyn Provider>> {
     match provider {
         #[cfg(feature = "local")]
         crate::model::Provider::Local => Ok(Box::new(local::LocalProvider::new())),
+        #[cfg(feature = "curseforge")]
+        crate::model::Provider::CurseForge => {
+            let api_key = config
+                .curseforge_api_key
+                .clone()
+                .ok_or(crate::Error::MissingApiKey {
+                    provider: crate::model::Provider::CurseForge,
+                })?;
+            Ok(Box::new(curseforge::CurseForgeProvider::new(api_key)))
+        }
         _ => Err(crate::Error::ProviderNotSupported {
             provider: provider.clone(),
         }),

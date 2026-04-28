@@ -9,8 +9,9 @@ repository.workspace = true
 edition.workspace = true
 
 [features]
-default = ["local"]
+default = ["local", "curseforge"]
 local = []
+curseforge = ["dep:reqwest"]
 
 [dependencies]
 thiserror = "2"
@@ -20,8 +21,10 @@ toml = "1.1"
 chrono = { version = "0.4", features = ["serde"] }
 zip = { version = "8", default-features = false, features = ["deflate"] }
 async-trait = "0.1"
+reqwest = { version = "0.13", features = ["json", "query"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"
 zip = { version = "8", default-features = false, features = ["deflate"] }
 tokio = { version = "1", features = ["full"] }
+mockito = "1"
