@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::cli::{Cli, Command, InfoArgs, ListArgs, RemoveArgs, SearchArgs, SyncArgs};
+use crate::cli::{Cli, Command, InfoArgs, InitArgs, ListArgs, RemoveArgs, SearchArgs, SyncArgs};
 
 use super::Settings;
 
@@ -55,6 +55,16 @@ fn resolve_info_fails_on_missing_config() {
     let cli = cli_with_missing_config(Command::Info(InfoArgs {
         addon: "WeakAuras".into(),
         tag: None,
+    }));
+    assert!(Settings::resolve(&cli).is_err());
+}
+
+#[test]
+fn resolve_init_fails_on_missing_config() {
+    let cli = cli_with_missing_config(Command::Init(InitArgs {
+        tag: None,
+        manifest: None,
+        force: false,
     }));
     assert!(Settings::resolve(&cli).is_err());
 }

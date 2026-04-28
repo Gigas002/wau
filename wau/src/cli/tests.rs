@@ -1,5 +1,6 @@
 use super::*;
 use clap::Parser;
+use std::path::Path;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -231,4 +232,45 @@ fn default_cli_has_no_flags() {
     assert!(!cli.noconfirm);
     assert!(!cli.quiet);
     assert!(!cli.verbose);
+}
+
+// ── init ─────────────────────────────────────────────────────────────────────
+
+#[test]
+fn init_no_args_uses_defaults() {
+    let cli = Cli::try_parse_from(["wau", "init"]).unwrap();
+    assert!(matches!(cli.command, Command::Init(_)));
+    let Command::Init(args) = cli.command else {
+        panic!()
+    };
+    assert!(args.tag.is_none());
+    assert!(args.manifest.is_none());
+    assert!(!args.force);
+}
+
+#[test]
+fn init_with_tag() {
+    let cli = Cli::try_parse_from(["wau", "init", "--tag", "classic-era"]).unwrap();
+    let Command::Init(args) = cli.command else {
+        panic!()
+    };
+    assert_eq!(args.tag.as_deref(), Some("classic-era"));
+}
+
+#[test]
+fn init_with_manifest() {
+    let cli = Cli::try_parse_from(["wau", "init", "--manifest", "/tmp/my.toml"]).unwrap();
+    let Command::Init(args) = cli.command else {
+        panic!()
+    };
+    assert_eq!(args.manifest.as_deref(), Some(Path::new("/tmp/my.toml")));
+}
+
+#[test]
+fn init_with_force() {
+    let cli = Cli::try_parse_from(["wau", "init", "--force"]).unwrap();
+    let Command::Init(args) = cli.command else {
+        panic!()
+    };
+    assert!(args.force);
 }

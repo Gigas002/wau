@@ -8,8 +8,8 @@ use libwau::{
 use crate::{
     output,
     settings::{
-        CommandSettings, InfoSettings, ListSettings, RemoveSettings, SearchSettings, Settings,
-        SyncSettings,
+        CommandSettings, InfoSettings, InitSettings, ListSettings, RemoveSettings, SearchSettings,
+        Settings, SyncSettings,
     },
 };
 
@@ -23,6 +23,11 @@ pub enum AppError {
 
     #[error("addon '{name}' not found in manifest or lock")]
     AddonNotFound { name: String },
+
+    #[error(
+        "manifest not found at {path}; run `wau init` to auto-generate one from installed addons"
+    )]
+    ManifestNotFound { path: std::path::PathBuf },
 }
 
 /// Dispatches the resolved settings to the appropriate command handler.
@@ -35,6 +40,7 @@ pub async fn run(settings: Settings) -> Result<(), AppError> {
         CommandSettings::Remove(s) => remove(s, quiet, noconfirm).await,
         CommandSettings::Search(s) => search(s),
         CommandSettings::Info(s) => info(s),
+        CommandSettings::Init(s) => init(s),
     }
 }
 
@@ -53,7 +59,10 @@ async fn sync(s: SyncSettings, quiet: bool, noconfirm: bool) -> Result<(), AppEr
         "syncing"
     );
 
-    let manifest = manifest::load(&s.manifest_path)?;
+    let manifest = manifest::load(&s.manifest_path).map_err(|e| match e {
+        libwau::Error::ManifestNotFound { path } => AppError::ManifestNotFound { path },
+        other => AppError::Libwau(other),
+    })?;
 
     let mut lock = match lock::load(&s.lock_path) {
         Ok(l) => l,
@@ -168,6 +177,42 @@ fn search(s: SearchSettings) -> Result<(), AppError> {
         .collect();
 
     output::print_search_results(&s.query, &manifest_matches, &installed_matches);
+    Ok(())
+}
+
+fn init(s: InitSettings) -> Result<(), AppError> {
+    output::print_init_header(&s.tag);
+
+    // Scan installed addons if the directory exists; generate manifest entries from .toc X-fields.
+    let installed = if s.addons_path.is_dir() {
+        libwau::fs::scan(&s.addons_path)?
+    } else {
+        tracing::debug!(
+            path = %s.addons_path.display(),
+            "addons directory does not exist; skipping scan"
+        );
+        Vec::new()
+    };
+
+    let generated = manifest::from_installed(&installed, &s.flavor);
+    let detected = generated.addon.len();
+    let skipped = installed.len().saturating_sub(detected);
+    output::print_init_scan_result(detected, skipped);
+
+    if s.manifest_path.exists() && !s.force {
+        output::print_init_skipped(&s.manifest_path);
+    } else {
+        manifest::save(&generated, &s.manifest_path)?;
+        output::print_init_manifest_created(&s.manifest_path, detected);
+    }
+
+    if s.lock_path.exists() && !s.force {
+        output::print_init_skipped(&s.lock_path);
+    } else {
+        lock::save(&Lock::new(s.tag.clone()), &s.lock_path)?;
+        output::print_init_created(&s.lock_path);
+    }
+
     Ok(())
 }
 

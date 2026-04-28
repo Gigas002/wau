@@ -70,6 +70,7 @@ impl Settings {
             Command::Remove(_) => CommandSettings::Remove(build_remove(cli, &config, &config_dir)?),
             Command::Search(_) => CommandSettings::Search(build_search(cli, &config, &config_dir)?),
             Command::Info(_) => CommandSettings::Info(build_info(cli, &config, &config_dir)?),
+            Command::Init(_) => CommandSettings::Init(build_init(cli, &config, &config_dir)?),
         };
 
         Ok(Settings {
@@ -93,6 +94,7 @@ pub enum CommandSettings {
     Remove(RemoveSettings),
     Search(SearchSettings),
     Info(InfoSettings),
+    Init(InitSettings),
 }
 
 /// Resolved settings for `wau list`.
@@ -142,6 +144,17 @@ pub struct InfoSettings {
     pub tag: Tag,
     pub manifest_path: PathBuf,
     pub lock_path: PathBuf,
+}
+
+/// Resolved settings for `wau init`.
+#[derive(Debug)]
+pub struct InitSettings {
+    pub tag: Tag,
+    pub addons_path: PathBuf,
+    pub flavor: Flavor,
+    pub manifest_path: PathBuf,
+    pub lock_path: PathBuf,
+    pub force: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -316,6 +329,46 @@ fn build_info(
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
+
+fn build_init(
+    cli: &Cli,
+    config: &Config,
+    config_dir: &Path,
+) -> Result<InitSettings, SettingsError> {
+    let (tag, manifest_override, force) = if let Command::Init(args) = &cli.command {
+        let tag = args
+            .tag
+            .as_deref()
+            .map(Tag::new)
+            .unwrap_or_else(|| config.defaults.install_tag.clone());
+        (tag, args.manifest.clone(), args.force)
+    } else {
+        (config.defaults.install_tag.clone(), None, false)
+    };
+
+    let install = config
+        .paths
+        .installs
+        .iter()
+        .find(|i| i.tag == tag)
+        .ok_or_else(|| SettingsError::TagNotFound {
+            tag: tag.to_string(),
+        })?;
+
+    let addons_path = install.wow_root.join("Interface").join("AddOns");
+    let flavor = install.flavor.clone();
+    let manifest_path = manifest_override.unwrap_or_else(|| config_dir.join("manifest.toml"));
+    let lock_path = lock_path(config_dir, &tag);
+
+    Ok(InitSettings {
+        tag,
+        addons_path,
+        flavor,
+        manifest_path,
+        lock_path,
+        force,
+    })
+}
 
 fn addons_path(config: &Config, tag: &Tag) -> Result<PathBuf, SettingsError> {
     config

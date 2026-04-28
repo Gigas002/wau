@@ -1,8 +1,8 @@
-# wau CLI (illustrative)
+# wau CLI
 
-Target ergonomics: **paru-like** — terse defaults, short flags, predictable exit codes, useful `--help`, optional color, non-interactive mode.
+Target ergonomics: **paru-like** — terse defaults, short flags, predictable exit codes, useful `--help`, non-interactive mode.
 
-Maintainers: treat this file as the **draft command surface**; the plan in `docs/WAU_RS_PLAN.md` references it so CLI debates do not bloat the roadmap.
+Maintainers: treat this file as the **command surface reference**; the plan in `docs/WAU_RS_PLAN.md` references it so CLI debates do not bloat the roadmap.
 
 ---
 
@@ -15,22 +15,20 @@ Maintainers: treat this file as the **draft command surface**; the plan in `docs
 
 ---
 
-## Command intent (names may evolve)
+## Commands
 
 ### Sync / install / update (`paru -S` family)
 
-- `wau sync` — install or update from manifest + lock.
-- `wau sync <addon…>` — install named addons (resolution rules TBD).
-- `wau sync --update` — apply updates per manifest/lock/channel.
-- `wau sync --refresh --update` — refresh provider caches, then update (sketch: `paru -Syu`).
+- `wau sync` — install or update all addons from manifest.
+- `wau sync --update` — apply updates (re-resolve latest for each addon).
 - `wau sync --manifest <path>` — manifest path override.
-- `wau sync --install <tag>` / `wau sync --tag <tag>` — target a configured install tag (see `examples/config.toml`).
-- `wau sync --flavor <…>` — flavor override when useful without switching default install.
-- `wau sync --channel <stable|beta|alpha|…>` — channel override.
+- `wau sync --tag <tag>` — target a configured install tag (see `examples/config.toml`).
+- `wau sync --flavor <…>` — flavor override without changing the config default.
+- `wau sync --channel <stable|beta|alpha>` — channel override without changing the config default.
 
 ### Search
 
-- `wau search <query>` — `paru -Ss`-style provider search (quality depends on provider).
+- `wau search <query>` — local search across manifest and installed addons.
 
 ### Remove
 
@@ -38,15 +36,23 @@ Maintainers: treat this file as the **draft command surface**; the plan in `docs
 
 ### Query
 
-- `wau list` — installed + manifest alignment / update hints (`paru -Q`).
-- `wau info <addon>` — detail view (`paru -Qi`).
+- `wau list` — installed addons for the active install tag.
+- `wau info <addon>` — detail view: manifest entry + lock state.
 
-### Global flags (sketch)
+### Init
 
-- `--noconfirm` — non-interactive confirmations.
-- `--quiet` / `--verbose` — output level.
+- `wau init` — create `manifest.toml` and `<tag>.lock.toml` in the config directory.
+- `wau init --tag <tag>` — target a specific install tag's lock file.
+- `wau init --manifest <path>` — override the manifest output path.
+- `wau init --force` — overwrite existing files.
+
+### Global flags
+
+- `--noconfirm` — skip interactive confirmation prompts.
+- `-q` / `--quiet` — suppress per-item progress output.
+- `-v` / `--verbose` — enable debug logging.
 - `--config <path>` — config file override.
-- Default log filter from `examples/config.toml` **`[logging].level`**; optional `--log-level` / `RUST_LOG` override (merge order TBD in implementation).
+- Log verbosity priority (highest wins): `RUST_LOG` env > `--verbose` > `--quiet` > `[logging].level` in config.
 
 ---
 
@@ -54,20 +60,22 @@ Maintainers: treat this file as the **draft command surface**; the plan in `docs
 
 These stay in design docs until the core pipeline and providers are stable:
 
+- **Named-addon sync**: `wau sync <addon…>` — install or update specific addons from the manifest (resolution rules deferred).
+- **Cache refresh**: `wau sync --refresh --update` — refresh provider caches, then update (sketch: `paru -Syu`).
 - **Backup / restore** (SavedVariables): `wau backup`, `wau restore`, retention flags.
 - **Specific version / non-latest**: manifest **`pin`** fields, `wau sync <addon> --version …`, `wau sync <addon> --rollback`, rich lock `history` — **first release installs and updates latest only** (see `docs/WAU_RS_PLAN.md` §1.1, §4.1.1, Phase 8).
-- **One-off provider override on CLI**: useful for experiments; **not** “provider switching” as a first-class migration story (see plan: cross-provider identity is unsolved).
-- **Shell completions** (**bash**, **zsh**, **fish**, **Nushell**) — **Phase 10** in `docs/WAU_RS_PLAN.md` (not part of first UX-polish ship).
+- **One-off provider override on CLI**: useful for experiments; **not** "provider switching" as a first-class migration story (see plan: cross-provider identity is unsolved).
+- **Shell completions** (**bash**, **zsh**, **fish**, **Nushell**) — **Phase 10** in `docs/WAU_RS_PLAN.md`.
 
 ---
 
 ## Paru mapping (quick reference)
 
-| paru              | wau (illustrative)        |
-| ----------------- | ------------------------- |
-| `paru -S <pkg>`   | `wau sync <addon>`        |
-| `paru -Syu`       | `wau sync --refresh --update` |
-| `paru -Ss <q>`    | `wau search <q>`          |
-| `paru -Q` / `-Qi` | `wau list` / `wau info`   |
-| `paru -R`         | `wau remove`              |
-| `--noconfirm`     | `--noconfirm`             |
+| paru              | wau                          |
+| ----------------- | ---------------------------- |
+| `paru -S <pkg>`   | `wau sync` (manifest-driven) |
+| `paru -Syu`       | `wau sync --update`          |
+| `paru -Ss <q>`    | `wau search <q>`             |
+| `paru -Q` / `-Qi` | `wau list` / `wau info`      |
+| `paru -R`         | `wau remove`                 |
+| `--noconfirm`     | `--noconfirm`                |

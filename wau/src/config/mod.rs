@@ -1,6 +1,3 @@
-// Config is Phase 1 scaffolding; consumed by `settings` (Phase 5) rather than directly from main.
-#![allow(dead_code)]
-
 use std::{
     io,
     path::{Path, PathBuf},

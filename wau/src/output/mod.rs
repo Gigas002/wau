@@ -156,6 +156,36 @@ pub fn print_search_results(
 }
 
 // ---------------------------------------------------------------------------
+// wau init
+// ---------------------------------------------------------------------------
+
+pub fn print_init_header(tag: &libwau::model::Tag) {
+    println!("==> Initializing wau files for tag '{}'", tag.as_str());
+}
+
+pub fn print_init_scan_result(detected: usize, skipped: usize) {
+    let total = detected + skipped;
+    println!(
+        "    scanned {total} addon(s): {detected} with known provider IDs, {skipped} skipped (no provider X-field)"
+    );
+}
+
+pub fn print_init_manifest_created(path: &std::path::Path, count: usize) {
+    println!("created  {}  ({count} entries)", path.display());
+}
+
+pub fn print_init_created(path: &std::path::Path) {
+    println!("created  {}", path.display());
+}
+
+pub fn print_init_skipped(path: &std::path::Path) {
+    println!(
+        "skipped  {}  (already exists, use --force to overwrite)",
+        path.display()
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Interactive prompt
 // ---------------------------------------------------------------------------
 

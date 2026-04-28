@@ -1,16 +1,18 @@
-# Example `config.toml` (machine-local). Schema is illustrative until implemented.
-# Canonical narrative lives in `docs/WAU_RS_PLAN.md`; edit shapes here first, then sync the plan’s prose if needed.
+# Example `config.toml` (machine-local).
+# Default location: `$XDG_CONFIG_HOME/wau/config.toml` (fallback `~/.config/wau/config.toml`).
+# Override at runtime with `--config <path>`.
 
 # Config format version for forward-compatible parsing.
 schema = 1
 
-# Default install context when a command omits `--install` / `--tag` (exact flag TBD; see examples/cli.md).
+# Default install context when a command omits `--tag`.
 [defaults]
 flavor = "retail"
 channel = "stable"
 install_tag = "retail-main"
 
-# Default tracing filter for `wau` / `libwau` (CLI flags or env may override; exact merge order TBD).
+# Default tracing verbosity. Priority (highest wins): RUST_LOG env > --verbose > --quiet > this value.
+# Valid values: trace, debug, info, warn, error.
 [logging]
 level = "info"
 
@@ -18,7 +20,8 @@ level = "info"
 [paths]
 cache = "~/.cache/wau"
 
-# Multiple WoW roots: same base `flavor` may appear more than once; `tag` disambiguates (private server, second retail copy, etc.).
+# Multiple WoW roots: same base `flavor` may appear more than once; `tag` disambiguates
+# (private server, second retail copy, etc.).
 [[paths.installs]]
 tag = "retail-main"
 flavor = "retail"
@@ -31,7 +34,8 @@ wow_root = "/games/World of Warcraft"
 
 [[paths.installs]]
 tag = "classic-turtle"
-# Illustrative: third-party / pirate / custom client; still a `flavor` id the resolver understands for API metadata, but paths are yours.
+# Illustrative: third-party / custom client; still a `flavor` id the resolver understands for API
+# metadata, but paths are yours.
 flavor = "classic-era"
 wow_root = "/games/TurtleWoW/World of Warcraft"
 
@@ -40,7 +44,11 @@ wow_root = "/games/TurtleWoW/World of Warcraft"
 #   1. Go to https://console.curseforge.com and sign in (or create an account).
 #   2. In the left sidebar, click "API Keys".
 #   3. Click "Generate API Key", give it a name (e.g. "wau"), and confirm.
-#   4. Copy the generated key and paste it below (or export as WAU_CF_API_KEY and
-#      reference it via an env-var substitution mechanism once that is wired up).
+#   4. Copy the generated key and paste it below.
 # Keep this file out of version control — treat the key as a secret.
 api_key = "your-curseforge-api-key"
+
+[providers.github]
+# Optional personal access token. Omit this section entirely to use the unauthenticated API
+# (60 req/h rate limit). With a token the limit rises to 5000 req/h.
+# token = "ghp_yourPersonalAccessToken"

@@ -40,6 +40,8 @@ pub enum Command {
     Search(SearchArgs),
     /// Show details for an addon from the manifest and lock.
     Info(InfoArgs),
+    /// Initialise manifest and lock files for an install tag.
+    Init(InitArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -103,4 +105,19 @@ pub struct InfoArgs {
     /// Install tag to use (default: config `defaults.install_tag`).
     #[arg(short, long, value_name = "TAG")]
     pub tag: Option<String>,
+}
+
+#[derive(Debug, clap::Args)]
+pub struct InitArgs {
+    /// Install tag to use (default: config `defaults.install_tag`).
+    #[arg(short, long, value_name = "TAG")]
+    pub tag: Option<String>,
+
+    /// Path to manifest file to generate (default: `$XDG_CONFIG_HOME/wau/manifest.toml`).
+    #[arg(short, long, value_name = "PATH")]
+    pub manifest: Option<PathBuf>,
+
+    /// Overwrite existing files.
+    #[arg(long)]
+    pub force: bool,
 }

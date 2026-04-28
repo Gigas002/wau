@@ -61,3 +61,14 @@ fn info_settings_error_when_config_missing() {
     }));
     assert!(Settings::resolve(&cli).is_err());
 }
+
+#[test]
+fn init_settings_error_when_config_missing() {
+    use crate::cli::InitArgs;
+    let cli = cli_with_missing_config(Command::Init(InitArgs {
+        tag: None,
+        manifest: None,
+        force: false,
+    }));
+    assert!(Settings::resolve(&cli).is_err());
+}
