@@ -165,15 +165,53 @@ pub enum LogLevel {
     Error,
 }
 
-impl std::fmt::Display for LogLevel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
+impl LogLevel {
+    pub fn as_str(&self) -> &'static str {
+        match self {
             Self::Trace => "trace",
             Self::Debug => "debug",
             Self::Info => "info",
             Self::Warn => "warn",
             Self::Error => "error",
-        };
-        f.write_str(s)
+        }
+    }
+}
+
+impl std::fmt::Display for LogLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for Flavor {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "retail" => Ok(Self::Retail),
+            "classic-era" => Ok(Self::Era),
+            "classic-tbc" => Ok(Self::Tbc),
+            "classic-wrath" => Ok(Self::Wrath),
+            "classic-cata" => Ok(Self::Cata),
+            "classic-mop" => Ok(Self::Mop),
+            "classic-wod" => Ok(Self::Wod),
+            "classic-legion" => Ok(Self::Legion),
+            "classic-bfa" => Ok(Self::Bfa),
+            "classic-shadowlands" => Ok(Self::Shadowlands),
+            "classic-dragonflight" => Ok(Self::Dragonflight),
+            "classic-tww" => Ok(Self::Tww),
+            _ => Err(format!("unknown flavor '{s}'")),
+        }
+    }
+}
+
+impl std::str::FromStr for Channel {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "stable" => Ok(Self::Stable),
+            "beta" => Ok(Self::Beta),
+            "alpha" => Ok(Self::Alpha),
+            _ => Err(format!("unknown channel '{s}'")),
+        }
     }
 }
