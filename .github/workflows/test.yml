@@ -34,7 +34,7 @@ jobs:
         run: |
           cargo llvm-cov --all-features -p wau --lcov --output-path lcov-wau.info
       - name: Upload libwau coverage to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./lcov-libwau.info
           flags: libwau
@@ -44,7 +44,7 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload wau coverage to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./lcov-wau.info
           flags: wau
