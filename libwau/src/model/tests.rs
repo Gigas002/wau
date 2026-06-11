@@ -134,6 +134,80 @@ fn log_level_default_is_info() {
 }
 
 #[test]
+fn log_level_as_str_all_variants() {
+    assert_eq!(LogLevel::Trace.as_str(), "trace");
+    assert_eq!(LogLevel::Debug.as_str(), "debug");
+    assert_eq!(LogLevel::Info.as_str(), "info");
+    assert_eq!(LogLevel::Warn.as_str(), "warn");
+    assert_eq!(LogLevel::Error.as_str(), "error");
+}
+
+#[test]
+fn flavor_from_str_all_variants() {
+    let cases = [
+        ("retail", Flavor::Retail),
+        ("classic-era", Flavor::Era),
+        ("classic-tbc", Flavor::Tbc),
+        ("classic-wrath", Flavor::Wrath),
+        ("classic-cata", Flavor::Cata),
+        ("classic-mop", Flavor::Mop),
+        ("classic-wod", Flavor::Wod),
+        ("classic-legion", Flavor::Legion),
+        ("classic-bfa", Flavor::Bfa),
+        ("classic-shadowlands", Flavor::Shadowlands),
+        ("classic-dragonflight", Flavor::Dragonflight),
+        ("classic-tww", Flavor::Tww),
+    ];
+    for (s, expected) in cases {
+        assert_eq!(
+            s.parse::<Flavor>().unwrap(),
+            expected,
+            "parse failed for '{s}'"
+        );
+    }
+}
+
+#[test]
+fn flavor_from_str_roundtrip() {
+    let variants = [
+        Flavor::Retail,
+        Flavor::Era,
+        Flavor::Tbc,
+        Flavor::Wrath,
+        Flavor::Cata,
+        Flavor::Mop,
+        Flavor::Wod,
+        Flavor::Legion,
+        Flavor::Bfa,
+        Flavor::Shadowlands,
+        Flavor::Dragonflight,
+        Flavor::Tww,
+    ];
+    for v in variants {
+        assert_eq!(v.as_str().parse::<Flavor>().unwrap(), v);
+    }
+}
+
+#[test]
+fn flavor_from_str_unknown_errors() {
+    assert!("bogus".parse::<Flavor>().is_err());
+    assert!("Retail".parse::<Flavor>().is_err()); // case-sensitive
+}
+
+#[test]
+fn channel_from_str_all_variants() {
+    assert_eq!("stable".parse::<Channel>().unwrap(), Channel::Stable);
+    assert_eq!("beta".parse::<Channel>().unwrap(), Channel::Beta);
+    assert_eq!("alpha".parse::<Channel>().unwrap(), Channel::Alpha);
+}
+
+#[test]
+fn channel_from_str_unknown_errors() {
+    assert!("nightly".parse::<Channel>().is_err());
+    assert!("Stable".parse::<Channel>().is_err());
+}
+
+#[test]
 fn display_impls() {
     assert_eq!(Flavor::Retail.to_string(), "retail");
     assert_eq!(Flavor::Era.to_string(), "classic-era");

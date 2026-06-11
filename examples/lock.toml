@@ -1,10 +1,11 @@
 # Example `lock.toml` (resolved + install bookkeeping). Illustrative only.
-# Heavy optional sections (e.g. long per-addon history) are intentionally deferred in the roadmap; shape here reserves room.
+# Each install tag produces its own lock file: `<tag>.lock.toml` in the config directory.
+# Heavy optional sections (e.g. per-addon history) are intentionally deferred; shape here reserves room.
 
 schema = 1
 generated_at = "2026-04-22T00:00:00Z"
 
-# Which tagged install this lock belongs to (when using per-install manifests/locks; exact layout TBD).
+# Which tagged install this lock belongs to; mirrors the install tag in config.toml.
 install_tag = "retail-main"
 
 [[addon]]
