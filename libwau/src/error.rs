@@ -45,6 +45,13 @@ pub enum Error {
     #[error("no release found for addon '{name}'")]
     NoRelease { name: String },
 
+    #[error(
+        "CurseForge addon '{name}' has no downloadable file — the author has not enabled \
+         third-party app distribution for this project (download via the CurseForge site \
+         or app instead)"
+    )]
+    NoDownloadPermission { name: String },
+
     #[error("no asset matching '{pattern}' in release '{tag}' for addon '{name}'")]
     NoMatchingAsset {
         name: String,

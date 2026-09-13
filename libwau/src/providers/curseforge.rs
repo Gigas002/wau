@@ -80,24 +80,37 @@ impl Provider for CurseForgeProvider {
             .await
             .map_err(|e| crate::Error::Http(e.to_string()))?;
 
+        let mut any_flavor_match = false;
         let file = body
             .data
             .into_iter()
-            .find(|f| flavor_matches(&ctx.flavor, &f.game_versions))
-            .ok_or_else(|| crate::Error::NoRelease {
-                name: addon.name.clone(),
-            })?;
+            .filter(|f| flavor_matches(&ctx.flavor, &f.game_versions))
+            .inspect(|_| any_flavor_match = true)
+            .find_map(|f| {
+                let download_url = f.download_url?;
+                Some((f.id, f.display_name, download_url, f.hashes))
+            });
 
-        let sha256 = file
-            .hashes
-            .iter()
-            .find(|h| h.algo == 2)
-            .map(|h| h.value.clone());
+        let (id, display_name, download_url, hashes) = match file {
+            Some(f) => f,
+            None if any_flavor_match => {
+                return Err(crate::Error::NoDownloadPermission {
+                    name: addon.name.clone(),
+                });
+            }
+            None => {
+                return Err(crate::Error::NoRelease {
+                    name: addon.name.clone(),
+                });
+            }
+        };
+
+        let sha256 = hashes.iter().find(|h| h.algo == 2).map(|h| h.value.clone());
 
         Ok(ResolvedArtifact {
-            version: file.display_name,
-            id: file.id.to_string(),
-            url: file.download_url,
+            version: display_name,
+            id: id.to_string(),
+            url: download_url,
             sha256,
         })
     }
@@ -141,7 +154,10 @@ struct FilesResponse {
 struct CfFile {
     id: i64,
     display_name: String,
-    download_url: String,
+    /// `None` when the addon author has not enabled third-party app distribution for this
+    /// file — CurseForge withholds the download URL in that case rather than rejecting the
+    /// request.
+    download_url: Option<String>,
     game_versions: Vec<String>,
     hashes: Vec<CfHash>,
 }
