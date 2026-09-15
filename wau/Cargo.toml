@@ -10,20 +10,26 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-default = ["local", "curseforge", "wowinterface", "github"]
-local = ["libwau/local"]
+default = ["curseforge", "github", "tukui", "wowinterface", "wago"]
 curseforge = ["libwau/curseforge"]
-wowinterface = ["libwau/wowinterface"]
 github = ["libwau/github"]
+tukui = ["libwau/tukui"]
+wowinterface = ["libwau/wowinterface"]
+wago = ["libwau/wago"]
 
 [dependencies]
 libwau = { path = "../libwau", default-features = false }
 
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"
-tokio.workspace = true
+tokio = { workspace = true, features = ["fs"] }
 tracing = "0.1"
-tracing-subscriber = "0.3"
-serde = { version = "1.0", features = ["derive"] }
-toml = "1.1"
-dirs = "6.0"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde_json = "1"
+chrono = "0.4"
+inquire = "0.9"
+indicatif = "0.18"
+rusqlite = { version = "0.40", features = ["bundled"] }
+
+[dev-dependencies]
+tempfile = "3"
