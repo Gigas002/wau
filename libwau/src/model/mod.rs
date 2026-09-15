@@ -407,6 +407,12 @@ impl fmt::Display for Strategy {
     }
 }
 
+impl Serialize for Strategy {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.as_str())
+    }
+}
+
 /// The three [`Strategy`] values a `Defn` may request, each with its own
 /// storage shape (flag vs. pinned-version string) — mirrors instawow's
 /// `Strategies` mapping, specialised to its fixed 3-key set.
@@ -446,8 +452,30 @@ pub enum ChangelogFormat {
     Raw,
 }
 
+impl ChangelogFormat {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Html => "html",
+            Self::Markdown => "markdown",
+            Self::Raw => "raw",
+        }
+    }
+}
+
+impl fmt::Display for ChangelogFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl Serialize for ChangelogFormat {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.as_str())
+    }
+}
+
 /// Static description of a source, returned by `Resolver::metadata()`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct SourceMetadata {
     /// The source id used as `Defn::source` and the DB `pkg.source` value (e.g. `"curse"`).
     pub id: &'static str,

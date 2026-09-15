@@ -1,6 +1,11 @@
-//! Command-line surface — clap definitions only, no addon logic. Mirrors
+//! Command-line surface — clap definitions only, no addon logic. Based on
 //! instawow's `cli/__init__.py` command set (minus the GUI/weakauras/plugins
-//! commands, out of scope for this port — see `docs/WAU_RS_PLAN.md`).
+//! commands, out of scope for this port — see `docs/WAU_RS_PLAN.md`), with
+//! deliberate deviations: `update`/`reconcile`/`debug` renamed to
+//! `sync`/`init`/`stats`, and `rollback`/`rereconcile`/`reveal`/
+//! `view-changelog`/`help`/`configure`/`profile configure` removed — profiles
+//! are configured by hand-editing TOML (see `examples/*.toml`) or via the
+//! interactive bootstrap built into `init`.
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
@@ -10,14 +15,11 @@ mod tests;
 #[derive(Debug, Parser)]
 #[command(
     name = "wau",
-    about = "A 1:1 instawow-parity WoW addon manager",
-    version
+    about = "An instawow-inspired WoW addon manager",
+    version,
+    disable_help_subcommand = true
 )]
 pub struct Cli {
-    /// Increase log verbosity (repeatable: -v info, -vv debug, -vvv trace).
-    #[arg(short, long, global = true, action = clap::ArgAction::Count)]
-    pub verbose: u8,
-
     /// Bypass the on-disk HTTP response cache for this invocation.
     #[arg(long, global = true)]
     pub no_cache: bool,
@@ -34,16 +36,13 @@ pub struct Cli {
 pub enum Command {
     /// Install addons.
     Install(InstallArgs),
-    /// Update installed addons (all, if none named).
-    Update(UpdateArgs),
+    /// Sync installed addons (all, if none named).
+    Sync(SyncArgs),
     /// Remove installed addons.
     Remove(RemoveArgs),
-    /// Reinstall an addon at a previous version from its install history.
-    Rollback(RollbackArgs),
-    /// Match untracked addon folders against the catalogue and import them.
-    Reconcile(ReconcileArgs),
-    /// Switch installed addons to an equivalent package on another source.
-    Rereconcile(RereconcileArgs),
+    /// Bootstrap an unconfigured profile interactively, then match untracked
+    /// addon folders against the catalogue and import them.
+    Init(InitArgs),
     /// Fuzzy-search the addon catalogue.
     Search(SearchArgs),
     /// List installed addons.
@@ -51,20 +50,14 @@ pub enum Command {
     /// Show detailed info for one installed addon (alias for `list -f detailed`).
     #[command(hide = true)]
     Info(InfoArgs),
-    /// Open an addon's installed folder in the OS file manager.
-    Reveal(RevealArgs),
-    /// Show changelogs for installed addons.
-    ViewChangelog(ViewChangelogArgs),
     /// Manage the on-disk HTTP response cache.
     #[command(subcommand)]
     Cache(CacheCommand),
     /// Manage profiles (configured WoW installations).
     #[command(subcommand)]
     Profile(ProfileCommand),
-    /// Configure the active profile (alias for `profile configure`).
-    Configure(ConfigureArgs),
     /// Print the active profile config, all profile names, and source metadata as JSON.
-    Debug,
+    Stats,
 }
 
 #[derive(Debug, Subcommand)]
@@ -75,8 +68,6 @@ pub enum CacheCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ProfileCommand {
-    /// Interactively (or via `key=value` pairs) configure the active profile.
-    Configure(ConfigureArgs),
     /// Delete the active profile's config and database.
     Erase,
 }
@@ -95,8 +86,8 @@ pub struct InstallArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct UpdateArgs {
-    /// Addons to update (default: everything installed).
+pub struct SyncArgs {
+    /// Addons to sync (default: everything installed).
     pub addons: Vec<String>,
     /// Resolve and report without installing.
     #[arg(long)]
@@ -113,27 +104,13 @@ pub struct RemoveArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct RollbackArgs {
-    pub addon: String,
-    /// Clear the pin and reinstall at the default strategy.
-    #[arg(long)]
-    pub undo: bool,
-}
-
-#[derive(Debug, Args)]
-pub struct ReconcileArgs {
+pub struct InitArgs {
     /// Pick the top match for every group without prompting.
     #[arg(short, long)]
     pub auto: bool,
     /// Only list what would be matched.
     #[arg(long)]
     pub list_unreconciled: bool,
-}
-
-#[derive(Debug, Args)]
-pub struct RereconcileArgs {
-    /// Addons to re-reconcile (default: everything installed).
-    pub addons: Vec<String>,
 }
 
 #[derive(Debug, Args)]
@@ -172,25 +149,4 @@ pub struct ListArgs {
 #[derive(Debug, Args)]
 pub struct InfoArgs {
     pub addon: String,
-}
-
-#[derive(Debug, Args)]
-pub struct RevealArgs {
-    pub addon: String,
-}
-
-#[derive(Debug, Args)]
-pub struct ViewChangelogArgs {
-    /// Addons to show changelogs for (default: everything installed).
-    pub addons: Vec<String>,
-    /// Fetch the latest changelog from the source instead of the installed one.
-    #[arg(long)]
-    pub remote: bool,
-}
-
-#[derive(Debug, Args)]
-pub struct ConfigureArgs {
-    /// `key=value` pairs (addon_dir, flavour_override, auto_update_check, github_token,
-    /// cfcore_api_key, wago_addons_token). With none given, prompts interactively.
-    pub options: Vec<String>,
 }

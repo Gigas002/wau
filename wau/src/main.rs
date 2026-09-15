@@ -5,18 +5,23 @@ mod output;
 mod prompts;
 
 use clap::Parser;
+use libwau::config::LogLevel;
 
-fn init_logging(verbosity: u8) {
-    let level = match verbosity {
-        0 => "warn",
-        1 => "info",
-        2 => "debug",
-        _ => "trace",
-    };
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(level));
+/// Maps [`LogLevel`] (`config.toml`'s `[logging].level` — the only source of
+/// verbosity; no `-v` flag, no `$RUST_LOG`) onto `tracing`'s level type.
+fn to_tracing_level(level: LogLevel) -> tracing::Level {
+    match level {
+        LogLevel::Error => tracing::Level::ERROR,
+        LogLevel::Warn => tracing::Level::WARN,
+        LogLevel::Info => tracing::Level::INFO,
+        LogLevel::Debug => tracing::Level::DEBUG,
+        LogLevel::Trace => tracing::Level::TRACE,
+    }
+}
+
+fn init_logging(level: LogLevel) {
     tracing_subscriber::fmt()
-        .with_env_filter(filter)
+        .with_max_level(to_tracing_level(level))
         .with_writer(std::io::stderr)
         .init();
 }
@@ -24,7 +29,10 @@ fn init_logging(verbosity: u8) {
 #[tokio::main]
 async fn main() {
     let cli = cli::Cli::parse();
-    init_logging(cli.verbose);
+    let log_level = libwau::config::GlobalConfig::read()
+        .map(|g| g.log_level)
+        .unwrap_or_default();
+    init_logging(log_level);
 
     match app::run(&cli).await {
         Ok(exit_code) => std::process::exit(exit_code),

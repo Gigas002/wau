@@ -1,13 +1,15 @@
 //! Global and per-profile configuration — ports instawow's `config/*.py`.
 //!
-//! Two independent JSON documents: a **global config** (secrets, defaults,
-//! computed dirs) and one **profile config** per WoW installation (each
-//! profile owns its own `db.sqlite`, written next to its `config.json`). Env
-//! vars (`WAU_*`) always win over file values, re-applied on every read.
-//! `WAU_HOME` (instawow: `INSTAWOW_HOME`) overrides all three dirs at once.
+//! Two independent TOML documents: a **global config** (`config.toml`:
+//! logging, cache path, provider API keys) and one **profile config** per WoW
+//! installation (`profiles/<name>.toml`, alongside its sibling
+//! `profiles/<name>.sqlite`). No environment variables are ever read —
+//! everything comes from these files or their built-in defaults; config/cache
+//! base dirs are resolved via platform-conventional locations (the `dirs`
+//! crate), never overridable.
 
 use std::{
-    env, fmt, fs,
+    fmt, fs,
     path::{Path, PathBuf},
 };
 
@@ -21,7 +23,6 @@ use crate::model::{
 mod tests;
 
 const APP_NAME: &str = "wau";
-const HOME_ENV_VAR: &str = "WAU_HOME";
 
 // ============================================================================
 // Errors
@@ -35,8 +36,11 @@ pub enum ConfigError {
     #[error("IO: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("JSON: {0}")]
-    Json(#[from] serde_json::Error),
+    #[error("TOML: {0}")]
+    TomlDe(#[from] toml::de::Error),
+
+    #[error("TOML: {0}")]
+    TomlSer(#[from] toml::ser::Error),
 
     #[error("profile name must not be empty")]
     EmptyProfileName,
@@ -44,7 +48,7 @@ pub enum ConfigError {
     #[error("'{}' is not a writable directory", .path.display())]
     AddonDirNotWritable { path: PathBuf },
 
-    #[error("game flavour cannot be detected for '{}'; set flavour_override", .path.display())]
+    #[error("game flavour cannot be detected for '{}'; set flavour", .path.display())]
     NoFlavourDetected { path: PathBuf },
 }
 
@@ -85,122 +89,115 @@ impl fmt::Display for SecretString {
 const REDACTED: &str = "**********";
 
 // ============================================================================
+// Log level
+// ============================================================================
+
+/// `[logging].level` in `config.toml` — the sole source of log verbosity (no
+/// `-v` CLI flag, no `$RUST_LOG`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LogLevel {
+    Error,
+    #[default]
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl LogLevel {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Error => "error",
+            Self::Warn => "warn",
+            Self::Info => "info",
+            Self::Debug => "debug",
+            Self::Trace => "trace",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "error" => Some(Self::Error),
+            "warn" | "warning" => Some(Self::Warn),
+            "info" => Some(Self::Info),
+            "debug" => Some(Self::Debug),
+            "trace" => Some(Self::Trace),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for LogLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl Serialize for LogLevel {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for LogLevel {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Self::parse(&s).ok_or_else(|| serde::de::Error::custom(format!("unknown log level '{s}'")))
+    }
+}
+
+// ============================================================================
 // Dirs
 // ============================================================================
 
-/// The three XDG-style locations `GlobalConfig` resolves eagerly.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// The base locations `GlobalConfig` resolves eagerly: `config` (fixed,
+/// platform-conventional, holds `config.toml` + `profiles/`) and `cache`
+/// (platform-conventional default, overridable via `[paths].cache`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Dirs {
     pub cache: PathBuf,
     pub config: PathBuf,
-    pub state: PathBuf,
 }
 
 impl Dirs {
-    fn default_dirs() -> Self {
+    fn default_dirs(cache_override: Option<PathBuf>) -> Self {
         Self {
-            cache: cache_dir(&[]),
-            config: config_dir(&[]),
-            state: state_dir(&[]),
+            cache: cache_override.unwrap_or_else(cache_dir),
+            config: config_dir(),
         }
     }
 
     fn ensure(&self) -> std::io::Result<()> {
         fs::create_dir_all(&self.cache)?;
         fs::create_dir_all(&self.config)?;
-        fs::create_dir_all(&self.state)?;
         Ok(())
     }
 }
 
-fn dirs_home() -> Option<PathBuf> {
-    env::var_os("HOME")
-        .or_else(|| env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
+/// Platform-conventional config base (e.g. `~/.config/wau` on Linux),
+/// resolved via the `dirs` crate — never overridable, never an env var read
+/// in this crate's own code.
+fn config_dir() -> PathBuf {
+    dirs::config_dir()
+        .map(|d| d.join(APP_NAME))
+        .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn join_parts(base: PathBuf, parts: &[&str]) -> PathBuf {
-    parts.iter().fold(base, |acc, p| acc.join(p))
-}
-
-fn home_override(kind: &str) -> Option<PathBuf> {
-    env::var_os(HOME_ENV_VAR).map(|home| PathBuf::from(home).join(kind))
-}
-
-/// `$WAU_CONFIG_HOME`-independent config dir: `$WAU_HOME/config`, else
-/// `$XDG_CONFIG_HOME/wau`, else the platform default, else `~/.config/wau`.
-pub fn config_dir(parts: &[&str]) -> PathBuf {
-    if let Some(base) = home_override("config") {
-        return join_parts(base, parts);
-    }
-    let base = env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(platform_config_base)
-        .or_else(|| dirs_home().map(|h| h.join(".config")))
-        .unwrap_or_else(|| PathBuf::from("."));
-    join_parts(base.join(APP_NAME), parts)
-}
-
-/// `$WAU_HOME/cache`, else `$XDG_CACHE_HOME/wau`, else the platform default,
-/// else `~/.cache/wau`.
-pub fn cache_dir(parts: &[&str]) -> PathBuf {
-    if let Some(base) = home_override("cache") {
-        return join_parts(base, parts);
-    }
-    let base = env::var_os("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .or_else(platform_cache_base)
-        .or_else(|| dirs_home().map(|h| h.join(".cache")))
-        .unwrap_or_else(|| PathBuf::from("."));
-    join_parts(base.join(APP_NAME), parts)
-}
-
-/// `$WAU_HOME/state`, else `$XDG_STATE_HOME/wau`, else `~/.local/state/wau` on
-/// Linux/BSD, else collapses into [`config_dir`] (macOS/Windows have no XDG
-/// state convention — matches instawow).
-pub fn state_dir(parts: &[&str]) -> PathBuf {
-    if let Some(base) = home_override("state") {
-        return join_parts(base, parts);
-    }
-    if let Some(base) = env::var_os("XDG_STATE_HOME").map(PathBuf::from) {
-        return join_parts(base.join(APP_NAME), parts);
-    }
-    if !cfg!(target_os = "macos")
-        && !cfg!(target_os = "windows")
-        && let Some(home) = dirs_home()
-    {
-        return join_parts(home.join(".local").join("state").join(APP_NAME), parts);
-    }
-    config_dir(parts)
-}
-
-fn platform_config_base() -> Option<PathBuf> {
-    if cfg!(target_os = "macos") {
-        dirs_home().map(|h| h.join("Library").join("Application Support"))
-    } else if cfg!(target_os = "windows") {
-        env::var_os("APPDATA").map(PathBuf::from)
-    } else {
-        None
-    }
-}
-
-fn platform_cache_base() -> Option<PathBuf> {
-    if cfg!(target_os = "macos") {
-        dirs_home().map(|h| h.join("Library").join("Caches"))
-    } else if cfg!(target_os = "windows") {
-        env::var_os("LOCALAPPDATA").map(PathBuf::from)
-    } else {
-        None
-    }
+/// Platform-conventional cache base (e.g. `~/.cache/wau` on Linux); the
+/// default when `[paths].cache` isn't set.
+fn cache_dir() -> PathBuf {
+    dirs::cache_dir()
+        .map(|d| d.join(APP_NAME))
+        .unwrap_or_else(|| PathBuf::from("."))
 }
 
 fn expand_tilde(path: PathBuf) -> PathBuf {
     let s = path.to_string_lossy().into_owned();
     if s == "~" {
-        return dirs_home().unwrap_or(path);
+        return dirs::home_dir().unwrap_or(path);
     }
     if let Some(rest) = s.strip_prefix("~/")
-        && let Some(home) = dirs_home()
+        && let Some(home) = dirs::home_dir()
     {
         return home.join(rest);
     }
@@ -235,83 +232,96 @@ pub struct AccessTokens {
     pub wago_addons: Option<SecretString>,
 }
 
-impl AccessTokens {
-    fn is_empty(&self) -> bool {
-        self.cfcore.is_none() && self.github.is_none() && self.wago_addons.is_none()
-    }
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct LoggingConfigFile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    level: Option<LogLevel>,
 }
 
-/// On-disk shape of `config.json` — [`Dirs`] are computed, never persisted.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct PathsConfigFile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cache: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct ProviderConfigFile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    api_key: Option<SecretString>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct ProvidersConfigFile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    curseforge: Option<ProviderConfigFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    wago: Option<ProviderConfigFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    github: Option<ProviderConfigFile>,
+}
+
+/// On-disk shape of `config.toml` — [`Dirs`] are computed, never persisted.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct GlobalConfigFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    auto_update_check: Option<bool>,
+    logging: Option<LoggingConfigFile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    access_tokens: Option<AccessTokens>,
+    paths: Option<PathsConfigFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    providers: Option<ProvidersConfigFile>,
 }
 
 #[derive(Debug, Clone)]
 pub struct GlobalConfig {
-    pub auto_update_check: bool,
+    pub log_level: LogLevel,
     pub access_tokens: AccessTokens,
     pub dirs: Dirs,
 }
 
 impl GlobalConfig {
-    /// Defaults overlaid with env vars only — no disk read.
-    pub fn from_env() -> Self {
+    /// Built-in defaults — no disk read.
+    pub fn defaults() -> Self {
         Self::from_file(GlobalConfigFile::default())
     }
 
-    fn from_file(mut file: GlobalConfigFile) -> Self {
-        if let Some(v) = env_bool("WAU_AUTO_UPDATE_CHECK") {
-            file.auto_update_check = Some(v);
-        }
+    fn from_file(file: GlobalConfigFile) -> Self {
+        let log_level = file
+            .logging
+            .and_then(|l| l.level)
+            .unwrap_or_default();
 
-        let mut access_tokens = file.access_tokens.unwrap_or_default();
-        if let Ok(v) = env::var("WAU_ACCESS_TOKENS_CFCORE") {
-            access_tokens.cfcore = Some(SecretString::new(v));
-        }
-        if let Ok(v) = env::var("WAU_ACCESS_TOKENS_GITHUB") {
-            access_tokens.github = Some(SecretString::new(v));
-        }
-        if let Ok(v) = env::var("WAU_ACCESS_TOKENS_WAGO_ADDONS") {
-            access_tokens.wago_addons = Some(SecretString::new(v));
-        }
+        let cache_override = file
+            .paths
+            .and_then(|p| p.cache)
+            .map(expand_tilde);
+
+        let providers = file.providers.unwrap_or_default();
+        let access_tokens = AccessTokens {
+            cfcore: providers.curseforge.and_then(|p| p.api_key),
+            github: providers.github.and_then(|p| p.api_key),
+            wago_addons: providers.wago.and_then(|p| p.api_key),
+        };
 
         GlobalConfig {
-            auto_update_check: file.auto_update_check.unwrap_or(true),
+            log_level,
             access_tokens,
-            dirs: Dirs::default_dirs(),
+            dirs: Dirs::default_dirs(cache_override),
         }
     }
 
     pub fn config_file_path(&self) -> PathBuf {
-        self.dirs.config.join("config.json")
+        self.dirs.config.join("config.toml")
     }
 
-    fn access_tokens_file_path(&self) -> PathBuf {
-        self.dirs.config.join("config.access_tokens.json")
-    }
-
-    /// Reads `config.json` (defaults if absent), overlays
-    /// `config.access_tokens.json` if present and non-empty, then overlays env
-    /// vars (env always wins).
+    /// Reads `config.toml` (built-in defaults if absent).
     pub fn read() -> Result<Self, ConfigError> {
-        let base = Self::from_env();
+        let path = config_dir().join("config.toml");
 
-        let mut file = match fs::read(base.config_file_path()) {
-            Ok(bytes) => serde_json::from_slice::<GlobalConfigFile>(&bytes)?,
+        let file = match fs::read_to_string(&path) {
+            Ok(s) => toml::from_str::<GlobalConfigFile>(&s)?,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => GlobalConfigFile::default(),
             Err(e) => return Err(e.into()),
         };
-
-        if let Ok(bytes) = fs::read(base.access_tokens_file_path())
-            && let Ok(tokens) = serde_json::from_slice::<AccessTokens>(&bytes)
-            && !tokens.is_empty()
-        {
-            file.access_tokens = Some(tokens);
-        }
 
         Ok(Self::from_file(file))
     }
@@ -324,22 +334,32 @@ impl GlobalConfig {
     pub fn write(&self) -> Result<(), ConfigError> {
         self.ensure_dirs()?;
         let file = GlobalConfigFile {
-            auto_update_check: Some(self.auto_update_check),
-            access_tokens: Some(self.access_tokens.clone()),
+            logging: Some(LoggingConfigFile {
+                level: Some(self.log_level),
+            }),
+            paths: Some(PathsConfigFile {
+                cache: Some(self.dirs.cache.clone()),
+            }),
+            providers: Some(ProvidersConfigFile {
+                curseforge: self.access_tokens.cfcore.clone().map(|api_key| {
+                    ProviderConfigFile {
+                        api_key: Some(api_key),
+                    }
+                }),
+                github: self.access_tokens.github.clone().map(|api_key| {
+                    ProviderConfigFile {
+                        api_key: Some(api_key),
+                    }
+                }),
+                wago: self.access_tokens.wago_addons.clone().map(|api_key| {
+                    ProviderConfigFile {
+                        api_key: Some(api_key),
+                    }
+                }),
+            }),
         };
-        fs::write(
-            self.config_file_path(),
-            serde_json::to_string_pretty(&file)?,
-        )?;
+        fs::write(self.config_file_path(), toml::to_string_pretty(&file)?)?;
         Ok(())
-    }
-}
-
-fn env_bool(key: &str) -> Option<bool> {
-    match env::var(key).ok()?.to_ascii_lowercase().as_str() {
-        "1" | "true" | "yes" | "on" => Some(true),
-        "0" | "false" | "no" | "off" => Some(false),
-        _ => None,
     }
 }
 
@@ -365,12 +385,13 @@ impl InstalledProduct {
     }
 }
 
+/// On-disk shape of `profiles/<name>.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProfileConfigFile {
     profile: String,
-    addon_dir: PathBuf,
+    path: PathBuf,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    flavour_override: Option<Flavour>,
+    flavour: Option<Flavour>,
 }
 
 /// One WoW installation's config: which profile, which `Interface/AddOns`
@@ -384,13 +405,16 @@ pub struct ProfileConfig {
     pub product: InstalledProduct,
 }
 
+fn profiles_dir_path(global_config: &GlobalConfig) -> PathBuf {
+    global_config.dirs.config.join("profiles")
+}
+
 fn profile_config_file_path(global_config: &GlobalConfig, profile: &str) -> PathBuf {
-    global_config
-        .dirs
-        .config
-        .join("profiles")
-        .join(profile)
-        .join("config.json")
+    profiles_dir_path(global_config).join(format!("{profile}.toml"))
+}
+
+fn profile_db_file_path(global_config: &GlobalConfig, profile: &str) -> PathBuf {
+    profiles_dir_path(global_config).join(format!("{profile}.sqlite"))
 }
 
 impl ProfileConfig {
@@ -433,47 +457,47 @@ impl ProfileConfig {
 
     pub fn read(global_config: GlobalConfig, profile: &str) -> Result<Self, ConfigError> {
         let path = profile_config_file_path(&global_config, profile);
-        let bytes = fs::read(&path).map_err(|e| {
+        let s = fs::read_to_string(&path).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 ConfigError::NotFound { path: path.clone() }
             } else {
                 ConfigError::Io(e)
             }
         })?;
-        let file: ProfileConfigFile = serde_json::from_slice(&bytes)?;
-        Self::new(
-            global_config,
-            file.profile,
-            file.addon_dir,
-            file.flavour_override,
-        )
+        let file: ProfileConfigFile = toml::from_str(&s)?;
+        Self::new(global_config, file.profile, file.path, file.flavour)
     }
 
-    /// Every configured profile name (`profiles/*/config.json`), sorted.
+    /// Every configured profile name (`profiles/*.toml`), sorted.
     pub fn iter_profiles(global_config: &GlobalConfig) -> Vec<String> {
-        let Ok(entries) = fs::read_dir(global_config.dirs.config.join("profiles")) else {
+        let Ok(entries) = fs::read_dir(profiles_dir_path(global_config)) else {
             return Vec::new();
         };
         let mut names: Vec<String> = entries
             .flatten()
-            .filter(|e| e.path().join("config.json").is_file())
-            .filter_map(|e| e.file_name().to_str().map(str::to_owned))
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "toml"))
+            .filter_map(|e| {
+                e.path()
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .map(str::to_owned)
+            })
             .collect();
         names.sort();
         names
     }
 
     /// Installation directories already covered by a configured profile
-    /// (best-effort: reads just the raw `addon_dir` value from each profile's
-    /// JSON, unexpanded — matches instawow's `iter_profile_installations`).
+    /// (best-effort: reads just the raw `path` value from each profile's
+    /// TOML, unexpanded — matches instawow's `iter_profile_installations`).
     pub fn iter_profile_installations(global_config: &GlobalConfig) -> Vec<PathBuf> {
         Self::iter_profiles(global_config)
             .into_iter()
             .filter_map(|name| {
                 let path = profile_config_file_path(global_config, &name);
-                let bytes = fs::read(&path).ok()?;
-                let file: ProfileConfigFile = serde_json::from_slice(&bytes).ok()?;
-                extract_installation_dir_from_addon_dir(&file.addon_dir)
+                let s = fs::read_to_string(&path).ok()?;
+                let file: ProfileConfigFile = toml::from_str(&s).ok()?;
+                extract_installation_dir_from_addon_dir(&file.path)
             })
             .collect()
     }
@@ -482,19 +506,12 @@ impl ProfileConfig {
         profile_config_file_path(&self.global_config, &self.profile)
     }
 
-    pub fn config_path(&self) -> PathBuf {
-        self.config_file_path()
-            .parent()
-            .expect("profile config file path always has a parent")
-            .to_path_buf()
-    }
-
     pub fn db_file_path(&self) -> PathBuf {
-        self.config_path().join("db.sqlite")
+        profile_db_file_path(&self.global_config, &self.profile)
     }
 
     pub fn ensure_dirs(&self) -> Result<(), ConfigError> {
-        fs::create_dir_all(self.config_path())?;
+        fs::create_dir_all(profiles_dir_path(&self.global_config))?;
         Ok(())
     }
 
@@ -502,19 +519,20 @@ impl ProfileConfig {
         self.ensure_dirs()?;
         let file = ProfileConfigFile {
             profile: self.profile.clone(),
-            addon_dir: self.addon_dir.clone(),
-            flavour_override: self.flavour_override,
+            path: self.addon_dir.clone(),
+            flavour: self.flavour_override,
         };
-        fs::write(
-            self.config_file_path(),
-            serde_json::to_string_pretty(&file)?,
-        )?;
+        fs::write(self.config_file_path(), toml::to_string_pretty(&file)?)?;
         Ok(())
     }
 
-    /// Trashes the profile's whole config directory (config.json + db.sqlite).
+    /// Trashes the profile's config file and its sibling `db.sqlite`, if any.
     pub fn delete(&self) -> Result<(), ConfigError> {
-        crate::fs::trash(&self.config_path())?;
+        crate::fs::trash(&self.config_file_path())?;
+        let db_path = self.db_file_path();
+        if db_path.exists() {
+            crate::fs::trash(&db_path)?;
+        }
         Ok(())
     }
 }

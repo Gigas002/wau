@@ -8,6 +8,9 @@ license.workspace = true
 repository.workspace = true
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 default = ["curseforge", "github", "tukui", "wowinterface", "wago"]
 curseforge = []
@@ -30,6 +33,8 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 async-trait = "0.1"
 futures-util = "0.3"
 rapidfuzz = "0.5"
+toml = "1"
+dirs = "7"
 
 [dev-dependencies]
 tempfile = "3"

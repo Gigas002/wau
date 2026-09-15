@@ -8,15 +8,14 @@ fn parse(args: &[&str]) -> Cli {
 
 #[test]
 fn global_flags_parse() {
-    let cli = parse(&["-vv", "--no-cache", "-p", "retail", "debug"]);
-    assert_eq!(cli.verbose, 2);
+    let cli = parse(&["--no-cache", "-p", "retail", "stats"]);
     assert!(cli.no_cache);
     assert_eq!(cli.profile, "retail");
 }
 
 #[test]
 fn default_profile_is_default_marker() {
-    let cli = parse(&["debug"]);
+    let cli = parse(&["stats"]);
     assert_eq!(cli.profile, "__default__");
 }
 
@@ -35,10 +34,10 @@ fn install_requires_at_least_one_addon() {
 }
 
 #[test]
-fn update_addons_are_optional() {
-    let cli = parse(&["update"]);
+fn sync_addons_are_optional() {
+    let cli = parse(&["sync"]);
     match cli.command {
-        Command::Update(args) => assert!(args.addons.is_empty()),
+        Command::Sync(args) => assert!(args.addons.is_empty()),
         _ => panic!("wrong command"),
     }
 }
@@ -103,49 +102,28 @@ fn cache_clear_subcommand_parses() {
 }
 
 #[test]
-fn profile_configure_and_erase_subcommands_parse() {
+fn profile_erase_subcommand_parses() {
     let cli = parse(&["profile", "erase"]);
     assert!(matches!(
         cli.command,
         Command::Profile(ProfileCommand::Erase)
     ));
-
-    let cli = parse(&["profile", "configure", "addon_dir=/tmp/addons"]);
-    match cli.command {
-        Command::Profile(ProfileCommand::Configure(args)) => {
-            assert_eq!(args.options, vec!["addon_dir=/tmp/addons"]);
-        }
-        _ => panic!("wrong command"),
-    }
 }
 
 #[test]
-fn top_level_configure_alias_parses() {
-    let cli = parse(&["configure"]);
-    assert!(matches!(cli.command, Command::Configure(_)));
-}
-
-#[test]
-fn rollback_requires_addon_and_accepts_undo() {
-    assert!(Cli::try_parse_from(["wau", "rollback"]).is_err());
-    let cli = parse(&["rollback", "curse:foo", "--undo"]);
+fn init_flags_parse() {
+    let cli = parse(&["init", "-a", "--list-unreconciled"]);
     match cli.command {
-        Command::Rollback(args) => {
-            assert_eq!(args.addon, "curse:foo");
-            assert!(args.undo);
-        }
-        _ => panic!("wrong command"),
-    }
-}
-
-#[test]
-fn reconcile_flags_parse() {
-    let cli = parse(&["reconcile", "-a", "--list-unreconciled"]);
-    match cli.command {
-        Command::Reconcile(args) => {
+        Command::Init(args) => {
             assert!(args.auto);
             assert!(args.list_unreconciled);
         }
         _ => panic!("wrong command"),
     }
+}
+
+#[test]
+fn help_subcommand_is_disabled() {
+    assert!(Cli::try_parse_from(["wau", "help"]).is_err());
+    assert!(Cli::try_parse_from(["wau", "help", "install"]).is_err());
 }

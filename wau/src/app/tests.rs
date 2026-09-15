@@ -78,12 +78,3 @@ fn parse_defn_errors_on_a_bare_alias_with_no_colon_and_no_matching_source() {
     let err = parse_defn("just-a-name", &[], false).unwrap_err();
     assert!(matches!(err, AppError::Other(_)));
 }
-
-#[test]
-fn parse_bool_accepts_common_spellings() {
-    assert!(parse_bool("true").unwrap());
-    assert!(parse_bool("yes").unwrap());
-    assert!(!parse_bool("false").unwrap());
-    assert!(!parse_bool("off").unwrap());
-    assert!(parse_bool("maybe").is_err());
-}

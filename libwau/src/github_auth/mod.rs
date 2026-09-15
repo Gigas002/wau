@@ -3,9 +3,9 @@
 //! Stores nothing itself: callers persist the returned access token wherever
 //! they see fit (`config::GlobalConfig::access_tokens.github`).
 
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     http::{CacheTtl, HttpClient},
@@ -24,6 +24,46 @@ pub struct DeviceCodeResponse {
     pub verification_uri: String,
     pub expires_in: u64,
     pub interval: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DeviceCodeRequest {
+    client_id: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct AccessTokenRequest<'a> {
+    client_id: &'static str,
+    device_code: &'a str,
+    grant_type: &'static str,
+}
+
+/// GitHub's device-flow token-poll response: either a success payload or an
+/// `{"error": "..."}` payload (`authorization_pending` while the user hasn't
+/// approved yet, some other error code otherwise).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum AccessTokenResponse {
+    Success { access_token: String },
+    Error { error: String },
+}
+
+/// One category's usage/limit counters in GitHub's `/rate_limit` response.
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct RateLimitResource {
+    pub limit: u64,
+    pub remaining: u64,
+    pub reset: u64,
+    #[serde(default)]
+    pub used: u64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct RateLimitStatus {
+    #[serde(default)]
+    pub resources: HashMap<String, RateLimitResource>,
+    #[serde(default)]
+    pub rate: Option<RateLimitResource>,
 }
 
 #[derive(Default)]
@@ -69,8 +109,10 @@ impl GitHubAuth {
     /// Requests a device/user code pair to start the flow. Show `user_code`
     /// and `verification_uri` to the user, then call [`Self::poll_for_access_token`].
     pub async fn get_codes(&self, http: &HttpClient) -> Result<DeviceCodeResponse, Failure> {
-        let body =
-            serde_json::to_vec(&serde_json::json!({ "client_id": CLIENT_ID })).unwrap_or_default();
+        let body = serde_json::to_vec(&DeviceCodeRequest {
+            client_id: CLIENT_ID,
+        })
+        .unwrap_or_default();
         let response = http
             .post(
                 &format!("{}/login/device/code", self.base()),
@@ -98,11 +140,11 @@ impl GitHubAuth {
         polling_interval: Duration,
     ) -> Result<String, Failure> {
         loop {
-            let body = serde_json::to_vec(&serde_json::json!({
-                "client_id": CLIENT_ID,
-                "device_code": device_code,
-                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-            }))
+            let body = serde_json::to_vec(&AccessTokenRequest {
+                client_id: CLIENT_ID,
+                device_code,
+                grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+            })
             .unwrap_or_default();
             let response = http
                 .post(
@@ -120,20 +162,15 @@ impl GitHubAuth {
                 .into());
             }
 
-            let json: serde_json::Value = serde_json::from_slice(&response.body)?;
-            if let Some(error) = json.get("error").and_then(|v| v.as_str()) {
-                if error == "authorization_pending" {
+            match serde_json::from_slice(&response.body)? {
+                AccessTokenResponse::Success { access_token } => return Ok(access_token),
+                AccessTokenResponse::Error { error } if error == "authorization_pending" => {
                     tokio::time::sleep(polling_interval).await;
-                    continue;
                 }
-                return Err(InternalError::new(format!("authorization failed: {json}")).into());
+                AccessTokenResponse::Error { error } => {
+                    return Err(InternalError::new(format!("authorization failed: {error}")).into());
+                }
             }
-
-            let token = json
-                .get("access_token")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| InternalError::new("missing access_token in response"))?;
-            return Ok(token.to_owned());
         }
     }
 
@@ -144,7 +181,7 @@ impl GitHubAuth {
         &self,
         http: &HttpClient,
         access_token: Option<&str>,
-    ) -> Result<serde_json::Value, Failure> {
+    ) -> Result<RateLimitStatus, Failure> {
         let mut headers = vec![
             ("Accept", "application/vnd.github+json"),
             ("X-GitHub-Api-Version", "2022-11-28"),

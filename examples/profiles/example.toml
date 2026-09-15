@@ -1,0 +1,4 @@
+profile = "profile-name"
+path = "/games/World of Warcraft/_retail_/Interface/AddOns"
+# optional
+flavour = "mainline"

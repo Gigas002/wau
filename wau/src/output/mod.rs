@@ -100,26 +100,56 @@ pub fn format_list_detailed(pkgs: &[&Pkg]) -> String {
         .join("\n\n")
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+struct PkgOptionsJson {
+    any_flavour: bool,
+    any_release_type: bool,
+    version_eq: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct PkgJson {
+    source: String,
+    id: String,
+    slug: String,
+    name: String,
+    description: String,
+    url: String,
+    download_url: String,
+    date_published: String,
+    version: String,
+    changelog_url: String,
+    folders: Vec<String>,
+    deps: Vec<String>,
+    options: PkgOptionsJson,
+}
+
+impl From<&Pkg> for PkgJson {
+    fn from(pkg: &Pkg) -> Self {
+        PkgJson {
+            source: pkg.source.clone(),
+            id: pkg.id.clone(),
+            slug: pkg.slug.clone(),
+            name: pkg.name.clone(),
+            description: pkg.description.clone(),
+            url: pkg.url.clone(),
+            download_url: pkg.download_url.clone(),
+            date_published: pkg.date_published.to_rfc3339(),
+            version: pkg.version.clone(),
+            changelog_url: pkg.changelog_url.clone(),
+            folders: pkg.folders.iter().map(|f| f.name.clone()).collect(),
+            deps: pkg.deps.iter().map(|d| d.id.clone()).collect(),
+            options: PkgOptionsJson {
+                any_flavour: pkg.options.any_flavour,
+                any_release_type: pkg.options.any_release_type,
+                version_eq: pkg.options.version_eq,
+            },
+        }
+    }
+}
+
 pub fn pkg_to_json(pkg: &Pkg) -> serde_json::Value {
-    serde_json::json!({
-        "source": pkg.source,
-        "id": pkg.id,
-        "slug": pkg.slug,
-        "name": pkg.name,
-        "description": pkg.description,
-        "url": pkg.url,
-        "download_url": pkg.download_url,
-        "date_published": pkg.date_published.to_rfc3339(),
-        "version": pkg.version,
-        "changelog_url": pkg.changelog_url,
-        "folders": pkg.folders.iter().map(|f| f.name.clone()).collect::<Vec<_>>(),
-        "deps": pkg.deps.iter().map(|d| d.id.clone()).collect::<Vec<_>>(),
-        "options": {
-            "any_flavour": pkg.options.any_flavour,
-            "any_release_type": pkg.options.any_release_type,
-            "version_eq": pkg.options.version_eq,
-        },
-    })
+    serde_json::to_value(PkgJson::from(pkg)).unwrap_or(serde_json::Value::Null)
 }
 
 /// `_ListFormat.Json`: an array of full package objects.

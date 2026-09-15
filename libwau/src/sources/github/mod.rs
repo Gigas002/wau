@@ -64,6 +64,16 @@ struct GhAsset {
     state: String,
 }
 
+/// GitHub's `/releases` endpoint returns an array for the "recent releases"
+/// query, but `/releases/tags/{tag}` returns a single object — both hit the
+/// same call site here depending on whether `version_eq` is pinned.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum GhReleasesResponse {
+    Many(Vec<GhRelease>),
+    One(GhRelease),
+}
+
 #[derive(Debug, Deserialize)]
 struct PackagerReleaseJson {
     releases: Vec<PackagerRelease>,
@@ -549,11 +559,9 @@ impl Resolver for GitHubResolver {
             .into());
         }
 
-        let json: serde_json::Value = serde_json::from_slice(&releases_response.body)?;
-        let mut releases: Vec<GhRelease> = if json.is_array() {
-            serde_json::from_value(json)?
-        } else {
-            vec![serde_json::from_value(json)?]
+        let mut releases: Vec<GhRelease> = match serde_json::from_slice(&releases_response.body)? {
+            GhReleasesResponse::Many(releases) => releases,
+            GhReleasesResponse::One(release) => vec![release],
         };
 
         // Only users with push access get draft releases, but filter just in case.

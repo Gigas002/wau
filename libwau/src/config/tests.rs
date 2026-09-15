@@ -1,86 +1,18 @@
-use std::sync::Mutex;
-
 use super::*;
 use crate::model::Flavour;
-
-/// Env-var-touching tests must not run concurrently (process-global state).
-static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-struct EnvVarGuard {
-    key: &'static str,
-    original: Option<String>,
-}
-
-impl EnvVarGuard {
-    /// Sets `key` for the duration of this guard, restoring (or clearing) it on drop.
-    /// Callers must hold [`ENV_LOCK`] for the guard's whole lifetime.
-    fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
-        let original = env::var(key).ok();
-        // SAFETY: caller holds `ENV_LOCK`, so no other test thread reads/writes env concurrently.
-        unsafe { env::set_var(key, value.as_ref()) };
-        Self { key, original }
-    }
-
-    /// Removes `key` for the duration of this guard, restoring it on drop.
-    /// Callers must hold [`ENV_LOCK`] for the guard's whole lifetime.
-    fn unset(key: &'static str) -> Self {
-        let original = env::var(key).ok();
-        // SAFETY: see `set`.
-        unsafe { env::remove_var(key) };
-        Self { key, original }
-    }
-}
-
-impl Drop for EnvVarGuard {
-    fn drop(&mut self) {
-        // SAFETY: see `set`.
-        unsafe {
-            match &self.original {
-                Some(v) => env::set_var(self.key, v),
-                None => env::remove_var(self.key),
-            }
-        }
-    }
-}
-
-fn lock_env() -> std::sync::MutexGuard<'static, ()> {
-    ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
-}
 
 // ---------------------------------------------------------------------------
 // Dirs
 // ---------------------------------------------------------------------------
 
 #[test]
-fn wau_home_overrides_all_three_dirs_without_app_name_segment() {
-    let _lock = lock_env();
-    let home = EnvVarGuard::set(HOME_ENV_VAR, "/tmp/wau-home-test");
-
-    assert_eq!(config_dir(&[]), PathBuf::from("/tmp/wau-home-test/config"));
-    assert_eq!(cache_dir(&[]), PathBuf::from("/tmp/wau-home-test/cache"));
-    assert_eq!(state_dir(&[]), PathBuf::from("/tmp/wau-home-test/state"));
-
-    drop(home);
+fn config_dir_ends_with_app_name() {
+    assert_eq!(config_dir().file_name().unwrap(), "wau");
 }
 
 #[test]
-fn wau_home_appends_extra_parts() {
-    let _lock = lock_env();
-    let _home = EnvVarGuard::set(HOME_ENV_VAR, "/tmp/wau-home-test");
-
-    assert_eq!(
-        config_dir(&["profiles", "default"]),
-        PathBuf::from("/tmp/wau-home-test/config/profiles/default")
-    );
-}
-
-#[test]
-fn xdg_config_home_is_honoured_when_wau_home_unset() {
-    let _lock = lock_env();
-    let _clear_home = EnvVarGuard::unset(HOME_ENV_VAR);
-    let _xdg = EnvVarGuard::set("XDG_CONFIG_HOME", "/tmp/xdg-config");
-
-    assert_eq!(config_dir(&[]), PathBuf::from("/tmp/xdg-config/wau"));
+fn cache_dir_ends_with_app_name() {
+    assert_eq!(cache_dir().file_name().unwrap(), "wau");
 }
 
 // ---------------------------------------------------------------------------
@@ -103,101 +35,111 @@ fn secret_string_serializes_in_plaintext() {
 }
 
 // ---------------------------------------------------------------------------
-// GlobalConfig
+// LogLevel
 // ---------------------------------------------------------------------------
 
 #[test]
-fn global_config_defaults_when_no_file_or_env() {
-    let _lock = lock_env();
-    let home = EnvVarGuard::set(HOME_ENV_VAR, tempfile::tempdir().unwrap().keep());
-
-    let config = GlobalConfig::read().unwrap();
-    assert!(config.auto_update_check);
-    assert!(config.access_tokens.is_empty());
-
-    drop(home);
+fn log_level_parse_accepts_known_spellings() {
+    assert_eq!(LogLevel::parse("info"), Some(LogLevel::Info));
+    assert_eq!(LogLevel::parse("WARN"), Some(LogLevel::Warn));
+    assert_eq!(LogLevel::parse("warning"), Some(LogLevel::Warn));
+    assert_eq!(LogLevel::parse("bogus"), None);
 }
 
 #[test]
-fn global_config_env_var_overrides_default() {
-    let _lock = lock_env();
-    let _home = EnvVarGuard::set(HOME_ENV_VAR, tempfile::tempdir().unwrap().keep());
-    let _flag = EnvVarGuard::set("WAU_AUTO_UPDATE_CHECK", "false");
-    let _token = EnvVarGuard::set("WAU_ACCESS_TOKENS_GITHUB", "env-token");
+fn log_level_defaults_to_warn() {
+    assert_eq!(LogLevel::default(), LogLevel::Warn);
+}
 
-    let config = GlobalConfig::read().unwrap();
-    assert!(!config.auto_update_check);
-    assert_eq!(config.access_tokens.github.unwrap().expose(), "env-token");
+// ---------------------------------------------------------------------------
+// GlobalConfig
+// ---------------------------------------------------------------------------
+
+fn global_config_in(dir: &std::path::Path) -> GlobalConfig {
+    let mut config = GlobalConfig::defaults();
+    config.dirs = Dirs {
+        cache: dir.join("cache"),
+        config: dir.join("config"),
+    };
+    config
+}
+
+#[test]
+fn global_config_defaults_when_no_file() {
+    let config = GlobalConfig::defaults();
+    assert_eq!(config.log_level, LogLevel::Warn);
+    assert!(config.access_tokens.cfcore.is_none());
+    assert!(config.access_tokens.github.is_none());
+    assert!(config.access_tokens.wago_addons.is_none());
 }
 
 #[test]
 fn global_config_write_then_read_round_trips() {
-    let _lock = lock_env();
-    let _home = EnvVarGuard::set(HOME_ENV_VAR, tempfile::tempdir().unwrap().keep());
-
-    let mut config = GlobalConfig::from_env();
-    config.auto_update_check = false;
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = global_config_in(dir.path());
+    config.log_level = LogLevel::Debug;
     config.access_tokens.cfcore = Some(SecretString::new("cf-key"));
     config.write().unwrap();
 
-    let read_back = GlobalConfig::read().unwrap();
-    assert!(!read_back.auto_update_check);
+    let raw = fs::read_to_string(config.config_file_path()).unwrap();
+    let file: GlobalConfigFile = toml::from_str(&raw).unwrap();
+    let read_back = GlobalConfig::from_file(file);
+    assert_eq!(read_back.log_level, LogLevel::Debug);
     assert_eq!(read_back.access_tokens.cfcore.unwrap().expose(), "cf-key");
 }
 
 #[test]
-fn global_config_env_wins_over_file() {
-    let _lock = lock_env();
-    let _home = EnvVarGuard::set(HOME_ENV_VAR, tempfile::tempdir().unwrap().keep());
-
-    let mut config = GlobalConfig::from_env();
-    config.auto_update_check = true;
+fn global_config_write_persists_all_three_providers() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = global_config_in(dir.path());
+    config.access_tokens.cfcore = Some(SecretString::new("cf-key"));
+    config.access_tokens.github = Some(SecretString::new("gh-token"));
+    config.access_tokens.wago_addons = Some(SecretString::new("wago-token"));
     config.write().unwrap();
 
-    let _flag = EnvVarGuard::set("WAU_AUTO_UPDATE_CHECK", "false");
-    let read_back = GlobalConfig::read().unwrap();
-    assert!(!read_back.auto_update_check);
+    let raw = fs::read_to_string(config.config_file_path()).unwrap();
+    let file: GlobalConfigFile = toml::from_str(&raw).unwrap();
+    let providers = file.providers.unwrap();
+    assert_eq!(
+        providers.curseforge.unwrap().api_key.unwrap().expose(),
+        "cf-key"
+    );
+    assert_eq!(
+        providers.github.unwrap().api_key.unwrap().expose(),
+        "gh-token"
+    );
+    assert_eq!(
+        providers.wago.unwrap().api_key.unwrap().expose(),
+        "wago-token"
+    );
 }
 
 #[test]
-fn global_config_access_tokens_independent_file_overrides_main_file() {
-    let _lock = lock_env();
-    let _home = EnvVarGuard::set(HOME_ENV_VAR, tempfile::tempdir().unwrap().keep());
+fn global_config_paths_cache_override_expands_tilde_and_is_used() {
+    let toml = r#"
+        [paths]
+        cache = "~/custom-cache"
+    "#;
+    let file: GlobalConfigFile = toml::from_str(toml).unwrap();
+    let config = GlobalConfig::from_file(file);
+    assert!(!config.dirs.cache.starts_with("~"));
+    assert!(config.dirs.cache.ends_with("custom-cache"));
+}
 
-    let mut config = GlobalConfig::from_env();
-    config.access_tokens.github = Some(SecretString::new("from-main-file"));
-    config.write().unwrap();
-
-    let tokens = AccessTokens {
-        github: Some(SecretString::new("from-sibling-file")),
-        ..Default::default()
-    };
-    fs::write(
-        config.access_tokens_file_path(),
-        serde_json::to_string(&tokens).unwrap(),
-    )
-    .unwrap();
-
-    let read_back = GlobalConfig::read().unwrap();
-    assert_eq!(
-        read_back.access_tokens.github.unwrap().expose(),
-        "from-sibling-file"
-    );
+#[test]
+fn global_config_logging_level_round_trips() {
+    let toml = r#"
+        [logging]
+        level = "trace"
+    "#;
+    let file: GlobalConfigFile = toml::from_str(toml).unwrap();
+    let config = GlobalConfig::from_file(file);
+    assert_eq!(config.log_level, LogLevel::Trace);
 }
 
 // ---------------------------------------------------------------------------
 // ProfileConfig
 // ---------------------------------------------------------------------------
-
-fn global_config_in(dir: &std::path::Path) -> GlobalConfig {
-    let mut config = GlobalConfig::from_env();
-    config.dirs = Dirs {
-        cache: dir.join("cache"),
-        config: dir.join("config"),
-        state: dir.join("state"),
-    };
-    config
-}
 
 #[test]
 fn profile_config_new_rejects_empty_profile_name() {
@@ -279,12 +221,36 @@ fn profile_config_write_then_read_round_trips() {
     .unwrap();
     profile.write().unwrap();
 
-    assert!(profile.db_file_path().starts_with(profile.config_path()));
+    assert!(
+        profile
+            .config_file_path()
+            .starts_with(profiles_dir_path(&global))
+    );
+    assert_eq!(profile.config_file_path().extension().unwrap(), "toml");
+    assert_eq!(profile.db_file_path().extension().unwrap(), "sqlite");
 
     let read_back = ProfileConfig::read(global, "retail-main").unwrap();
     assert_eq!(read_back.profile, "retail-main");
     assert_eq!(read_back.addon_dir, addon_dir);
     assert_eq!(read_back.flavour_override, Some(Flavour::Mainline));
+}
+
+#[test]
+fn profile_config_file_uses_path_and_flavour_keys() {
+    let dir = tempfile::tempdir().unwrap();
+    let global = global_config_in(dir.path());
+    let addon_dir = dir.path().join("addons");
+    fs::create_dir_all(&addon_dir).unwrap();
+
+    ProfileConfig::new(global.clone(), "keyed", &addon_dir, Some(Flavour::Mainline))
+        .unwrap()
+        .write()
+        .unwrap();
+
+    let raw = fs::read_to_string(profile_config_file_path(&global, "keyed")).unwrap();
+    assert!(raw.contains("profile ="));
+    assert!(raw.contains("path ="));
+    assert!(raw.contains("flavour ="));
 }
 
 #[test]
@@ -333,7 +299,7 @@ fn iter_profile_installations_extracts_installation_dirs() {
 }
 
 #[test]
-fn profile_config_delete_trashes_config_dir() {
+fn profile_config_delete_trashes_config_file_and_db() {
     let dir = tempfile::tempdir().unwrap();
     let global = global_config_in(dir.path());
     let addon_dir = dir.path().join("addons");
@@ -342,9 +308,27 @@ fn profile_config_delete_trashes_config_dir() {
     let profile =
         ProfileConfig::new(global, "gone-soon", &addon_dir, Some(Flavour::Mainline)).unwrap();
     profile.write().unwrap();
-    let config_path = profile.config_path();
-    assert!(config_path.exists());
+    fs::write(profile.db_file_path(), b"fake-db").unwrap();
+    assert!(profile.config_file_path().exists());
+    assert!(profile.db_file_path().exists());
 
     profile.delete().unwrap();
-    assert!(!config_path.exists());
+    assert!(!profile.config_file_path().exists());
+    assert!(!profile.db_file_path().exists());
+}
+
+#[test]
+fn profile_config_delete_without_db_file_still_succeeds() {
+    let dir = tempfile::tempdir().unwrap();
+    let global = global_config_in(dir.path());
+    let addon_dir = dir.path().join("addons");
+    fs::create_dir_all(&addon_dir).unwrap();
+
+    let profile =
+        ProfileConfig::new(global, "no-db-yet", &addon_dir, Some(Flavour::Mainline)).unwrap();
+    profile.write().unwrap();
+    assert!(!profile.db_file_path().exists());
+
+    profile.delete().unwrap();
+    assert!(!profile.config_file_path().exists());
 }

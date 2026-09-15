@@ -6,7 +6,7 @@ mod tests;
 use std::{collections::HashMap, time::Duration};
 
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
@@ -30,6 +30,12 @@ const RELATION_TYPE_REQUIRED_DEPENDENCY: u8 = 3;
 #[derive(Debug, Deserialize)]
 struct DataResponse<T> {
     data: T,
+}
+
+#[derive(Debug, Serialize)]
+struct ModIdsRequest<'a> {
+    #[serde(rename = "modIds")]
+    mod_ids: &'a [u64],
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -220,15 +226,13 @@ impl CurseForgeResolver {
             );
         }
 
-        let json: serde_json::Value = serde_json::from_slice(&response.body)?;
-        let data = json.get("data").cloned().unwrap_or(serde_json::Value::Null);
-
         if fetched_single {
-            let file: CfFile = serde_json::from_value(data)?;
-            Ok(vec![file])
+            let parsed: DataResponse<CfFile> = serde_json::from_slice(&response.body)?;
+            Ok(vec![parsed.data])
         } else {
-            let files: Vec<CfFile> = serde_json::from_value(data)?;
-            Ok(files
+            let parsed: DataResponse<Vec<CfFile>> = serde_json::from_slice(&response.body)?;
+            Ok(parsed
+                .data
                 .into_iter()
                 .filter(|f| f.display_name == version_eq)
                 .take(1)
@@ -247,7 +251,7 @@ impl CurseForgeResolver {
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
         let ids: Vec<u64> = numeric_ids.iter().filter_map(|s| s.parse().ok()).collect();
-        let body = serde_json::to_vec(&serde_json::json!({ "modIds": ids })).unwrap_or_default();
+        let body = serde_json::to_vec(&ModIdsRequest { mod_ids: &ids }).unwrap_or_default();
 
         let response = http
             .post(
