@@ -1,4 +1,4 @@
-//! Global and per-profile configuration — ports instawow's `config/*.py`.
+//! Global and per-profile configuration.
 //!
 //! Two independent TOML documents: a **global config** (`config.toml`:
 //! logging, cache path, provider API keys) and one **profile config** per WoW
@@ -57,9 +57,9 @@ pub enum ConfigError {
 // ============================================================================
 
 /// A config value that should never be printed in the clear. Serializes
-/// (file I/O) as plain text — matching instawow, which stores tokens
-/// unencrypted on disk — but `Debug`/`Display` always redact, so an accidental
-/// `{:?}`/`{}` elsewhere in the app can't leak it.
+/// (file I/O) as plain text — tokens are stored unencrypted on disk — but
+/// `Debug`/`Display` always redact, so an accidental `{:?}`/`{}` elsewhere
+/// in the app can't leak it.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct SecretString(String);
@@ -368,8 +368,7 @@ impl GlobalConfig {
 // ============================================================================
 
 /// The WoW client a profile targets: either auto-detected from `addon_dir`'s
-/// install-directory subfolder name, or forced via `flavour_override`
-/// (instawow's `Product` / `_NullProduct` union, collapsed to an enum).
+/// install-directory subfolder name, or forced via `flavour_override`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstalledProduct {
     Known(&'static ProductInfo),
@@ -489,7 +488,7 @@ impl ProfileConfig {
 
     /// Installation directories already covered by a configured profile
     /// (best-effort: reads just the raw `path` value from each profile's
-    /// TOML, unexpanded — matches instawow's `iter_profile_installations`).
+    /// TOML, unexpanded).
     pub fn iter_profile_installations(global_config: &GlobalConfig) -> Vec<PathBuf> {
         Self::iter_profiles(global_config)
             .into_iter()

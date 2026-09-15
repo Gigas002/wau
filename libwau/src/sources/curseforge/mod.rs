@@ -1,4 +1,4 @@
-//! CurseForge source — ports instawow's `_sources/cfcore.py`.
+//! CurseForge source.
 
 #[cfg(test)]
 mod tests;
@@ -120,8 +120,8 @@ fn parse_iso_datetime(s: &str) -> Result<DateTime<Utc>, Failure> {
 
 pub struct CurseForgeResolver {
     api_key: Option<SecretString>,
-    /// Self-hosted proxy override (instawow's `INSTAWOW_CF_API_URL`); when
-    /// set, the API key isn't required (the proxy is assumed to handle auth).
+    /// Self-hosted proxy override; when set, the API key isn't required (the
+    /// proxy is assumed to handle auth).
     api_url: Option<String>,
 }
 
@@ -454,10 +454,9 @@ impl Resolver for CurseForgeResolver {
             .await
     }
 
-    /// Batches numeric-id lookups into one `POST /mods` request, matching
-    /// instawow's `resolve()` override — a batch failure applies the same
-    /// error to every `Defn` in the batch (instawow: the whole `resolve()`
-    /// call raising means every `Defn` for this source gets that one error).
+    /// Batches numeric-id lookups into one `POST /mods` request. A batch
+    /// failure applies the same error to every `Defn` in the batch, since a
+    /// single failed request doesn't distinguish which id(s) caused it.
     async fn resolve(
         &self,
         http: &HttpClient,

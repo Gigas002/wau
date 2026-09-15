@@ -1,10 +1,7 @@
-//! Core CRUD queries — ports the DB-touching functions of instawow's
-//! `pkg_management.py` (`get_pkgs`, `_check_pkgs_not_exist`, `_insert_pkg`,
-//! `_delete_pkg`, `_mutate_pin`, `get_pkg_logged_versions`, and the
-//! folder-conflict checks from `_mutate_install`/`_mutate_update`).
-//!
-//! Orchestration (resolve/install/update/remove) lives in `pkg_management`
-//! (a later phase); this module only owns direct table access.
+//! Core CRUD queries against the `pkg`/`pkg_options`/`pkg_folder`/`pkg_dep`
+//! tables: fetch, existence checks, insert, delete, pin, logged-version
+//! history, and folder-conflict checks. Only direct table access — no
+//! higher-level orchestration.
 
 use rusqlite::{Connection, Row, params, params_from_iter, types::Value};
 
@@ -312,8 +309,8 @@ pub fn delete_pkg(conn: &Connection, source: &str, id: &str) -> Result<(), DbErr
 }
 
 /// Flips `pkg_options.version_eq` for an installed package, returning the new
-/// value. instawow "does not have true pinning" — this only sets the flag;
-/// the pinned version is whatever `pkg.version` already says.
+/// value. This only sets the flag — the pinned version is whatever
+/// `pkg.version` already holds, there's no separate stored pin target.
 pub fn pin_pkg(
     conn: &Connection,
     source: &str,
@@ -355,11 +352,11 @@ pub fn find_pkgs_owning_folders(
     bases.into_iter().map(|b| hydrate(conn, b)).collect()
 }
 
-/// Same conflict check as [`find_pkgs_owning_folders`], for the `_mutate_update`
-/// path, excluding the package being updated. Ported verbatim including its
-/// `AND` (not `OR`) exclusion clause: a *different* package that happens to
-/// share `exclude_source` (with a different id) is also excluded from the
-/// results — matches instawow exactly, not "fixed."
+/// Same conflict check as [`find_pkgs_owning_folders`], excluding the
+/// package being updated. Uses an `AND` (not `OR`) exclusion clause: a
+/// *different* package that happens to share `exclude_source` (with a
+/// different id) is also excluded from the results — this is intentional,
+/// not a bug.
 pub fn find_pkgs_owning_folders_excluding(
     conn: &Connection,
     folder_names: &[String],

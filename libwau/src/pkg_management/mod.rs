@@ -1,9 +1,8 @@
-//! Install/update/remove/replace/pin orchestration — ports instawow's
-//! `pkg_management.py`.
+//! Install/update/remove/replace/pin orchestration.
 //!
-//! No progress reporting or mutate-locking here yet: progress lands in a
-//! later phase (a pub/sub bus), and locking only matters for concurrent
-//! embedders (the GUI) — a sequential CLI has nothing to serialise against.
+//! No progress reporting, and no locking beyond per-URL download
+//! deduplication (`DownloadLocks`) — operations aren't otherwise serialized
+//! against each other.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -37,8 +36,7 @@ pub struct Ctx<'a> {
     pub flavour: Flavour,
 }
 
-/// A successful package operation outcome — instawow's `PkgInstalled` /
-/// `PkgUpdated` / `PkgRemoved`.
+/// A successful package operation outcome.
 #[derive(Debug, Clone)]
 pub enum Outcome {
     PkgInstalled {
@@ -103,8 +101,7 @@ fn strategies_diff(old: &PkgOptions, new: &PkgOptions, new_version: &str) -> Str
     parts.join("; ")
 }
 
-/// Splits a batch resolve result into successes and failures — instawow's
-/// `split_results`.
+/// Splits a batch resolve result into successes and failures.
 pub fn split_results<T>(
     results: HashMap<Defn, AnyOutcome<T>>,
 ) -> (HashMap<Defn, T>, HashMap<Defn, Failure>) {
@@ -179,9 +176,8 @@ fn download_headers(sources: &[Box<dyn Resolver>], source: &str) -> Vec<(String,
 // ============================================================================
 
 /// Resolves `defns` into packages, bucketed by source and resolved
-/// concurrently. `with_deps` follows one level of `PkgCandidate::deps`
-/// (instawow: "The resolver will not follow dependencies more than one
-/// level deep").
+/// concurrently. `with_deps` follows one level of `PkgCandidate::deps` —
+/// dependencies of dependencies are not resolved.
 pub async fn resolve(
     ctx: &Ctx<'_>,
     defns: &[Defn],
@@ -290,8 +286,7 @@ fn resolve_deps<'a>(
 }
 
 // ============================================================================
-// Mutations (sequential — matches instawow's per-item `await` in a dict
-// comprehension, which is sequential in Python too, not concurrent)
+// Mutations (run sequentially, one item at a time)
 // ============================================================================
 
 fn mutate_install(
@@ -728,9 +723,9 @@ pub fn remove(
         .collect()
 }
 
-/// Pins/unpins installed packages — sets `Strategy::VersionEq` on/off.
-/// instawow "does not have true pinning": this only flips a DB flag: the
-/// pinned version is whatever `pkg.version` already says.
+/// Pins/unpins installed packages — sets `Strategy::VersionEq` on/off. This
+/// only flips a DB flag; the pinned version is whatever `pkg.version`
+/// already holds, there's no separate stored pin target.
 pub fn pin(
     conn: &Connection,
     sources: &[Box<dyn Resolver>],

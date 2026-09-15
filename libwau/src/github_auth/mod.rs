@@ -1,7 +1,7 @@
-//! GitHub device-code OAuth flow — ports instawow's `_github_auth.py`.
+//! GitHub device-code OAuth flow.
 //!
-//! Stores nothing itself: callers persist the returned access token wherever
-//! they see fit (`config::GlobalConfig::access_tokens.github`).
+//! Stores nothing itself: callers persist the returned access token
+//! wherever they see fit.
 
 use std::{collections::HashMap, time::Duration};
 
@@ -174,9 +174,8 @@ impl GitHubAuth {
         }
     }
 
-    /// Fetches GitHub's current API rate-limit status (inspection only — not
-    /// used to enforce client-side rate limiting anywhere in this port,
-    /// matching instawow).
+    /// Fetches GitHub's current API rate-limit status (inspection only —
+    /// not used to enforce client-side rate limiting).
     pub async fn get_rate_limit_status(
         &self,
         http: &HttpClient,

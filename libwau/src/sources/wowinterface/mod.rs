@@ -1,9 +1,9 @@
-//! WoWInterface source — ports instawow's `_sources/wowi.py`.
+//! WoWInterface source.
 //!
-//! Documented upstream limitation, preserved as-is (not "fixed"): the
+//! Documented upstream limitation, preserved as-is (not worked around): the
 //! details API can't express classic-specific files for multi-file addons,
 //! and the download link always points at the retail build regardless of
-//! flavour — "the WoWI API is only good for installing retail add-ons."
+//! flavour.
 
 #[cfg(test)]
 mod tests;
@@ -48,8 +48,8 @@ fn timestamp_to_datetime(millis: i64) -> DateTime<Utc> {
         .unwrap_or_else(|| DateTime::from_timestamp(0, 0).unwrap())
 }
 
-/// instawow's `normalise_names('-')`: casefold and replace runs of
-/// non-alphanumerics with a single separator.
+/// Casefolds `s` and replaces runs of non-alphanumeric characters with a
+/// single `-`.
 fn slugify(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut last_was_sep = true; // avoid a leading separator
@@ -193,11 +193,10 @@ impl Resolver for WowInterfaceResolver {
         flavour: Flavour,
         defn: &Defn,
     ) -> AnyOutcome<PkgCandidate> {
-        // `resolve_one` is only ever meaningfully driven via the batched
-        // `resolve()` in instawow (a direct call with no pre-fetched metadata
-        // always raises `PkgNonexistent` there); routing through our own
-        // `resolve()` override here achieves the same real-world result
-        // while still resolving a genuine single item correctly.
+        // WoWInterface only exposes a batch lookup API, so a single-item
+        // resolve is implemented by routing through this resolver's own
+        // `resolve()` override with a one-element slice, rather than
+        // duplicating standalone lookup logic here.
         let results =
             <Self as Resolver>::resolve(self, http, flavour, std::slice::from_ref(defn)).await;
         results

@@ -1,8 +1,8 @@
-//! Package archive download — ports instawow's `pkg_archives/_download.py`.
+//! Package archive download.
 //!
-//! No checksum verification is performed anywhere in this path, matching
-//! instawow: despite CurseForge exposing file hashes, it never checks them
-//! against the downloaded bytes, so this port doesn't either.
+//! No checksum verification is performed anywhere in this path: despite
+//! CurseForge exposing file hashes in its API, the downloaded bytes are
+//! never checked against them.
 
 use std::{
     collections::HashMap,
@@ -28,9 +28,8 @@ pub enum DownloadError {
     Status { status: u16, url: String },
 }
 
-/// `true` for `file://` URLs — instawow short-circuits these to a direct
-/// filesystem path instead of making an HTTP request (used by local/test
-/// sources and by the addon-toc-key-less `instawow` source it doesn't port).
+/// `true` for `file://` URLs, which are short-circuited to a direct
+/// filesystem path instead of an HTTP request (used by local/test sources).
 pub fn is_file_uri(url: &str) -> bool {
     Url::parse(url)
         .map(|u| u.scheme() == "file")
@@ -43,7 +42,7 @@ pub fn file_uri_to_path(url: &str) -> Option<PathBuf> {
 }
 
 /// Per-URL download locks, so concurrent requests for the same archive share
-/// one download instead of racing — instawow's `_DOWNLOAD_PKG_LOCK`.
+/// one download instead of racing.
 #[derive(Default)]
 pub struct DownloadLocks {
     locks: StdMutex<HashMap<String, Arc<AsyncMutex<()>>>>,
@@ -68,8 +67,8 @@ impl DownloadLocks {
 
 /// Downloads `download_url` to a unique file under `temp_dir`, returning its
 /// path. `file://` URLs are returned directly without any network I/O.
-/// Downloads are cached indefinitely (relies on resolvers returning
-/// version-specific/immutable URLs), matching instawow.
+/// Downloads are cached indefinitely, which relies on resolvers returning
+/// version-specific/immutable URLs.
 pub async fn download_pkg_archive(
     client: &HttpClient,
     locks: &DownloadLocks,

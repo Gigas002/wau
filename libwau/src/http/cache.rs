@@ -1,6 +1,4 @@
-//! On-disk response cache store, backed by `rusqlite` — the storage half of
-//! instawow's `http/_cache.py` (which uses `diskcache`; there's no direct
-//! Rust equivalent of that pairing, so a small dedicated table stands in).
+//! On-disk response cache store, backed by a small `rusqlite` table.
 
 use std::{
     path::Path,

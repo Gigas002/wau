@@ -1,4 +1,4 @@
-//! Wago Addons source — ports instawow's `_sources/wago_addons.py`.
+//! Wago Addons source.
 
 #[cfg(test)]
 mod tests;
@@ -44,10 +44,9 @@ fn parse_iso_datetime(s: &str) -> Result<DateTime<Utc>, Failure> {
         .map_err(|e| InternalError::new(e).into())
 }
 
-/// `_WagoGameVersion` — note Tbc/Titan classic have no Wago equivalent;
-/// instawow's `to_flavourful_enum` would raise an uncaught `KeyError` for
-/// those (surfacing as `InternalError` via `resultify`), which this mirrors
-/// rather than silently treating them as unsupported.
+/// TBC/Titan classic have no Wago game-version mapping; callers surface
+/// `None` as an internal error rather than silently treating it as
+/// unsupported.
 fn game_version_param(flavour: Flavour) -> Option<&'static str> {
     match flavour {
         Flavour::Mainline => Some("retail"),
@@ -123,10 +122,9 @@ impl Resolver for WagoAddonsResolver {
         }
     }
 
-    /// Requires a bearer token to be configured — unlike Python's
-    /// `access_token.get()` (which raises if the required token is missing),
-    /// this returns no `Authorization` header at all in that case, since a
-    /// missing-token source is expected to be filtered out by
+    /// Requires a bearer token to be configured; when it's missing, this
+    /// returns no `Authorization` header at all rather than erroring, since
+    /// a missing-token source is expected to be filtered out by
     /// `get_disabled_reason` before any request is attempted.
     fn make_request_headers(&self, _intent: HeadersIntent) -> Vec<(String, String)> {
         match &self.token {

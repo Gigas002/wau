@@ -1,17 +1,11 @@
-//! Progress reporting pub/sub — ports instawow's `progress_reporting.py`.
+//! Progress reporting pub/sub.
 //!
-//! Python threads this through `contextvars` (implicit global state scoped
-//! per async task tree, since arbitrary code anywhere can call the
-//! module-level `update_progress`/`make_progress_receiver` functions); this
-//! port uses an explicit [`ProgressBus`] handle instead, matching the
-//! project's "explicit struct threaded through calls, not global state"
-//! architecture. Same observable behaviour (every subscriber sees every
-//! update), no hidden global state.
+//! An explicit [`ProgressBus`] handle is threaded through calls rather than
+//! relying on implicit global state — every subscriber sees every update,
+//! with no hidden state to reason about.
 //!
-//! Not yet wired into `pkg_management`'s resolve/download loops — that
-//! instrumentation lands with the CLI's `indicatif`-based renderer, so the
-//! integration points can be chosen alongside real rendering rather than
-//! speculatively.
+//! Not yet wired into any resolve/download loops that would report through
+//! it.
 
 use std::{
     collections::HashMap,
@@ -92,8 +86,7 @@ impl ProgressBus {
 }
 
 /// Tracks a fixed-size batch of futures as one "N of M done" entry,
-/// clearing it once every future completes — instawow's
-/// `make_incrementing_progress_tracker`.
+/// clearing it once every future completes.
 pub struct IncrementingTracker<'a> {
     bus: &'a ProgressBus,
     id: u64,
@@ -103,8 +96,7 @@ pub struct IncrementingTracker<'a> {
 }
 
 impl<'a> IncrementingTracker<'a> {
-    /// Returns `None` for an empty batch (nothing to track), matching
-    /// instawow's `total < 1` short-circuit.
+    /// Returns `None` for an empty batch — there's nothing to track.
     pub fn new(bus: &'a ProgressBus, total: u64, label: impl Into<String>) -> Option<Self> {
         if total < 1 {
             return None;

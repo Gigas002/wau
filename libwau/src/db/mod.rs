@@ -1,9 +1,8 @@
-//! SQLite persistence for installed packages — ports instawow's `pkg_db/*.py`.
+//! SQLite persistence for installed packages.
 //!
-//! Raw SQL via `rusqlite` (no ORM), mirroring instawow's own approach —
-//! both use hand-written SQL rather than fighting an ORM abstraction. Schema
-//! versioning uses `PRAGMA user_version` + an ordered migration list, not a
-//! separate migrations table (see the `migrations` submodule).
+//! Raw SQL via `rusqlite` (no ORM). Schema versioning uses `PRAGMA
+//! user_version` plus an ordered migration list, not a separate migrations
+//! table.
 
 use std::path::Path;
 
@@ -24,9 +23,9 @@ pub use queries::{
     get_all_pkgs, get_pkg_logged_versions, get_pkgs, insert_pkg, pin_pkg,
 };
 
-/// Schema for a brand-new database — already includes the indexes instawow's
-/// `_Migration_1` adds to an *older* (pre-index) database; a fresh install
-/// never runs that migration in practice, only upgrades from it.
+/// Schema for a brand-new database — already includes the indexes that an
+/// upgrade migration adds to an older (pre-index) database; a fresh install
+/// never runs that migration, only upgrades from it.
 const SCHEMA: &str = "
 CREATE TABLE pkg (
     source VARCHAR NOT NULL,
@@ -146,11 +145,12 @@ fn create(conn: &Connection) -> rusqlite::Result<()> {
 // Datetime storage format
 // ============================================================================
 //
-// instawow stores UTC datetimes as `isoformat(' ')` on a tz-naive value: a
-// space (not `T`) separator, no offset, and no fractional-second suffix when
-// the microseconds are zero. Matched exactly here (not via rusqlite's
-// `chrono` feature, whose default format differs) so a raw `ORDER BY
-// install_time` or hand inspection of the DB behaves identically.
+// UTC datetimes are stored as `YYYY-MM-DD HH:MM:SS[.ffffff]`: a space (not
+// `T`) separator, no offset, and no fractional-second suffix when the
+// microseconds are zero. This format is produced and parsed by hand here
+// (not via rusqlite's `chrono` feature, whose default format differs) so a
+// raw `ORDER BY install_time` or hand inspection of the DB behaves
+// correctly.
 
 pub(crate) fn format_datetime(dt: &DateTime<Utc>) -> String {
     if dt.timestamp_subsec_micros() == 0 {

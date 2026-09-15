@@ -1,11 +1,9 @@
-//! Aggregate addon catalogue — ports instawow's `catalogue/__init__.py` and
-//! `catalogue/cataloguer.py`'s `ComputedCatalogue`.
+//! Aggregate addon catalogue: fetches the published catalogue data and
+//! computes derived per-entry fields (name normalisation, popularity,
+//! cross-source `same_as` links).
 //!
-//! Live per-source catalogue generation (`cataloguer.collate`, backing
-//! instawow's hidden `generate-catalogue` command) is out of scope for this
-//! port: it consumes the same published, pre-built catalogue JSON instawow
-//! itself publishes and consumes — that's data, not code, and reproducing it
-//! doesn't change any user-facing behaviour `search`/`reconcile` depend on.
+//! Generating the catalogue data itself is out of scope here — this only
+//! consumes the already-published, pre-built catalogue JSON.
 
 use std::{collections::HashMap, time::Duration};
 
@@ -32,10 +30,7 @@ fn catalogue_url() -> String {
     )
 }
 
-/// Strips non-ASCII-alphanumeric characters and casefolds — instawow's
-/// `normalise_names('')`. Shared by catalogue name matching and the
-/// `matchers` module's name-based reconciliation pass (the same operation,
-/// duplicated ad hoc in `matchers/__init__.py`'s own `normalise` helper).
+/// Strips non-ASCII-alphanumeric characters and casefolds.
 pub(crate) fn normalise_name(s: &str) -> String {
     s.chars()
         .filter(|c| c.is_ascii_alphanumeric())
@@ -100,7 +95,7 @@ struct RawCatalogue {
 
 /// The catalogue once loaded and post-processed: `same_as` cross-references
 /// backfilled from GitHub entries, plus derived name-normalisation and
-/// download-popularity fields — instawow's `ComputedCatalogue`.
+/// download-popularity fields.
 pub struct ComputedCatalogue {
     pub entries: Vec<CatalogueEntry>,
 }

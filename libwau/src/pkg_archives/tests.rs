@@ -244,10 +244,10 @@ async fn download_pkg_archive_errors_on_failure_status() {
 
 #[tokio::test]
 async fn concurrent_downloads_of_same_url_both_succeed_without_corrupting_each_other() {
-    // The per-URL lock's guarantee (matching instawow) is that concurrent
-    // downloads of the same URL don't race on temp-file writes — not that
-    // only one HTTP request is made (the shared cache may or may not save
-    // the second caller a round trip depending on timing).
+    // The per-URL lock's guarantee is that concurrent downloads of the same
+    // URL don't race on temp-file writes — not that only one HTTP request
+    // is made (the shared cache may or may not save the second caller a
+    // round trip depending on timing).
     let mut server = mockito::Server::new_async().await;
     server
         .mock("GET", "/addon.zip")

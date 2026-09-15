@@ -1,4 +1,4 @@
-//! Tukui source — ports instawow's `_sources/tukui.py`.
+//! Tukui source.
 
 #[cfg(test)]
 mod tests;

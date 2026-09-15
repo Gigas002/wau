@@ -1,8 +1,5 @@
-//! HTTP client + on-disk response cache — ports instawow's `http/*.py`
-//! (`aiohttp` + `aiohttp_client_cache` backed by `diskcache`).
-//!
-//! Uses `reqwest` + a small `rusqlite`-backed cache store instead — there's
-//! no direct Rust equivalent of the exact Python dependency pairing.
+//! HTTP client + on-disk response cache, backed by `reqwest` and a small
+//! `rusqlite`-based cache store.
 
 use std::{sync::Arc, time::Duration};
 
@@ -13,17 +10,16 @@ mod tests;
 
 pub use cache::CachedResponse;
 
-/// instawow's `http._DEFAULT_EXPIRE = 0` / `CACHE_INDEFINITELY = -1` collapsed
-/// into a proper enum: every call site picks one explicitly, same as instawow
-/// (nothing is cached unless the caller passes a TTL).
+/// Every call site picks a caching policy explicitly — nothing is cached
+/// unless the caller passes one.
 #[derive(Debug, Clone, Copy)]
 pub enum CacheTtl {
-    /// Bypass the cache entirely for this request (instawow's default `expire_after=0`).
+    /// Bypass the cache entirely for this request.
     Never,
     /// Cache for a fixed duration.
     For(Duration),
-    /// Cache forever once fetched — relies on the URL being version-specific/immutable
-    /// (instawow's `CACHE_INDEFINITELY`, used for downloads and changelogs).
+    /// Cache forever once fetched — relies on the URL being
+    /// version-specific/immutable (used for downloads and changelogs).
     Indefinite,
 }
 
@@ -57,8 +53,7 @@ pub struct HttpClient {
 }
 
 impl HttpClient {
-    /// `cache_dir = None` disables the on-disk cache entirely (instawow's
-    /// `--no-cache` / ephemeral-context behaviour).
+    /// `cache_dir = None` disables the on-disk cache entirely.
     pub fn new(cache_dir: Option<&std::path::Path>) -> Result<Self, HttpError> {
         let cache = cache_dir.and_then(|dir| cache::Cache::open(dir).ok().map(Arc::new));
         Ok(Self {

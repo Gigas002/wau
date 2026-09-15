@@ -1,6 +1,5 @@
 //! Result reporting and `list` formatting — pure string/JSON formatting, no
-//! I/O. Ports the presentation half of instawow's `cli/__init__.py`
-//! (`report_results`, `list_installed`'s three `_ListFormat` branches).
+//! I/O.
 
 use std::collections::HashMap;
 
@@ -14,8 +13,7 @@ use libwau::{
 #[cfg(test)]
 mod tests;
 
-/// `report_results`'s per-result symbol: green check / red cross / blue bang
-/// in instawow, collapsed to plain glyphs here (no terminal color dependency).
+/// Per-result symbol: plain glyphs, no terminal color dependency.
 pub fn symbol_for(outcome: &AnyOutcome<Outcome>) -> &'static str {
     match outcome {
         Ok(_) => "✓",
@@ -24,8 +22,8 @@ pub fn symbol_for(outcome: &AnyOutcome<Outcome>) -> &'static str {
     }
 }
 
-/// Renders one `(Defn, outcome)` pair the way `report_results` does: a
-/// symbol-prefixed heading followed by an indented message line.
+/// Renders one `(Defn, outcome)` pair: a symbol-prefixed heading followed
+/// by an indented message line.
 pub fn format_result(defn: &Defn, outcome: &AnyOutcome<Outcome>) -> String {
     let heading = format!("{} {}", symbol_for(outcome), defn.as_uri(false, false));
     let detail = match outcome {
@@ -35,9 +33,9 @@ pub fn format_result(defn: &Defn, outcome: &AnyOutcome<Outcome>) -> String {
     format!("{heading}\n  {detail}")
 }
 
-/// Renders a whole result batch, sorted by URI for stable output — instawow
-/// iterates results in resolve order, which isn't itself stable across our
-/// concurrent-bucketed `resolve`, so sorting keeps this reproducible.
+/// Renders a whole result batch, sorted by URI for stable output — results
+/// come from a concurrently-bucketed resolve, so their natural order isn't
+/// stable across runs; sorting keeps this reproducible.
 pub fn format_results(results: &HashMap<Defn, AnyOutcome<Outcome>>) -> String {
     let mut defns: Vec<&Defn> = results.keys().collect();
     defns.sort_by_key(|d| d.as_uri(false, false));
@@ -57,7 +55,7 @@ pub fn any_errors(results: &HashMap<Defn, AnyOutcome<Outcome>>) -> bool {
 // `list` formats
 // ============================================================================
 
-/// `_ListFormat.Simple`: one bare `source:slug` URI per line.
+/// One bare `source:slug` URI per line.
 pub fn format_list_simple(pkgs: &[&Pkg]) -> String {
     pkgs.iter()
         .map(|p| Defn::new(p.source.clone(), p.slug.clone()).as_uri(false, false))
@@ -65,7 +63,7 @@ pub fn format_list_simple(pkgs: &[&Pkg]) -> String {
         .join("\n")
 }
 
-/// `_ListFormat.Detailed`: a multi-line definition-list block per package.
+/// A multi-line definition-list block per package.
 pub fn format_list_detailed(pkgs: &[&Pkg]) -> String {
     pkgs.iter()
         .map(|p| {
@@ -152,7 +150,7 @@ pub fn pkg_to_json(pkg: &Pkg) -> serde_json::Value {
     serde_json::to_value(PkgJson::from(pkg)).unwrap_or(serde_json::Value::Null)
 }
 
-/// `_ListFormat.Json`: an array of full package objects.
+/// An array of full package objects.
 pub fn format_list_json(pkgs: &[&Pkg]) -> String {
     let values: Vec<_> = pkgs.iter().map(|p| pkg_to_json(p)).collect();
     serde_json::to_string_pretty(&values).unwrap_or_default()

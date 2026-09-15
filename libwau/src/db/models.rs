@@ -1,4 +1,4 @@
-//! Row models — ports instawow's `pkg_db/models.py`.
+//! Row models for the `pkg`/`pkg_options`/`pkg_folder`/`pkg_dep` tables.
 
 use chrono::{DateTime, Utc};
 

@@ -66,8 +66,8 @@ fn filter_pkgs_by_addons_deduplicates_across_overlapping_args() {
 fn parse_defn_defers_an_unresolvable_but_colon_bearing_alias() {
     // With no sources registered, "curse" isn't a known scheme, so the whole
     // string becomes the alias with an empty source — but since it still
-    // contains a ':', instawow (and this port) defer the "unknown source"
-    // failure to resolution time rather than erroring out immediately.
+    // contains a ':', the "unknown source" failure is deferred to
+    // resolution time rather than erroring out immediately.
     let defn = parse_defn("curse:foo", &[], false).unwrap();
     assert_eq!(defn.source, "");
     assert_eq!(defn.alias, "curse:foo");

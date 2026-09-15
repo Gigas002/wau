@@ -1,73 +1,114 @@
-# wau CLI (illustrative)
+# wau CLI
 
-Target ergonomics: **paru-like** — terse defaults, short flags, predictable exit codes, useful `--help`, optional color, non-interactive mode.
-
-Maintainers: treat this file as the **draft command surface**; the plan in `docs/WAU_RS_PLAN.md` references it so CLI debates do not bloat the roadmap.
+A native, CLI-only World of Warcraft addon manager. Configs are TOML — see
+`examples/config.toml` and `examples/profiles/example.toml` — and the app never reads
+environment variables.
 
 ---
 
 ## Crate layout (implementation)
 
-- `wau/src/cli/mod.rs` — clap definitions only; no resolution logic.
-- `wau/src/config/mod.rs` — config load + deserialize.
-- `wau/src/settings/mod.rs` — merge CLI over config; downstream code sees only `Settings`.
-- `wau/src/app/mod.rs` — orchestration; `main` stays thin.
+- `wau/src/cli/mod.rs` — clap definitions only; no addon logic.
+- `wau/src/ctx/mod.rs` — assembles `GlobalConfig` + `ProfileConfig` + DB connection + HTTP
+  client + resolver registry into one explicit struct per invocation (`AppCtx`).
+- `wau/src/prompts/mod.rs` — interactive confirm/text/password/select-one/select-multiple.
+- `wau/src/output/mod.rs` — result reporting, `list` formats.
+- `wau/src/app/mod.rs` — command dispatch; `main` stays thin.
+
+All addon/DB/provider logic lives in `libwau`; `wau` only parses args, prompts, and prints.
+Commands print plain synchronous output for now; a progress-bar renderer is future polish.
 
 ---
 
-## Command intent (names may evolve)
+## Global flags
 
-### Sync / install / update (`paru -S` family)
+- `--version`
+- `--no-cache` — bypass the on-disk HTTP response cache for this invocation
+- `-p` / `--profile <NAME>` — target profile (default `default`); see
+  `examples/profiles/example.toml`
 
-- `wau sync` — install or update from manifest + lock.
-- `wau sync <addon…>` — install named addons (resolution rules TBD).
-- `wau sync --update` — apply updates per manifest/lock/channel.
-- `wau sync --refresh --update` — refresh provider caches, then update (sketch: `paru -Syu`).
-- `wau sync --manifest <path>` — manifest path override.
-- `wau sync --install <tag>` / `wau sync --tag <tag>` — target a configured install tag (see `examples/config.toml`).
-- `wau sync --flavor <…>` — flavor override when useful without switching default install.
-- `wau sync --channel <stable|beta|alpha|…>` — channel override.
+Log verbosity is not a CLI flag — it comes from `[logging].level` in `config.toml` (default
+`warn` if unset). There is no `$RUST_LOG` support either: `wau` never reads environment
+variables, full stop.
 
-### Search
+## Configuration
 
-- `wau search <query>` — `paru -Ss`-style provider search (quality depends on provider).
+There is no `configure` command. A profile is configured by either:
 
-### Remove
+- running `wau init` against it, which prompts interactively and writes the files, or
+- hand-writing `<config-dir>/config.toml` (global) and
+  `<config-dir>/profiles/<name>.toml` (per-profile) yourself, copying
+  `examples/config.toml` / `examples/profiles/example.toml` as a starting point.
 
-- `wau remove <addon…>` — `paru -R`-style removal using lock + safe dir list.
+`<config-dir>` is the platform-conventional config directory (`~/.config/wau` on Linux,
+`~/Library/Application Support/wau` on macOS, `%APPDATA%\wau` on Windows) — fixed, and never
+overridable via an environment variable. The default cache directory is likewise
+platform-conventional (`~/.cache/wau` on Linux); override it with `[paths].cache` in
+`config.toml`. Every command other than `init` errors out immediately if the active profile's
+`profiles/<name>.toml` doesn't exist.
 
-### Query
+## Commands
 
-- `wau list` — installed + manifest alignment / update hints (`paru -Q`).
-- `wau info <addon>` — detail view (`paru -Qi`).
+### `wau install <ADDON...>`
 
-### Global flags (sketch)
+Install one or more `source:alias` definitions (or bare aliases/URLs a source's
+`get_alias_from_url` can parse). `--replace` overwrites unreconciled on-disk folders that
+collide with the new install; `--dry-run` resolves and reports without installing.
 
-- `--noconfirm` — non-interactive confirmations.
-- `--quiet` / `--verbose` — output level.
-- `--config <path>` — config file override.
-- Default log filter from `examples/config.toml` **`[logging].level`**; optional `--log-level` / `RUST_LOG` override (merge order TBD in implementation).
+### `wau sync [ADDON...]`
+
+Update installed addons to the latest version per their stored strategies. With no
+arguments, updates everything installed (skipping up-to-date/pinned packages). `--dry-run`
+reports without installing.
+
+### `wau remove <ADDON...>`
+
+Remove installed addons and delete their DB rows. `--keep-folders` leaves the on-disk
+directories in place (DB row removed only).
+
+### `wau init`
+
+The only command that bootstraps an unconfigured profile: if `-p`'s profile has no
+`profiles/<name>.toml` yet, prompts interactively for the addon directory, game flavour, and
+optional GitHub/CurseForge/Wago Addons auth, and writes it (plus `config.toml`, if that's
+also missing). Every other command errors out instead — pointing at `wau init` and
+`examples/config.toml` / `examples/profiles/example.toml` — if the profile isn't configured.
+
+Once the profile exists (or was just created), matches un-tracked addon folders (installed by
+hand or by another tool) against catalogue/TOC metadata and imports them, in three
+decreasing-precision passes (TOC provider-id keys → folder-name subsets → normalized name
+match). `-a` / `--auto` picks the top match for every group without prompting;
+`--list-unreconciled` only lists what would be matched.
+
+### `wau search <TERM...>`
+
+Fuzzy-search the aggregate catalogue. `-l` / `--limit` (1-20, default 10), `--start-date`,
+repeatable `--source`, `--prefer-source`, `--no-exclude-installed`. Presents a
+multi-select list; confirmed selections are installed.
+
+### `wau list [ADDON...]` (alias: `wau info` for `-f detailed`)
+
+Lists installed addons. `-f` / `--format {simple,detailed,json}`.
+
+### `wau cache clear`
+
+Clears the on-disk HTTP response cache.
+
+### `wau profile erase`
+
+Deletes the active profile's config and DB after confirmation.
+
+### `wau stats`
+
+Prints the active profile config, all known profile names, and source metadata as JSON.
 
 ---
 
-## Deferred / late-phase commands (not required for first release)
+## Out of scope
 
-These stay in design docs until the core pipeline and providers are stable:
-
-- **Backup / restore** (SavedVariables): `wau backup`, `wau restore`, retention flags.
-- **Specific version / non-latest**: manifest **`pin`** fields, `wau sync <addon> --version …`, `wau sync <addon> --rollback`, rich lock `history` — **first release installs and updates latest only** (see `docs/WAU_RS_PLAN.md` §1.1, §4.1.1, Phase 8).
-- **One-off provider override on CLI**: useful for experiments; **not** “provider switching” as a first-class migration story (see plan: cross-provider identity is unsolved).
-- **Shell completions** (**bash**, **zsh**, **fish**, **Nushell**) — **Phase 10** in `docs/WAU_RS_PLAN.md` (not part of first UX-polish ship).
-
----
-
-## Paru mapping (quick reference)
-
-| paru              | wau (illustrative)        |
-| ----------------- | ------------------------- |
-| `paru -S <pkg>`   | `wau sync <addon>`        |
-| `paru -Syu`       | `wau sync --refresh --update` |
-| `paru -Ss <q>`    | `wau search <q>`          |
-| `paru -Q` / `-Qi` | `wau list` / `wau info`   |
-| `paru -R`         | `wau remove`              |
-| `--noconfirm`     | `--noconfirm`             |
+- GUI, background daemon, tray integration.
+- A WeakAuras Companion source/updater.
+- A runtime plugin loader — third-party addon sources are added as Cargo features/crates
+  instead.
+- SavedVariables backup/restore — removed addon folders are trashed to a temp dir rather than
+  hard-deleted, which is the only safety net for destructive operations.

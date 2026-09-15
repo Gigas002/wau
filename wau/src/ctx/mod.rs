@@ -1,6 +1,5 @@
 //! Assembles one profile's config, DB connection, HTTP client, and source
-//! registry into a single struct threaded through command dispatch — an
-//! explicit stand-in for instawow's implicit `contextvars`-based `ManagerCtx`.
+//! registry into a single struct threaded through command dispatch.
 
 use libwau::{
     config::{ConfigError, GlobalConfig, ProfileConfig},

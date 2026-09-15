@@ -1,4 +1,4 @@
-//! Addon zip inspection and extraction — ports instawow's `pkg_archives/__init__.py`.
+//! Addon zip inspection and extraction.
 
 use std::{collections::HashSet, fs, io, path::Path};
 
@@ -30,8 +30,7 @@ pub struct OpenArchive {
 /// Finds top-level addon folders in a flat list of archive member paths: a
 /// member counts when it sits exactly one level deep (`Folder/File.toc`, not
 /// nested further) and its filename starts with the folder name and ends in
-/// `.toc` (case-insensitive) — the sole heuristic instawow uses to decide
-/// "this is an addon folder," matching the WoW convention `MyAddon/MyAddon.toc`.
+/// `.toc` (case-insensitive) — matching the WoW convention `MyAddon/MyAddon.toc`.
 pub fn find_archive_addon_tocs<'a>(
     names: impl IntoIterator<Item = &'a str>,
 ) -> Vec<(String, String)> {
@@ -71,8 +70,8 @@ impl OpenArchive {
     /// Extracts every member under [`Self::top_level_folders`] into `dest`,
     /// skipping anything else in the archive. Uses `enclosed_name()` for the
     /// extraction path (rather than the raw member string) to reject
-    /// zip-slip path traversal — a safety addition beyond instawow's own
-    /// `extractall`, not a behavioural deviation for well-formed archives.
+    /// zip-slip path traversal; for well-formed archives this makes no
+    /// behavioural difference.
     pub fn extract(&self, dest: &Path) -> Result<(), ArchiveError> {
         let file = fs::File::open(&self.archive_path)?;
         let mut zip = zip::ZipArchive::new(file)?;

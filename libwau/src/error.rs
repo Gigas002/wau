@@ -3,8 +3,7 @@
 //!
 //! Expected, "business" failures for a specific package operation (already
 //! installed, source disabled, no matching release, …) are **not** modelled
-//! here — see [`crate::results::ManagerError`], which mirrors instawow's
-//! `ManagerError` vs. `InternalError` split.
+//! here — see [`crate::results::ManagerError`].
 
 use thiserror::Error;
 

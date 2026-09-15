@@ -1,12 +1,11 @@
-//! Catalogue fuzzy search — ports instawow's `catalogue/search.py`.
+//! Catalogue fuzzy search.
 //!
 //! Uses `rapidfuzz`'s `fuzz::ratio` (a straightforward Indel-based
-//! similarity, 0.0-1.0) rather than Python's `fuzz.WRatio` (a multi-strategy
-//! blend of token-sort/token-set/partial ratios) — the Rust `rapidfuzz`
-//! crate doesn't expose a WRatio equivalent. Both feed the same
-//! blend-with-download-popularity ranking formula on a 0-100 scale;
-//! near-identical or very different strings rank the same way, but
-//! word-reordering/partial-substring matches score differently than upstream.
+//! similarity, 0.0-1.0), fed into a blend-with-download-popularity ranking
+//! formula on a 0-100 scale. Near-identical or very different strings rank
+//! as expected, but word-reordering and partial-substring matches score
+//! lower than a multi-strategy blend (token-sort/token-set/partial ratios)
+//! would give them.
 
 use std::collections::HashSet;
 

@@ -1,11 +1,6 @@
-//! Command-line surface — clap definitions only, no addon logic. Based on
-//! instawow's `cli/__init__.py` command set (minus the GUI/weakauras/plugins
-//! commands, out of scope for this port — see `docs/WAU_RS_PLAN.md`), with
-//! deliberate deviations: `update`/`reconcile`/`debug` renamed to
-//! `sync`/`init`/`stats`, and `rollback`/`rereconcile`/`reveal`/
-//! `view-changelog`/`help`/`configure`/`profile configure` removed — profiles
-//! are configured by hand-editing TOML (see `examples/*.toml`) or via the
-//! interactive bootstrap built into `init`.
+//! Command-line surface — clap definitions only, no addon logic. Profiles are
+//! configured by hand-editing TOML or via the interactive bootstrap built
+//! into `init`.
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
@@ -15,7 +10,7 @@ mod tests;
 #[derive(Debug, Parser)]
 #[command(
     name = "wau",
-    about = "An instawow-inspired WoW addon manager",
+    about = "A World of Warcraft addon manager",
     version,
     disable_help_subcommand = true
 )]
@@ -25,7 +20,7 @@ pub struct Cli {
     pub no_cache: bool,
 
     /// Target profile (a configured WoW installation).
-    #[arg(short, long, global = true, default_value = "__default__")]
+    #[arg(short, long, global = true, default_value = "default")]
     pub profile: String,
 
     #[command(subcommand)]

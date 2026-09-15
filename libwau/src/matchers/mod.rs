@@ -1,6 +1,5 @@
-//! Reconciliation: matching untracked, on-disk addon folders (or already-
-//! installed packages, for `rereconcile`) against catalogue/TOC metadata —
-//! ports instawow's `matchers/__init__.py` and `matchers/addon_toc.py`.
+//! Reconciliation: matching untracked, on-disk addon folders, or
+//! already-installed packages, against catalogue/TOC metadata.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -20,10 +19,7 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
-/// An on-disk addon folder with a parsed `.toc` — instawow's `AddonFolder`.
-/// Reuses the full `.toc` parser (`crate::toc`) rather than a lightweight
-/// reader, since it already exceeds instawow's `TocReader` needs (see
-/// `docs/WAU_RS_PLAN.md`).
+/// An on-disk addon folder with a parsed `.toc` file.
 #[derive(Debug, Clone)]
 pub struct AddonFolder {
     pub path: PathBuf,
@@ -34,9 +30,8 @@ pub struct AddonFolder {
 impl AddonFolder {
     /// Finds the flavour-appropriate (or plain) `.toc` file directly inside
     /// `parent_path` and parses it. Directory iteration order is
-    /// unspecified (matches instawow's `os.scandir`-based "first match wins"
-    /// — neither implementation guarantees which file wins when several
-    /// would match).
+    /// unspecified, so if more than one file would match, which one wins is
+    /// not guaranteed.
     pub fn from_path(flavour: Flavour, parent_path: &Path) -> Option<Self> {
         let mut suffixes: Vec<String> = flavour
             .toc_suffixes()
@@ -345,8 +340,8 @@ pub fn match_addon_names_with_folder_names(
 
 /// For already-installed packages, finds `Defn`s of the same addon on other
 /// sources (via catalogue `same_as` and the installed folders' own `.toc`
-/// provider-id keys) — used by `rereconcile`. Keyed by `(pkg.source,
-/// pkg.id)` since [`Pkg`] deliberately has no structural equality.
+/// provider-id keys). Keyed by `(pkg.source, pkg.id)` since [`Pkg`]
+/// deliberately has no structural equality.
 pub fn find_equivalent_pkg_defns(
     pkgs: &[Pkg],
     addon_dir: &Path,

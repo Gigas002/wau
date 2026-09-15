@@ -1,9 +1,9 @@
-//! Provider abstraction — ports instawow's `resolvers.py` (the `Resolver`/
-//! `BaseResolver` protocol) and `_sources/__init__.py` (`DEFAULT_RESOLVERS`).
+//! Provider abstraction: the shared `Resolver` trait every addon source
+//! implements, plus the registry of built-in sources.
 //!
-//! Each concrete source lives behind its own Cargo feature (§2.2 in the
-//! plan) and its own submodule; this module only holds the shared trait,
-//! candidate types, and the registry.
+//! Each concrete source lives behind its own Cargo feature and its own
+//! submodule; this module only holds the shared trait, candidate types, and
+//! the registry.
 
 use chrono::{DateTime, Utc};
 
@@ -29,7 +29,7 @@ pub mod wago;
 #[cfg(feature = "wowinterface")]
 pub mod wowinterface;
 
-/// A resolved addon, not yet persisted — instawow's `PkgCandidate` TypedDict.
+/// A resolved addon, not yet persisted.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PkgCandidate {
     pub id: String,
@@ -45,8 +45,7 @@ pub struct PkgCandidate {
     pub deps: Vec<String>,
 }
 
-/// Infra-level failures a source can hit converted into `Failure::Internal` —
-/// mirrors `resultify` wrapping any unclassified Python exception.
+/// Infra-level failures a source can hit, converted into `Failure::Internal`.
 impl From<HttpError> for Failure {
     fn from(e: HttpError) -> Self {
         Failure::Internal(InternalError::new(e))
@@ -69,7 +68,6 @@ impl From<std::io::Error> for Failure {
 }
 
 /// A remote addon source: search/resolve metadata + artifact retrieval.
-/// Ports instawow's `Resolver`/`BaseResolver`.
 #[async_trait::async_trait]
 pub trait Resolver: Send + Sync {
     fn metadata(&self) -> SourceMetadata;
@@ -94,11 +92,9 @@ pub trait Resolver: Send + Sync {
 
     /// Per-source resolve logic for one `Defn`. Callers should go through the
     /// free function [`resolve_one`] (or [`Resolver::resolve`]), not this
-    /// directly — strategy support isn't checked here. Ported as a separate
-    /// method because instawow's `__init_subclass__`-based wrapping (which
-    /// makes the check unconditional for *every* subclass, even ones
-    /// overriding `resolve_one`) has no equivalent overridable-trait-method
-    /// mechanism in Rust; a free function fills the same role instead.
+    /// directly — strategy support isn't checked here. Kept separate from
+    /// that check so every implementor gets it applied uniformly, without
+    /// needing to call it themselves.
     async fn resolve_one_impl(
         &self,
         http: &crate::http::HttpClient,
@@ -121,7 +117,7 @@ pub trait Resolver: Send + Sync {
 
     /// Fetches a changelog from `url`. The default handles `data:,<text>`
     /// (inline), `file://` (local read), and `http(s)://` (cached
-    /// indefinitely) schemes — matches `BaseResolver.get_changelog`.
+    /// indefinitely) schemes.
     async fn get_changelog(
         &self,
         http: &crate::http::HttpClient,
@@ -131,8 +127,7 @@ pub trait Resolver: Send + Sync {
     }
 }
 
-/// Strategies `defn` requests that `supported` doesn't declare — ported from
-/// instawow's `defn.strategies.filled.keys() - self.metadata.strategies` check.
+/// Strategies `defn` requests that `supported` doesn't declare.
 fn extraneous_strategies(defn: &Defn, supported: &[Strategy]) -> Vec<Strategy> {
     let mut extraneous = Vec::new();
     if defn.strategies.any_flavour && !supported.contains(&Strategy::AnyFlavour) {
@@ -212,12 +207,12 @@ pub(crate) fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// Percent-encodes `s`, matching Python's `urllib.parse.quote` default safe
-/// set (`/` left unescaped) — the inverse of [`percent_decode`]. Used to
-/// build `data:,<urlencoded>` changelog URLs (GitHub, Wago Addons,
-/// WoWInterface all embed their changelog text this way rather than
-/// fetching it separately). Unused (dead code) under `--no-default-features`,
-/// where none of those sources are compiled in.
+/// Percent-encodes `s`, leaving alphanumeric characters and `-_.~/`
+/// unescaped — the inverse of [`percent_decode`]. Used to build
+/// `data:,<urlencoded>` changelog URLs (GitHub, Wago Addons, WoWInterface
+/// all embed their changelog text this way rather than fetching it
+/// separately). Unused (dead code) under `--no-default-features`, where none
+/// of those sources are compiled in.
 #[allow(dead_code)]
 pub(crate) fn percent_encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -242,16 +237,15 @@ pub(crate) fn percent_encode(s: &str) -> String {
 pub struct SourceConfig {
     pub cfcore_api_key: Option<SecretString>,
     /// Self-hosted CFCore-compatible proxy URL, overriding the default
-    /// `https://api.curseforge.com/v1`. instawow's `INSTAWOW_CF_API_URL`.
+    /// `https://api.curseforge.com/v1`.
     pub cfcore_api_url: Option<String>,
     pub github_token: Option<SecretString>,
     pub wago_addons_token: Option<SecretString>,
 }
 
-/// Every compiled-in source, in instawow's `DEFAULT_RESOLVERS` priority order
-/// (GitHub, CurseForge, WoWInterface, Tukui, Wago Addons — used for
-/// reconciliation tie-breaking; the `instawow`/WeakAuras Companion source is
-/// out of scope, see `docs/WAU_RS_PLAN.md`).
+/// Every compiled-in source, in priority order (GitHub, CurseForge,
+/// WoWInterface, Tukui, Wago Addons) — this order is used for reconciliation
+/// tie-breaking when multiple sources match the same addon.
 // `vec![]` can't express the per-source `#[cfg(feature = ...)]` gating below;
 // both `config` and `mut` go unused under `--no-default-features`, where no
 // source is compiled in.

@@ -1,8 +1,7 @@
-//! Interactive prompts — ports instawow's `cli/prompts.py` (built on
-//! `prompt_toolkit` there) onto `inquire`. Same UX shapes (confirm/text/
-//! password/select-one/select-multiple); the "open in browser" key binding
-//! `prompt_toolkit`'s select widgets had isn't reproduced — `inquire` has no
-//! custom-keybinding hook for it, and it's a convenience, not core behaviour.
+//! Interactive prompts, built on `inquire`: confirm/text/password/
+//! select-one/select-multiple. No "open in browser" key binding on select
+//! widgets — `inquire` has no custom-keybinding hook for it, and it's a
+//! convenience, not core behaviour.
 
 use inquire::{Confirm, MultiSelect, Password, Select, Text, error::InquireResult};
 

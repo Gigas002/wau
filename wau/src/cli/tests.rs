@@ -16,7 +16,7 @@ fn global_flags_parse() {
 #[test]
 fn default_profile_is_default_marker() {
     let cli = parse(&["stats"]);
-    assert_eq!(cli.profile, "__default__");
+    assert_eq!(cli.profile, "default");
 }
 
 #[test]

@@ -1,7 +1,6 @@
-//! Command dispatch — ports the command bodies of instawow's `cli/__init__.py`
-//! onto the `libwau` API assembled by [`crate::ctx`]. No addon logic lives
-//! here beyond `Defn`/installed-package lookup glue; every actual operation
-//! delegates to `libwau`.
+//! Command dispatch onto the `libwau` API assembled by [`crate::ctx`]. No
+//! addon logic lives here beyond `Defn`/installed-package lookup glue;
+//! every actual operation delegates to `libwau`.
 
 use std::{collections::HashSet, path::PathBuf, time::Duration};
 
@@ -104,10 +103,8 @@ fn load_ctx(cli: &Cli) -> Result<AppCtx, AppError> {
 }
 
 /// Builds the [`AppCtx`] for `cli.profile`, interactively bootstrapping it
-/// first if it hasn't been configured yet — mirrors instawow's
-/// `Group.invoke`/`_perform_installation_check` fallback into
-/// `configure_profile` on an unconfigured profile. Only [`cmd_init`] uses
-/// this; every other command uses [`load_ctx`] and errors out instead.
+/// first if it hasn't been configured yet. Only [`cmd_init`] uses this;
+/// every other command uses [`load_ctx`] and errors out instead.
 async fn ensure_ctx_bootstrap(cli: &Cli) -> Result<AppCtx, AppError> {
     match AppCtx::build(&cli.profile, cli.no_cache) {
         Ok(app_ctx) => Ok(app_ctx),
@@ -252,7 +249,7 @@ async fn cmd_sync(cli: &Cli, args: &SyncArgs) -> Result<i32, AppError> {
     let mut results = pkg_management::update(&mut conn, &pkg_ctx, target, args.dry_run).await;
     if args.addons.is_empty() {
         // Syncing "all": don't clutter output with already-up-to-date,
-        // unpinned packages — matches instawow's `update` command filter.
+        // unpinned packages.
         results.retain(|_, r| {
             !matches!(
                 r,
@@ -620,10 +617,9 @@ fn cmd_stats(cli: &Cli) -> Result<(), AppError> {
 // Defn parsing / installed-package lookup helpers
 // ============================================================================
 
-/// Parses a CLI-supplied addon URI into a `Defn` — ports
-/// `_parse_defn_uri_option`'s core: try [`Defn::from_uri`], then fall back to
-/// each source's `get_alias_from_url` when the scheme is unrecognized, else
-/// error out (instawow's `raise_invalid=True` path).
+/// Parses a CLI-supplied addon URI into a `Defn`: try [`Defn::from_uri`],
+/// then fall back to each source's `get_alias_from_url` when the scheme is
+/// unrecognized, else error out.
 fn parse_defn(
     uri: &str,
     sources: &[Box<dyn Resolver>],
@@ -662,10 +658,9 @@ fn parse_defns_retain(
 /// Filters already-installed packages by a list of raw CLI arguments: each
 /// arg is either a `source:ident` pair (exact id/slug match within that
 /// source) or a bare string (case-insensitive substring match against the
-/// slug). Empty `addons` means "every installed package". A simplification
-/// of instawow's SQL `LIKE`-based `_make_pkg_where_clause_and_params`
-/// (in-memory filtering over the small installed-package set instead of a
-/// generated `WHERE` clause) — functionally equivalent for typical package counts.
+/// slug). Empty `addons` means "every installed package". Filters in memory
+/// over the small installed-package set rather than generating a SQL
+/// `WHERE` clause.
 fn filter_pkgs_by_addons(all: &[Pkg], addons: &[String]) -> Vec<Pkg> {
     if addons.is_empty() {
         return all.to_vec();

@@ -1,9 +1,9 @@
-//! Schema version history — ports instawow's `pkg_db/_migrations.py`.
+//! Schema version history.
 //!
 //! Versioning uses SQLite's `PRAGMA user_version`, not a separate migrations
-//! table. The schema a fresh database is created with already includes the
-//! indexes added below (see `super::SCHEMA`); the migrations here only matter
-//! for upgrading/downgrading an *existing* database created at an older version.
+//! table. A fresh database is created with the current schema already
+//! including the indexes added below; the migrations here only matter for
+//! upgrading/downgrading an existing database created at an older version.
 
 use rusqlite::Connection;
 
@@ -17,8 +17,8 @@ struct Migration {
 }
 
 /// 1-indexed: `MIGRATIONS[i]` moves a database from version `i - 1` to `i`
-/// (upgrade) or back (downgrade). Mirrors instawow's `_Migration_1`, which
-/// added the four non-critical indexes `SCHEMA` now creates inline.
+/// (upgrade) or back (downgrade). This first migration adds four
+/// non-critical indexes that a fresh schema now creates inline.
 const MIGRATIONS: &[Migration] = &[Migration {
     upgrade: &[
         "CREATE UNIQUE INDEX pkg_options_fk ON pkg_options (pkg_source, pkg_id)",
@@ -36,13 +36,11 @@ const MIGRATIONS: &[Migration] = &[Migration {
 
 /// Migrates `conn` from `current_version` to `new_version`, running each
 /// intermediate version's `upgrade` (ascending) or `downgrade` (descending)
-/// statements inside one transaction, matching instawow's
-/// `PRAGMA foreign_keys = OFF` / `... = ON` + `PRAGMA foreign_key_check` dance.
+/// statements inside one transaction.
 ///
 /// The `foreign_keys` pragma is a no-op once a transaction is open (SQLite
-/// only honours it outside any pending `BEGIN`), so — unlike instawow, which
-/// relies on Python's lazily-started transactions — it's toggled off on the
-/// plain connection *before* opening the transaction, and always restored
+/// only honours it outside any pending `BEGIN`), so it's toggled off on the
+/// plain connection before opening the transaction, and always restored
 /// afterwards even on error.
 pub(super) fn migrate(
     conn: &mut Connection,

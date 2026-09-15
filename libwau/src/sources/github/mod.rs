@@ -1,16 +1,14 @@
-//! GitHub source — ports instawow's `_sources/github.py`.
+//! GitHub source.
 //!
-//! The asset-selection heuristic here is simplified in one way for
-//! tractability: when release.json is absent and the flavour can't be
-//! determined from a `.toc` filename suffix alone, instawow does a second
-//! *targeted* ranged read for just the main `.toc` file's bytes (using the
-//! zip central directory's recorded header offsets) to inspect `##
-//! Interface:`. This port instead falls back to a full asset download at
-//! that point. Both paths inspect the exact same bytes and make the exact
-//! same match/no-match decision — the simplification only trades bandwidth
-//! for implementation complexity in the (rare, for typical addon-sized
-//! zips) case where the initial 25 KB tail read isn't already the whole
-//! archive.
+//! Asset selection: when `release.json` is absent and the flavour can't be
+//! determined from a `.toc` filename suffix alone, this falls back to
+//! downloading the full asset to inspect its `## Interface:` line, rather
+//! than a targeted ranged read of just the main `.toc` file's bytes (using
+//! the zip central directory's recorded header offsets). Both approaches
+//! inspect the same bytes and make the same match/no-match decision — this
+//! trades bandwidth for implementation simplicity in the rare case (for
+//! typical addon-sized zips) where the initial 25 KB tail read isn't already
+//! the whole archive.
 
 #[cfg(test)]
 mod tests;

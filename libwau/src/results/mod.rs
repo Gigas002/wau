@@ -1,17 +1,15 @@
-//! Per-package operation outcomes — instawow's `results.py`.
+//! Per-package operation outcomes.
 //!
 //! Failure modes a package operation can hit in the *expected* course of
 //! business (already installed, source disabled, no matching release, …) are
 //! modelled as [`ManagerError`] values; anything unclassified (a network
-//! error, an unexpected API response shape, …) becomes an [`InternalError`] —
-//! together these mirror instawow's `AnyResult[T] = T | ManagerError |
-//! InternalError`. The point of both is the same: one failing `Defn` in a
-//! batch (`resolve`/`install`/`update`/…) is reported per-item rather than
+//! error, an unexpected API response shape, …) becomes an [`InternalError`].
+//! The point of both is the same: one failing `Defn` in a batch
+//! (`resolve`/`install`/`update`/…) is reported per-item rather than
 //! aborting the whole operation.
 //!
-//! The success side (`PkgInstalled`/`PkgUpdated`/`PkgRemoved`) is defined in
-//! `pkg_management` once `db::Pkg` exists, to avoid this module depending on
-//! the DB layer.
+//! The success side isn't defined here, to avoid this module depending on
+//! the database layer.
 
 use crate::model::{Strategies, Strategy};
 
@@ -22,7 +20,7 @@ mod tests;
 /// failure, or an unclassified one.
 pub type AnyOutcome<T> = Result<T, Failure>;
 
-/// instawow's `ManagerError | InternalError` duo.
+/// Either a recognized business failure or an unclassified one.
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum Failure {
     #[error(transparent)]
@@ -31,11 +29,10 @@ pub enum Failure {
     Internal(#[from] InternalError),
 }
 
-/// Catch-all for unclassified failures surfaced per-`Defn` — instawow's
-/// `InternalError`, which wraps *any* exception a resolver/operation didn't
-/// explicitly raise as a [`ManagerError`]. Sources convert their own error
-/// types into this via `?` (see each source's `From` impl) rather than
-/// aborting the whole batch resolve/install/update.
+/// Catch-all for unclassified failures surfaced per-`Defn`, wrapping
+/// anything a resolver/operation doesn't explicitly raise as a
+/// [`ManagerError`]. Sources convert their own error types into this via
+/// `?` rather than aborting the whole batch resolve/install/update.
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 #[error("internal error: \"{0}\"")]
 pub struct InternalError(pub String);
@@ -55,7 +52,7 @@ pub struct PkgRef {
     pub name: String,
 }
 
-/// Expected, "business" failure modes — ported from instawow's `ManagerError` hierarchy.
+/// Expected, "business" failure modes for a package operation.
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum ManagerError {
     #[error("package already installed")]
@@ -93,7 +90,7 @@ pub enum ManagerError {
 }
 
 impl ManagerError {
-    /// Convenience constructor mirroring instawow's `PkgFilesMissing()` default reason.
+    /// Convenience constructor for the default "no files available" reason.
     pub fn files_missing() -> Self {
         Self::PkgFilesMissing {
             reason: "no files are available for download".to_owned(),

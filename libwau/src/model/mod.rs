@@ -1,11 +1,8 @@
 //! Core addon domain vocabulary: game flavours, WoW install products,
 //! resolution strategies, and addon definitions (`Defn`).
 //!
-//! Ported from instawow's `wow_installations.py` and `definitions.py`. Where
-//! Python kept `Flavour`/`FlavourVersions`/`FlavourTocSuffixes` as three
-//! parallel enums (a workaround for `Flavour` already using its enum *value*
-//! for the string id), Rust has no such constraint: build-number ranges and
-//! `.toc` suffixes are plain methods on one [`Flavour`] enum.
+//! Build-number ranges and `.toc` suffixes are plain methods on one
+//! [`Flavour`] enum.
 
 use std::{
     fmt,
@@ -26,7 +23,7 @@ mod tests;
 ///
 /// [`Flavour::CLASSIC`] is a *moving alias* for whichever classic-progression
 /// flavour is current (Mists of Pandaria as of this writing) — it is not a
-/// distinct client, matching instawow's `Flavour.Classic = MistsClassic`.
+/// distinct client.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Flavour {
     Mainline,
@@ -39,7 +36,7 @@ pub enum Flavour {
 }
 
 impl Flavour {
-    /// Alias for the current classic-progression flavour (`instawow`'s `Flavour.Classic`).
+    /// Alias for the current classic-progression flavour.
     pub const CLASSIC: Flavour = Flavour::MistsClassic;
 
     pub const ALL: [Flavour; 7] = [
@@ -65,7 +62,7 @@ impl Flavour {
     }
 
     /// Parses a flavour id, accepting the `classic` and `retail` back-compat
-    /// aliases instawow's `Flavour._missing_` and `Flavour.Classic` support.
+    /// aliases.
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "mainline" => Some(Self::Mainline),
@@ -93,8 +90,8 @@ impl Flavour {
         }
     }
 
-    /// Client build-number ranges (`major*10000 + minor*100 + patch`) that map to
-    /// this flavour, per instawow's `FlavourVersions`.
+    /// Client build-number ranges (`major*10000 + minor*100 + patch`) that
+    /// map to this flavour.
     fn version_ranges(self) -> &'static [VersionRange] {
         match self {
             Self::Mainline => &MAINLINE_RANGES,
@@ -208,7 +205,7 @@ pub struct ProductInfo {
     pub subfolder: &'static str,
 }
 
-/// Every known Blizzard product, ported verbatim from instawow's `PRODUCTS` table.
+/// Every known Blizzard product.
 pub const PRODUCTS: &[ProductInfo] = &[
     ProductInfo {
         code: "wow",
@@ -414,8 +411,7 @@ impl Serialize for Strategy {
 }
 
 /// The three [`Strategy`] values a `Defn` may request, each with its own
-/// storage shape (flag vs. pinned-version string) — mirrors instawow's
-/// `Strategies` mapping, specialised to its fixed 3-key set.
+/// storage shape (flag vs. pinned-version string).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct Strategies {
     pub any_flavour: bool,
