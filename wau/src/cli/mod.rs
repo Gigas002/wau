@@ -2,6 +2,8 @@
 //! configured by hand-editing TOML or via the interactive bootstrap built
 //! into `init`.
 
+use std::path::PathBuf;
+
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[cfg(test)]
@@ -19,7 +21,15 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_cache: bool,
 
-    /// Target profile (a configured WoW installation).
+    /// Path to `config.toml`, overriding the platform-conventional config
+    /// dir (`profiles/` is resolved as its sibling directory). Mainly for
+    /// integration tests that need an isolated config location.
+    #[arg(long, global = true)]
+    pub config: Option<PathBuf>,
+
+    /// Target profile: a name (looked up in the config dir's `profiles/`),
+    /// or a path to a profile TOML file read directly — detected by
+    /// containing a path separator or ending in `.toml`.
     #[arg(short, long, global = true, default_value = "default")]
     pub profile: String,
 

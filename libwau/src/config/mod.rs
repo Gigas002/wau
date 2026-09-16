@@ -6,7 +6,11 @@
 //! `profiles/<name>.sqlite`). No environment variables are ever read —
 //! everything comes from these files or their built-in defaults; config/cache
 //! base dirs are resolved via platform-conventional locations (the `dirs`
-//! crate), never overridable.
+//! crate) by default. Both can be pointed at an explicit path instead
+//! ([`GlobalConfig::read_from`], [`ProfileConfig::read_from_path`]) — the
+//! CLI's `--config`/`--profile` flags use this, mainly so integration tests
+//! can run against an isolated fixture location rather than the real
+//! platform config dir.
 
 use std::{
     fmt, fs,
@@ -175,8 +179,9 @@ impl Dirs {
 }
 
 /// Platform-conventional config base (e.g. `~/.config/wau` on Linux),
-/// resolved via the `dirs` crate — never overridable, never an env var read
-/// in this crate's own code.
+/// resolved via the `dirs` crate; never an env var read in this crate's own
+/// code. [`GlobalConfig::read_from`] can point at a different config file
+/// entirely, in which case this default is never consulted.
 fn config_dir() -> PathBuf {
     dirs::config_dir()
         .map(|d| d.join(APP_NAME))
@@ -276,6 +281,10 @@ pub struct GlobalConfig {
     pub log_level: LogLevel,
     pub access_tokens: AccessTokens,
     pub dirs: Dirs,
+    /// Set only by [`Self::read_from`] with an explicit path; makes
+    /// [`Self::config_file_path`] return that exact path instead of
+    /// reconstructing it from `dirs.config`.
+    config_path_override: Option<PathBuf>,
 }
 
 impl GlobalConfig {
@@ -306,24 +315,49 @@ impl GlobalConfig {
             log_level,
             access_tokens,
             dirs: Dirs::default_dirs(cache_override),
+            config_path_override: None,
         }
     }
 
     pub fn config_file_path(&self) -> PathBuf {
-        self.dirs.config.join("config.toml")
+        self.config_path_override
+            .clone()
+            .unwrap_or_else(|| self.dirs.config.join("config.toml"))
     }
 
-    /// Reads `config.toml` (built-in defaults if absent).
+    /// Reads `config.toml` from the platform-conventional config dir
+    /// (built-in defaults if absent). Equivalent to `read_from(None)`.
     pub fn read() -> Result<Self, ConfigError> {
-        let path = config_dir().join("config.toml");
+        Self::read_from(None)
+    }
 
-        let file = match fs::read_to_string(&path) {
+    /// Reads `config.toml`, optionally from an explicit `path` instead of
+    /// the platform-conventional config dir (built-in defaults if absent
+    /// either way). When `path` is given, `dirs.config` becomes its parent
+    /// directory — so `profiles/` is resolved as its sibling — and
+    /// [`Self::config_file_path`] returns `path` verbatim. Used by the CLI's
+    /// `--config` flag, mainly to let integration tests point at an isolated
+    /// fixture file rather than the real platform config dir.
+    pub fn read_from(path: Option<&Path>) -> Result<Self, ConfigError> {
+        let resolved_path = path
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| config_dir().join("config.toml"));
+
+        let file = match fs::read_to_string(&resolved_path) {
             Ok(s) => toml::from_str::<GlobalConfigFile>(&s)?,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => GlobalConfigFile::default(),
             Err(e) => return Err(e.into()),
         };
 
-        Ok(Self::from_file(file))
+        let mut config = Self::from_file(file);
+        if let Some(p) = path {
+            config.dirs.config = p
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| PathBuf::from("."));
+            config.config_path_override = Some(p.to_path_buf());
+        }
+        Ok(config)
     }
 
     pub fn ensure_dirs(&self) -> Result<(), ConfigError> {
@@ -402,6 +436,10 @@ pub struct ProfileConfig {
     pub addon_dir: PathBuf,
     pub flavour_override: Option<Flavour>,
     pub product: InstalledProduct,
+    /// Set only by [`Self::read_from_path`]; makes [`Self::config_file_path`]
+    /// return that exact path and [`Self::db_file_path`] its `.sqlite`
+    /// sibling, instead of deriving both from `profile`/`profiles_dir_path`.
+    config_path_override: Option<PathBuf>,
 }
 
 fn profiles_dir_path(global_config: &GlobalConfig) -> PathBuf {
@@ -451,20 +489,60 @@ impl ProfileConfig {
             addon_dir,
             flavour_override,
             product,
+            config_path_override: None,
         })
     }
 
+    /// Makes [`Self::config_file_path`]/[`Self::db_file_path`] resolve to
+    /// `path` (and its `.sqlite` sibling) instead of the name-based
+    /// `profiles/<profile>.*` layout. Used when bootstrapping a new profile
+    /// from a `--profile` value that looked like a path (see
+    /// `wau::ctx::new_profile`).
+    pub fn with_path_override(mut self, path: impl Into<PathBuf>) -> Self {
+        self.config_path_override = Some(path.into());
+        self
+    }
+
+    /// Reads `profiles/<profile>.toml` by name inside `global_config`'s
+    /// config dir.
     pub fn read(global_config: GlobalConfig, profile: &str) -> Result<Self, ConfigError> {
         let path = profile_config_file_path(&global_config, profile);
-        let s = fs::read_to_string(&path).map_err(|e| {
+        Self::read_toml_at(global_config, &path, None)
+    }
+
+    /// Reads a profile config directly from `path`, bypassing name-based
+    /// lookup inside `global_config`'s `profiles/` dir entirely. Used by the
+    /// CLI's `--profile` flag when given a path instead of a name, mainly so
+    /// integration tests can point at a fixture file in an arbitrary
+    /// location. [`Self::db_file_path`] resolves to `path` with a `.sqlite`
+    /// extension, colocating the DB with the fixture rather than assuming a
+    /// `profiles/` layout.
+    pub fn read_from_path(
+        global_config: GlobalConfig,
+        path: impl Into<PathBuf>,
+    ) -> Result<Self, ConfigError> {
+        let path = path.into();
+        Self::read_toml_at(global_config, &path, Some(path.clone()))
+    }
+
+    fn read_toml_at(
+        global_config: GlobalConfig,
+        path: &Path,
+        path_override: Option<PathBuf>,
+    ) -> Result<Self, ConfigError> {
+        let s = fs::read_to_string(path).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                ConfigError::NotFound { path: path.clone() }
+                ConfigError::NotFound {
+                    path: path.to_path_buf(),
+                }
             } else {
                 ConfigError::Io(e)
             }
         })?;
         let file: ProfileConfigFile = toml::from_str(&s)?;
-        Self::new(global_config, file.profile, file.path, file.flavour)
+        let mut profile = Self::new(global_config, file.profile, file.path, file.flavour)?;
+        profile.config_path_override = path_override;
+        Ok(profile)
     }
 
     /// Every configured profile name (`profiles/*.toml`), sorted.
@@ -502,15 +580,27 @@ impl ProfileConfig {
     }
 
     pub fn config_file_path(&self) -> PathBuf {
-        profile_config_file_path(&self.global_config, &self.profile)
+        self.config_path_override
+            .clone()
+            .unwrap_or_else(|| profile_config_file_path(&self.global_config, &self.profile))
     }
 
     pub fn db_file_path(&self) -> PathBuf {
-        profile_db_file_path(&self.global_config, &self.profile)
+        match &self.config_path_override {
+            Some(path) => path.with_extension("sqlite"),
+            None => profile_db_file_path(&self.global_config, &self.profile),
+        }
     }
 
     pub fn ensure_dirs(&self) -> Result<(), ConfigError> {
-        fs::create_dir_all(profiles_dir_path(&self.global_config))?;
+        let dir = match &self.config_path_override {
+            Some(path) => path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| PathBuf::from(".")),
+            None => profiles_dir_path(&self.global_config),
+        };
+        fs::create_dir_all(dir)?;
         Ok(())
     }
 

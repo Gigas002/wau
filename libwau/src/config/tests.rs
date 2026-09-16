@@ -137,6 +137,34 @@ fn global_config_logging_level_round_trips() {
     assert_eq!(config.log_level, LogLevel::Trace);
 }
 
+#[test]
+fn global_config_read_from_none_matches_read() {
+    let config = GlobalConfig::read_from(None).unwrap();
+    assert_eq!(config.dirs.config, config_dir());
+}
+
+#[test]
+fn global_config_read_from_a_path_uses_its_parent_as_the_config_dir() {
+    let dir = tempfile::tempdir().unwrap();
+    let config_path = dir.path().join("fixture-config.toml");
+    fs::write(&config_path, "[logging]\nlevel = \"debug\"\n").unwrap();
+
+    let config = GlobalConfig::read_from(Some(&config_path)).unwrap();
+    assert_eq!(config.log_level, LogLevel::Debug);
+    assert_eq!(config.dirs.config, dir.path());
+    assert_eq!(config.config_file_path(), config_path);
+}
+
+#[test]
+fn global_config_read_from_a_missing_path_falls_back_to_defaults() {
+    let dir = tempfile::tempdir().unwrap();
+    let config_path = dir.path().join("does-not-exist.toml");
+
+    let config = GlobalConfig::read_from(Some(&config_path)).unwrap();
+    assert_eq!(config.log_level, LogLevel::Warn);
+    assert_eq!(config.config_file_path(), config_path);
+}
+
 // ---------------------------------------------------------------------------
 // ProfileConfig
 // ---------------------------------------------------------------------------
@@ -315,6 +343,54 @@ fn profile_config_delete_trashes_config_file_and_db() {
     profile.delete().unwrap();
     assert!(!profile.config_file_path().exists());
     assert!(!profile.db_file_path().exists());
+}
+
+#[test]
+fn profile_config_read_from_path_bypasses_name_based_lookup() {
+    let dir = tempfile::tempdir().unwrap();
+    let global = global_config_in(dir.path());
+    let addon_dir = dir.path().join("addons");
+    fs::create_dir_all(&addon_dir).unwrap();
+
+    let fixture_path = dir.path().join("fixture.toml");
+    let contents = ProfileConfigFile {
+        profile: "fixture".to_owned(),
+        path: addon_dir.clone(),
+        flavour: Some(Flavour::Mainline),
+    };
+    fs::write(&fixture_path, toml::to_string_pretty(&contents).unwrap()).unwrap();
+
+    let profile = ProfileConfig::read_from_path(global, &fixture_path).unwrap();
+    assert_eq!(profile.profile, "fixture");
+    assert_eq!(profile.addon_dir, addon_dir);
+    assert_eq!(profile.config_file_path(), fixture_path);
+    assert_eq!(
+        profile.db_file_path(),
+        fixture_path.with_extension("sqlite")
+    );
+}
+
+#[test]
+fn profile_config_with_path_override_writes_to_that_exact_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let global = global_config_in(dir.path());
+    let addon_dir = dir.path().join("addons");
+    fs::create_dir_all(&addon_dir).unwrap();
+
+    let target = dir.path().join("nested").join("override.toml");
+    let profile = ProfileConfig::new(
+        global,
+        "irrelevant-name",
+        &addon_dir,
+        Some(Flavour::Mainline),
+    )
+    .unwrap()
+    .with_path_override(&target);
+    profile.write().unwrap();
+
+    assert!(target.exists());
+    assert_eq!(profile.config_file_path(), target);
+    assert_eq!(profile.db_file_path(), target.with_extension("sqlite"));
 }
 
 #[test]

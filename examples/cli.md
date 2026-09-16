@@ -24,8 +24,14 @@ Commands print plain synchronous output for now; a progress-bar renderer is futu
 
 - `--version`
 - `--no-cache` — bypass the on-disk HTTP response cache for this invocation
-- `-p` / `--profile <NAME>` — target profile (default `default`); see
-  `examples/profiles/example.toml`
+- `--config <PATH>` — read `config.toml` from `<PATH>` instead of the platform-conventional
+  config dir; `profiles/` is then resolved as `<PATH>`'s sibling directory. Mainly for
+  integration tests that need an isolated config location.
+- `-p` / `--profile <NAME-OR-PATH>` — target profile (default `default`); see
+  `examples/profiles/example.toml`. A bare name is looked up as
+  `<config-dir>/profiles/<name>.toml`; a value containing a path separator or ending in
+  `.toml` is read directly from that path instead (its sibling `.sqlite` is the DB), bypassing
+  name-based lookup entirely — again mainly for integration tests pointing at a fixture file.
 
 Log verbosity is not a CLI flag — it comes from `[logging].level` in `config.toml` (default
 `warn` if unset). There is no `$RUST_LOG` support either: `wau` never reads environment
@@ -41,11 +47,11 @@ There is no `configure` command. A profile is configured by either:
   `examples/config.toml` / `examples/profiles/example.toml` as a starting point.
 
 `<config-dir>` is the platform-conventional config directory (`~/.config/wau` on Linux,
-`~/Library/Application Support/wau` on macOS, `%APPDATA%\wau` on Windows) — fixed, and never
-overridable via an environment variable. The default cache directory is likewise
-platform-conventional (`~/.cache/wau` on Linux); override it with `[paths].cache` in
-`config.toml`. Every command other than `init` errors out immediately if the active profile's
-`profiles/<name>.toml` doesn't exist.
+`~/Library/Application Support/wau` on macOS, `%APPDATA%\wau` on Windows) by default —
+override it for a single invocation with `--config` (see above); there is no environment
+variable equivalent. The default cache directory is likewise platform-conventional
+(`~/.cache/wau` on Linux); override it with `[paths].cache` in `config.toml`. Every command
+other than `init` errors out immediately if the active profile's config doesn't exist.
 
 ## Commands
 

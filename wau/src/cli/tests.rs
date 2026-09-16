@@ -17,6 +17,22 @@ fn global_flags_parse() {
 fn default_profile_is_default_marker() {
     let cli = parse(&["stats"]);
     assert_eq!(cli.profile, "default");
+    assert_eq!(cli.config, None);
+}
+
+#[test]
+fn config_flag_parses_as_a_path() {
+    let cli = parse(&["--config", "/tmp/fixture/config.toml", "stats"]);
+    assert_eq!(
+        cli.config,
+        Some(std::path::PathBuf::from("/tmp/fixture/config.toml"))
+    );
+}
+
+#[test]
+fn profile_flag_accepts_a_path_value() {
+    let cli = parse(&["-p", "/tmp/fixture/profile.toml", "stats"]);
+    assert_eq!(cli.profile, "/tmp/fixture/profile.toml");
 }
 
 #[test]

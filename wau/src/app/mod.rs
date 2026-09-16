@@ -24,8 +24,8 @@ use serde::Serialize;
 
 use crate::{
     cli::{
-        CacheCommand, Cli, Command, InitArgs, InstallArgs, ListFormat, ProfileCommand,
-        RemoveArgs, SearchArgs, SyncArgs,
+        CacheCommand, Cli, Command, InitArgs, InstallArgs, ListFormat, ProfileCommand, RemoveArgs,
+        SearchArgs, SyncArgs,
     },
     ctx::{self, AppCtx, CtxError},
     output::{any_errors, format_results},
@@ -67,11 +67,11 @@ pub async fn run(cli: &Cli) -> Result<i32, AppError> {
             cmd_list(cli, std::slice::from_ref(&args.addon), ListFormat::Detailed).await
         }
         Command::Cache(CacheCommand::Clear) => {
-            cmd_cache_clear().await?;
+            cmd_cache_clear(cli).await?;
             Ok(0)
         }
         Command::Profile(ProfileCommand::Erase) => {
-            cmd_profile_erase(&cli.profile)?;
+            cmd_profile_erase(cli)?;
             Ok(0)
         }
         Command::Stats => {
@@ -90,7 +90,7 @@ pub async fn run(cli: &Cli) -> Result<i32, AppError> {
 /// `wau init` and the example TOML configs, rather than prompting — only
 /// `init` bootstraps a profile interactively (see [`ensure_ctx_bootstrap`]).
 fn load_ctx(cli: &Cli) -> Result<AppCtx, AppError> {
-    AppCtx::build(&cli.profile, cli.no_cache).map_err(|e| match e {
+    AppCtx::build(cli).map_err(|e| match e {
         CtxError::Config(ConfigError::NotFound { path }) => AppError::Other(format!(
             "profile '{}' isn't configured (expected {}); run `wau init` to set it up \
              interactively, or hand-write it — see examples/config.toml and \
@@ -106,11 +106,11 @@ fn load_ctx(cli: &Cli) -> Result<AppCtx, AppError> {
 /// first if it hasn't been configured yet. Only [`cmd_init`] uses this;
 /// every other command uses [`load_ctx`] and errors out instead.
 async fn ensure_ctx_bootstrap(cli: &Cli) -> Result<AppCtx, AppError> {
-    match AppCtx::build(&cli.profile, cli.no_cache) {
+    match AppCtx::build(cli) {
         Ok(app_ctx) => Ok(app_ctx),
         Err(CtxError::Config(ConfigError::NotFound { .. })) => {
             println!("Profile '{}' isn't configured yet.", cli.profile);
-            let mut global = GlobalConfig::read()?;
+            let mut global = GlobalConfig::read_from(cli.config.as_deref())?;
             let profile = configure_profile_interactive(&mut global, &cli.profile).await?;
             Ok(AppCtx::from_profile(profile, cli.no_cache)?)
         }
@@ -168,7 +168,7 @@ async fn configure_profile_interactive(
 
     global.write()?;
 
-    let profile = ProfileConfig::new(global.clone(), profile_name, addon_dir, flavour_override)?;
+    let profile = ctx::new_profile(global.clone(), profile_name, addon_dir, flavour_override)?;
     profile.write()?;
     Ok(profile)
 }
@@ -537,16 +537,16 @@ async fn cmd_list(cli: &Cli, addons: &[String], format: ListFormat) -> Result<i3
 // cache / profile / stats
 // ============================================================================
 
-async fn cmd_cache_clear() -> Result<(), AppError> {
-    let global = GlobalConfig::read()?;
+async fn cmd_cache_clear(cli: &Cli) -> Result<(), AppError> {
+    let global = GlobalConfig::read_from(cli.config.as_deref())?;
     let http = HttpClient::new(Some(&global.dirs.cache))?;
     http.clear_cache().await?;
     Ok(())
 }
 
-fn cmd_profile_erase(profile_name: &str) -> Result<(), AppError> {
-    let global = GlobalConfig::read()?;
-    let profile = ProfileConfig::read(global, profile_name)?;
+fn cmd_profile_erase(cli: &Cli) -> Result<(), AppError> {
+    let global = GlobalConfig::read_from(cli.config.as_deref())?;
+    let profile = ctx::read_profile(global, &cli.profile)?;
     profile.delete()?;
     Ok(())
 }
@@ -580,9 +580,9 @@ struct StatsSourceMeta {
 }
 
 fn cmd_stats(cli: &Cli) -> Result<(), AppError> {
-    let global = GlobalConfig::read()?;
+    let global = GlobalConfig::read_from(cli.config.as_deref())?;
     let profiles = ProfileConfig::iter_profiles(&global);
-    let active_profile_config = ProfileConfig::read(global.clone(), &cli.profile).ok();
+    let active_profile_config = ctx::read_profile(global.clone(), &cli.profile).ok();
     let sources = libwau::sources::default_sources(&ctx::source_config(&global));
 
     let source_meta: Vec<StatsSourceMeta> = sources

@@ -29,7 +29,7 @@ fn init_logging(level: LogLevel) {
 #[tokio::main]
 async fn main() {
     let cli = cli::Cli::parse();
-    let log_level = libwau::config::GlobalConfig::read()
+    let log_level = libwau::config::GlobalConfig::read_from(cli.config.as_deref())
         .map(|g| g.log_level)
         .unwrap_or_default();
     init_logging(log_level);
