@@ -81,12 +81,13 @@ pub fn dim(color: bool, s: &str) -> String {
     }
 }
 
-/// The `[Installed]` tag search results and lists use.
-pub fn installed_tag(color: bool) -> String {
+/// The `[Installed: <version>]` tag `search` results use.
+pub fn installed_tag(color: bool, version: &str) -> String {
+    let tag = format!("[Installed: {version}]");
     if color {
-        "[Installed]".blue().bold().to_string()
+        tag.blue().bold().to_string()
     } else {
-        "[Installed]".to_owned()
+        tag
     }
 }
 

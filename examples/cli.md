@@ -114,22 +114,22 @@ profile, without installing anything, prompting, or touching the network.
 ### `wau search <TERM...>`
 
 Fuzzy-search the aggregate catalogue. `-l` / `--limit` (1-20, default 10), `--start-date`,
-repeatable `--source`, `--prefer-source`, `--no-exclude-installed`. Results print `paru`-style:
-numbered top to bottom from least to most relevant, so the best match is `1`, right above the
-input prompt — each entry shows `source/slug [downloads↓]` (`[Installed]` appended if
-applicable) with its display name indented below (the catalogue has no version/description to
-show, unlike a real package repository, so those don't appear here the way they do in `paru`).
-Pick addons to install the same way `paru` does: `:: Packages to install (eg: 1 2 3, 1-3):`
-takes space/comma-separated numbers and/or `a-b` ranges; typing nothing installs nothing, no
-separate confirmation step.
+repeatable `--source`, `--prefer-source`, `--exclude-installed` (hide already-installed addons
+instead of showing them like `paru` does — the default, matching `paru`, is to show them).
+Results print `paru`-style: numbered top to bottom from least to most relevant, so the best
+match is `1`, right above the input prompt — each entry shows `source/slug [downloads↓]`
+(`[Installed: <version>]` appended when it matches an installed package — the one place a real
+version shows up, since it comes from the lock file, not the catalogue) with its display name
+indented below (the catalogue itself has no version/description to show, unlike a real package
+repository, so those don't appear here the way they do in `paru`). Pick addons to install the
+same way `paru` does: `:: Packages to install (eg: 1 2 3, 1-3):` takes space/comma-separated
+numbers and/or `a-b` ranges; typing nothing installs nothing, no separate confirmation step.
 
 ### `wau list [ADDON...]` (alias: `wau info` for `-f detailed`)
 
-Lists installed addons. `-f` / `--format {simple,detailed,json}`.
-
-### `wau profile erase`
-
-Deletes the active profile's config and lock file. No confirmation prompt.
+Lists installed addons. `-f` / `--format {simple,detailed,json}`. `simple` (the default) is
+`source:slug <version>` per line — the URI first so it still parses as `source:slug` on its own
+(e.g. piped elsewhere), version trailing it.
 
 ---
 

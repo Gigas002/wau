@@ -3,7 +3,7 @@
 //! an explicit `color: bool` — see [`crate::style`] for why that's a plain
 //! parameter rather than the functions detecting a terminal themselves.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use libwau::{
     catalogue::CatalogueEntry,
@@ -66,14 +66,17 @@ pub fn any_errors(results: &HashMap<Defn, AnyOutcome<Outcome>>) -> bool {
 // `list` formats
 // ============================================================================
 
-/// One `source:slug` URI per line, source and slug colored separately.
+/// One `source:slug` URI plus its installed version per line — the URI comes
+/// first and unstyled-plain still parses as `source:slug` (e.g. piped into
+/// another command), the version trails it.
 pub fn format_list_simple(pkgs: &[&Pkg], color: bool) -> String {
     pkgs.iter()
         .map(|p| {
             format!(
-                "{}:{}",
+                "{}:{} {}",
                 style::source(color, &p.source),
-                style::name(color, &p.slug)
+                style::name(color, &p.slug),
+                style::version(color, &p.version)
             )
         })
         .collect::<Vec<_>>()
@@ -124,15 +127,19 @@ pub fn format_list_detailed(pkgs: &[&Pkg], color: bool) -> String {
 /// input prompt so the best pick is the easiest one to type) — `entries` is
 /// expected already sorted best-first, as [`catalogue::search::search`]
 /// returns it. Each result gets a `source/slug [downloads]` heading (an
-/// `[Installed]` tag appended when applicable) and an indented name line —
-/// the catalogue doesn't carry a version or description to show, unlike a
-/// real package repository, so those stand in for paru's version/popularity
-/// and description lines.
+/// `[Installed: <version>]` tag appended when it matches an installed
+/// package — installed addons are never hidden by default, matching `paru`,
+/// which shows them the same way) and an indented name line — the catalogue
+/// doesn't carry a version or description to show for addons in general,
+/// unlike a real package repository, so those stand in for paru's
+/// version/popularity and description lines; the installed tag is the one
+/// place a real version is available (from the lock file, not the
+/// catalogue), so it's shown there.
 ///
 /// [`catalogue::search::search`]: libwau::catalogue::search::search
 pub fn format_search_results(
     entries: &[&CatalogueEntry],
-    installed_keys: &HashSet<(String, String)>,
+    installed_versions: &HashMap<(String, String), String>,
     color: bool,
 ) -> String {
     (0..entries.len())
@@ -144,17 +151,17 @@ pub fn format_search_results(
             } else {
                 &entry.slug
             };
-            let installed = installed_keys.contains(&(entry.source.clone(), entry.id.clone()));
+            let installed_version =
+                installed_versions.get(&(entry.source.clone(), entry.id.clone()));
             let heading = format!(
                 "{} {}/{} [{} \u{2193}]{}",
                 style::number(color, i + 1),
                 style::source(color, &entry.source),
                 style::name(color, slug),
                 entry.download_count,
-                if installed {
-                    format!(" {}", style::installed_tag(color))
-                } else {
-                    String::new()
+                match installed_version {
+                    Some(version) => format!(" {}", style::installed_tag(color, version)),
+                    None => String::new(),
                 },
             );
             format!("{heading}\n    {}", style::dim(color, &entry.name))

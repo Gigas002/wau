@@ -49,8 +49,8 @@ fn copy_dir_recursive(src: &Path, dst: &Path) {
 }
 
 /// Copies `testing/<name>` into a fresh temp dir so a test run never writes
-/// into the checked-in fixtures (installs, DB files, cache, `profile erase`
-/// all mutate in place).
+/// into the checked-in fixtures (installs, DB files, cache all mutate in
+/// place).
 fn env_copy(name: &str) -> TempDir {
     let src = workspace_root().join("testing").join(name);
     let tmp = tempfile::tempdir().unwrap();
@@ -316,21 +316,6 @@ fn no_profile_flag_with_multiple_profiles_configured_errors_listing_them() {
     assert!(err.contains("retail"));
     assert!(err.contains("classic-era"));
     assert!(err.contains("-p/--profile"));
-}
-
-#[test]
-#[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
-fn profile_erase_then_list_reports_the_profile_as_not_configured() {
-    let tmp = env_copy("retail");
-
-    let erase = wau_configured(&tmp, &["profile", "erase"]);
-    assert!(erase.status.success(), "{}", stderr(&erase));
-    assert!(!tmp.path().join("profile.toml").exists());
-
-    let list = wau_configured(&tmp, &["list"]);
-    assert!(!list.status.success());
-    assert!(stderr(&list).contains("isn't configured"));
-    assert!(stderr(&list).contains("examples/config.toml"));
 }
 
 #[test]

@@ -130,15 +130,6 @@ fn list_format_accepts_detailed_and_json() {
 }
 
 #[test]
-fn profile_erase_subcommand_parses() {
-    let cli = parse(&["profile", "erase"]);
-    assert!(matches!(
-        cli.command,
-        Command::Profile(ProfileCommand::Erase)
-    ));
-}
-
-#[test]
 fn init_flags_parse() {
     let cli = parse(&["init", "-a", "--list-unreconciled"]);
     match cli.command {

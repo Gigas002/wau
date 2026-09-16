@@ -62,15 +62,6 @@ pub enum Command {
     /// Show detailed info for one installed addon (alias for `list -f detailed`).
     #[command(hide = true)]
     Info(InfoArgs),
-    /// Manage profiles (configured WoW installations).
-    #[command(subcommand)]
-    Profile(ProfileCommand),
-}
-
-#[derive(Debug, Subcommand)]
-pub enum ProfileCommand {
-    /// Delete the active profile's config and database.
-    Erase,
 }
 
 #[derive(Debug, Args)]
@@ -136,8 +127,10 @@ pub struct SearchArgs {
     pub sources: Vec<String>,
     #[arg(long)]
     pub prefer_source: Option<String>,
+    /// Hide already-installed addons instead of showing them tagged `[Installed: <version>]`,
+    /// like every other result (matching `paru`, which shows installed packages too).
     #[arg(long)]
-    pub no_exclude_installed: bool,
+    pub exclude_installed: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]

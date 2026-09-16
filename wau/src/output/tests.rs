@@ -131,10 +131,13 @@ fn any_errors_detects_at_least_one_failure() {
 }
 
 #[test]
-fn format_list_simple_renders_bare_source_slug_uris() {
+fn format_list_simple_renders_source_slug_uris_with_version() {
     let pkgs = [sample_pkg("curse", "foo"), sample_pkg("github", "bar")];
     let refs: Vec<&Pkg> = pkgs.iter().collect();
-    assert_eq!(format_list_simple(&refs, false), "curse:foo\ngithub:bar");
+    assert_eq!(
+        format_list_simple(&refs, false),
+        "curse:foo 1.0.0\ngithub:bar 1.0.0"
+    );
 }
 
 #[test]
@@ -154,7 +157,7 @@ fn format_search_results_numbers_best_match_as_one_at_the_bottom() {
     let worst = catalogue_entry("curse", "2", "worst-match", "Worst Match", 10);
     let entries = vec![&best, &worst];
 
-    let rendered = format_search_results(&entries, &HashSet::new(), false);
+    let rendered = format_search_results(&entries, &HashMap::new(), false);
     let lines: Vec<&str> = rendered.lines().collect();
     // best-first input -> best (index 0) printed last, labelled "1".
     assert!(lines[0].starts_with("2 curse/worst-match"));
@@ -162,14 +165,25 @@ fn format_search_results_numbers_best_match_as_one_at_the_bottom() {
 }
 
 #[test]
-fn format_search_results_tags_installed_entries() {
+fn format_search_results_tags_installed_entries_with_their_version() {
     let entry = catalogue_entry("curse", "1", "foo", "Foo", 1);
     let entries = vec![&entry];
-    let installed: HashSet<(String, String)> =
-        [("curse".to_owned(), "1".to_owned())].into_iter().collect();
+    let installed: HashMap<(String, String), String> =
+        [(("curse".to_owned(), "1".to_owned()), "1.2.3".to_owned())]
+            .into_iter()
+            .collect();
 
     let rendered = format_search_results(&entries, &installed, false);
-    assert!(rendered.contains("[Installed]"));
+    assert!(rendered.contains("[Installed: 1.2.3]"));
+}
+
+#[test]
+fn format_search_results_leaves_uninstalled_entries_untagged() {
+    let entry = catalogue_entry("curse", "1", "foo", "Foo", 1);
+    let entries = vec![&entry];
+
+    let rendered = format_search_results(&entries, &HashMap::new(), false);
+    assert!(!rendered.contains("[Installed"));
 }
 
 #[test]

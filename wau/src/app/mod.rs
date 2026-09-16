@@ -2,7 +2,7 @@
 //! addon logic lives here beyond `Defn`/installed-package lookup glue;
 //! every actual operation delegates to `libwau`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use libwau::{
     catalogue::{
@@ -20,8 +20,8 @@ use libwau::{
 
 use crate::{
     cli::{
-        Cli, Command, InitArgs, InstallArgs, ListFormat, ProfileCommand, RemoveArgs, ReplaceArgs,
-        SearchArgs, SyncArgs,
+        Cli, Command, InitArgs, InstallArgs, ListFormat, RemoveArgs, ReplaceArgs, SearchArgs,
+        SyncArgs,
     },
     ctx::{self, AppCtx, CtxError},
     output::{any_errors, format_results},
@@ -63,10 +63,6 @@ pub async fn run(cli: &Cli) -> Result<i32, AppError> {
         Command::List(args) => cmd_list(cli, &args.addons, args.format).await,
         Command::Info(args) => {
             cmd_list(cli, std::slice::from_ref(&args.addon), ListFormat::Detailed).await
-        }
-        Command::Profile(ProfileCommand::Erase) => {
-            cmd_profile_erase(cli)?;
-            Ok(0)
         }
     }
 }
@@ -432,11 +428,12 @@ async fn cmd_search(cli: &Cli, args: &SearchArgs) -> Result<i32, AppError> {
     let flavour = profile.product.flavour();
 
     let catalogue = catalogue::synchronise(&http).await?;
-    let installed_keys: HashSet<(String, String)> = lock
+    let installed_versions: HashMap<(String, String), String> = lock
         .get_all_pkgs()
         .into_iter()
-        .map(|p| (p.source, p.id))
+        .map(|p| ((p.source, p.id), p.version))
         .collect();
+    let installed_keys: HashSet<(String, String)> = installed_versions.keys().cloned().collect();
 
     let start_date = args
         .start_date
@@ -454,10 +451,10 @@ async fn cmd_search(cli: &Cli, args: &SearchArgs) -> Result<i32, AppError> {
         })
         .transpose()?;
 
-    let filter_installed = if args.no_exclude_installed {
-        FilterInstalled::Ident
-    } else {
+    let filter_installed = if args.exclude_installed {
         FilterInstalled::ExcludeFromAllSources
+    } else {
+        FilterInstalled::Ident
     };
     let options = SearchOptions {
         limit: args.limit as usize,
@@ -483,7 +480,7 @@ async fn cmd_search(cli: &Cli, args: &SearchArgs) -> Result<i32, AppError> {
     let color = style::color_enabled();
     println!(
         "{}",
-        crate::output::format_search_results(&entries, &installed_keys, color)
+        crate::output::format_search_results(&entries, &installed_versions, color)
     );
     println!(
         "{} Packages to install (eg: 1 2 3, 1-3):",
@@ -545,18 +542,6 @@ async fn cmd_list(cli: &Cli, addons: &[String], format: ListFormat) -> Result<i3
         println!("{rendered}");
     }
     Ok(0)
-}
-
-// ============================================================================
-// profile
-// ============================================================================
-
-fn cmd_profile_erase(cli: &Cli) -> Result<(), AppError> {
-    let global = GlobalConfig::read_from(cli.config.as_deref())?;
-    let profile = ctx::resolve_profile(global, cli.profile.as_deref())
-        .map_err(|e| describe_config_error(cli, e))?;
-    profile.delete()?;
-    Ok(())
 }
 
 // ============================================================================
