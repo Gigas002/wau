@@ -9,9 +9,11 @@ environment variables.
 ## Crate layout (implementation)
 
 - `wau/src/cli/mod.rs` — clap definitions only; no addon logic.
-- `wau/src/ctx/mod.rs` — assembles `GlobalConfig` + `ProfileConfig` + DB connection + HTTP
+- `wau/src/ctx/mod.rs` — assembles `GlobalConfig` + `ProfileConfig` + lock file + HTTP
   client + resolver registry into one explicit struct per invocation (`AppCtx`).
-- `wau/src/prompts/mod.rs` — interactive confirm/text/password/select-one/select-multiple.
+- `wau/src/prompts/mod.rs` — interactive confirm/select-one/select-multiple, used by `search`
+  and by `init`'s per-group source picker (unless `--auto`). Profile/global config setup is the
+  only thing that's fully non-interactive — it must be hand-written.
 - `wau/src/output/mod.rs` — result reporting, `list` formats.
 - `wau/src/app/mod.rs` — command dispatch; `main` stays thin.
 
@@ -39,19 +41,19 @@ variables, full stop.
 
 ## Configuration
 
-There is no `configure` command. A profile is configured by either:
-
-- running `wau init` against it, which prompts interactively and writes the files, or
-- hand-writing `<config-dir>/config.toml` (global) and
-  `<config-dir>/profiles/<name>/profile.toml` (per-profile) yourself, copying
-  `examples/config.toml` / `examples/profiles/example/profile.toml` as a starting point.
+There is no `configure` command and no interactive bootstrap of any kind. A profile is
+configured by hand-writing `<config-dir>/config.toml` (global) and
+`<config-dir>/profiles/<name>/profile.toml` (per-profile) yourself, copying
+`examples/config.toml` / `examples/profiles/example/profile.toml` as a starting point.
 
 `<config-dir>` is the platform-conventional config directory (`~/.config/wau` on Linux,
 `~/Library/Application Support/wau` on macOS, `%APPDATA%\wau` on Windows) by default —
 override it for a single invocation with `--config` (see above); there is no environment
 variable equivalent. The default cache directory is likewise platform-conventional
 (`~/.cache/wau` on Linux); override it with `[paths].cache` in `config.toml`. Every command
-other than `init` errors out immediately if the active profile's config doesn't exist.
+except `init` errors out immediately if the active (`-p`-selected) profile's config doesn't
+exist; `init` ignores `-p` and instead reports if there are no profiles configured at all (see
+below).
 
 ## Commands
 
@@ -69,23 +71,36 @@ reports without installing.
 
 ### `wau remove <ADDON...>`
 
-Remove installed addons and delete their DB rows. `--keep-folders` leaves the on-disk
-directories in place (DB row removed only).
+Remove installed addons and delete their lock file entries. `--keep-folders` leaves the on-disk
+directories in place (lock file entry removed only).
+
+### `wau replace <OLD> <NEW>`
+
+Switches one installed addon to a different source (e.g. `wau replace curse:big-wigs
+github:BigWigsMods/BigWigs`) as one operation: resolves `NEW`, downloads and installs it, then
+removes `OLD`'s lock file entry — rather than the folder-conflict-prone sequencing of doing it
+by hand as two separate `remove`/`install` calls. `OLD` is looked up like `remove`'s targets
+(works even if its source was since removed/disabled); `NEW` must resolve against a live
+source, same as `install`. Neither side's pin (`version_eq`) carries over automatically — give
+`NEW` its own `#version_eq=...` fragment if you want it pinned. `OLD`'s version-history log
+entries aren't deleted, but they also don't transfer to `NEW`'s identity — they're just left
+behind, keyed to the old `(source, id)`.
 
 ### `wau init`
 
-The only command that bootstraps an unconfigured profile: if `-p`'s profile has no
-`profiles/<name>/profile.toml` yet, prompts interactively for the addon directory, game
-flavour, and optional GitHub/CurseForge/Wago Addons auth, and writes it (plus `config.toml`,
-if that's also missing). Every other command errors out instead — pointing at `wau init` and
-`examples/config.toml` / `examples/profiles/example/profile.toml` — if the profile isn't
-configured.
+Reconciles **every** configured profile (`<config-dir>/profiles/*/profile.toml`) in one run —
+ignores `-p`/`--profile`, since there's no single "active" profile for this command; prints
+`== <name> ==` between profiles when there's more than one. If no profiles exist yet, says so
+and exits — profiles are never created by `init` or anything else; hand-write them (see
+`examples/config.toml` / `examples/profiles/example/profile.toml`).
 
-Once the profile exists (or was just created), matches un-tracked addon folders (installed by
-hand or by another tool) against catalogue/TOC metadata and imports them, in three
-decreasing-precision passes (TOC provider-id keys → folder-name subsets → normalized name
-match). `-a` / `--auto` picks the top match for every group without prompting;
-`--list-unreconciled` only lists what would be matched.
+For each profile, matches un-tracked addon folders (installed by hand or by another tool)
+against catalogue/TOC metadata and imports them, in three decreasing-precision passes (TOC
+provider-id keys → folder-name subsets → normalized name match). For each matched group,
+prompts a single-select of the candidate sources (priority order) and then confirms before
+installing the batch; `-a` / `--auto` picks the top-priority candidate for every group instead,
+with no prompting at all. `--list-unreconciled` only lists what would be matched, for every
+profile, without installing anything, prompting, or touching the network.
 
 ### `wau search <TERM...>`
 
@@ -99,7 +114,7 @@ Lists installed addons. `-f` / `--format {simple,detailed,json}`.
 
 ### `wau profile erase`
 
-Deletes the active profile's config and DB after confirmation.
+Deletes the active profile's config and lock file. No confirmation prompt.
 
 ### `wau stats`
 

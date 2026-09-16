@@ -1,13 +1,12 @@
 //! Assembles one profile's config, DB connection, HTTP client, and source
 //! registry into a single struct threaded through command dispatch.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use libwau::{
     config::{ConfigError, GlobalConfig, ProfileConfig},
     http::{HttpClient, HttpError},
     lockfile::{LockError, LockFile},
-    model::Flavour,
     pkg_archives::DownloadLocks,
     sources::{self, Resolver, SourceConfig},
 };
@@ -57,30 +56,6 @@ fn is_profile_path(value: &str) -> bool {
         || Path::new(value).is_absolute()
 }
 
-/// Builds a brand-new [`ProfileConfig`] for `profile_arg` (same name-or-path
-/// detection as [`read_profile`]), used when bootstrapping an unconfigured
-/// profile. When `profile_arg` is a path, the profile's internal name is its
-/// file stem and the config/DB are written at that exact path rather than
-/// under `profiles/`.
-pub fn new_profile(
-    global: GlobalConfig,
-    profile_arg: &str,
-    addon_dir: impl Into<PathBuf>,
-    flavour_override: Option<Flavour>,
-) -> Result<ProfileConfig, ConfigError> {
-    if is_profile_path(profile_arg) {
-        let path = PathBuf::from(profile_arg);
-        let name = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or(profile_arg);
-        let profile = ProfileConfig::new(global, name, addon_dir, flavour_override)?;
-        Ok(profile.with_path_override(path))
-    } else {
-        ProfileConfig::new(global, profile_arg, addon_dir, flavour_override)
-    }
-}
-
 pub fn source_config(global: &GlobalConfig) -> SourceConfig {
     SourceConfig {
         cfcore_api_key: global.access_tokens.cfcore.clone(),
@@ -94,9 +69,9 @@ impl AppCtx {
     /// Reads the global config (from `cli.config`, if given, else the
     /// platform-conventional dir) and `cli.profile`'s config, then builds a
     /// full [`AppCtx`] from them. Returns [`CtxError::Config`] with
-    /// [`ConfigError::NotFound`] if the profile isn't configured yet — the
-    /// caller (`app::run`) is expected to catch that and bootstrap the
-    /// profile interactively before retrying.
+    /// [`ConfigError::NotFound`] if the profile isn't configured yet — every
+    /// command surfaces that as an error pointing at the example configs;
+    /// there is no interactive bootstrap.
     pub fn build(cli: &Cli) -> Result<Self, CtxError> {
         let global = GlobalConfig::read_from(cli.config.as_deref())?;
         let profile = read_profile(global, &cli.profile)?;
@@ -104,7 +79,7 @@ impl AppCtx {
     }
 
     /// Builds an [`AppCtx`] from an already-resolved [`ProfileConfig`] (e.g.
-    /// one just created by an interactive `configure` prompt).
+    /// one `init` is reconciling by name rather than via `cli.profile`).
     pub fn from_profile(profile: ProfileConfig) -> Result<Self, CtxError> {
         profile.ensure_dirs()?;
         let lock = LockFile::open(&profile.lock_file_path())?;

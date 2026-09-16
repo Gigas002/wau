@@ -2,19 +2,17 @@
 //! addon logic lives here beyond `Defn`/installed-package lookup glue;
 //! every actual operation delegates to `libwau`.
 
-use std::{collections::HashSet, path::PathBuf, time::Duration};
+use std::{collections::HashSet, path::PathBuf};
 
 use libwau::{
     catalogue::{
         self,
         search::{self, FilterInstalled, SearchOptions},
     },
-    config::{ConfigError, GlobalConfig, ProfileConfig, SecretString},
-    github_auth::GitHubAuth,
-    http::HttpClient,
+    config::{ConfigError, GlobalConfig, ProfileConfig},
     lockfile::Pkg,
     matchers,
-    model::{Defn, Flavour, infer_product_from_addon_dir},
+    model::{Defn, Flavour},
     pkg_management,
     results::{Failure, ManagerError},
     sources::{PkgCandidate, Resolver},
@@ -24,8 +22,8 @@ use serde::Serialize;
 
 use crate::{
     cli::{
-        Cli, Command, InitArgs, InstallArgs, ListFormat, ProfileCommand, RemoveArgs, SearchArgs,
-        SyncArgs,
+        Cli, Command, InitArgs, InstallArgs, ListFormat, ProfileCommand, RemoveArgs, ReplaceArgs,
+        SearchArgs, SyncArgs,
     },
     ctx::{self, AppCtx, CtxError},
     output::{any_errors, format_results},
@@ -58,6 +56,7 @@ pub async fn run(cli: &Cli) -> Result<i32, AppError> {
         Command::Install(args) => cmd_install(cli, args).await,
         Command::Sync(args) => cmd_sync(cli, args).await,
         Command::Remove(args) => cmd_remove(cli, args).await,
+        Command::Replace(args) => cmd_replace(cli, args).await,
         Command::Init(args) => cmd_init(cli, args).await,
         Command::Search(args) => cmd_search(cli, args).await,
         Command::List(args) => cmd_list(cli, &args.addons, args.format).await,
@@ -79,112 +78,21 @@ pub async fn run(cli: &Cli) -> Result<i32, AppError> {
 // Ctx bootstrap
 // ============================================================================
 
-/// Builds the [`AppCtx`] for `cli.profile`. Every command except `init` calls
-/// this: if the profile isn't configured yet, it errors out pointing at
-/// `wau init` and the example TOML configs, rather than prompting — only
-/// `init` bootstraps a profile interactively (see [`ensure_ctx_bootstrap`]).
+/// Builds the [`AppCtx`] for `cli.profile`. Every command uses this — there is
+/// no interactive bootstrap: a profile that isn't configured yet must be
+/// hand-written (see `examples/config.toml` and
+/// `examples/profiles/example/profile.toml`), then picked up by `init` or any
+/// other command.
 fn load_ctx(cli: &Cli) -> Result<AppCtx, AppError> {
     AppCtx::build(cli).map_err(|e| match e {
         CtxError::Config(ConfigError::NotFound { path }) => AppError::Other(format!(
-            "profile '{}' isn't configured (expected {}); run `wau init` to set it up \
-             interactively, or hand-write it — see examples/config.toml and \
-             examples/profiles/example/profile.toml",
+            "profile '{}' isn't configured (expected {}); hand-write it — see \
+             examples/config.toml and examples/profiles/example/profile.toml",
             cli.profile,
             path.display()
         )),
         e => e.into(),
     })
-}
-
-/// Builds the [`AppCtx`] for `cli.profile`, interactively bootstrapping it
-/// first if it hasn't been configured yet. Only [`cmd_init`] uses this;
-/// every other command uses [`load_ctx`] and errors out instead.
-async fn ensure_ctx_bootstrap(cli: &Cli) -> Result<AppCtx, AppError> {
-    match AppCtx::build(cli) {
-        Ok(app_ctx) => Ok(app_ctx),
-        Err(CtxError::Config(ConfigError::NotFound { .. })) => {
-            println!("Profile '{}' isn't configured yet.", cli.profile);
-            let mut global = GlobalConfig::read_from(cli.config.as_deref())?;
-            let profile = configure_profile_interactive(&mut global, &cli.profile).await?;
-            Ok(AppCtx::from_profile(profile)?)
-        }
-        Err(e) => Err(e.into()),
-    }
-}
-
-async fn configure_profile_interactive(
-    global: &mut GlobalConfig,
-    profile_name: &str,
-) -> Result<ProfileConfig, AppError> {
-    let addon_dir_input = prompts::text("Add-on directory:")?;
-    let addon_dir = PathBuf::from(addon_dir_input.trim());
-
-    let flavour_override = if infer_product_from_addon_dir(&addon_dir).is_none() {
-        let choices: Vec<Choice<Flavour>> = Flavour::ALL
-            .iter()
-            .map(|f| Choice::new(f.to_string(), *f))
-            .collect();
-        Some(prompts::select_one("Game flavour", choices)?)
-    } else {
-        None
-    };
-
-    if global.access_tokens.github.is_none()
-        && prompts::confirm("Set up GitHub authentication?", false)?
-    {
-        match run_github_oauth_flow().await {
-            Ok(token) => global.access_tokens.github = Some(SecretString::new(token)),
-            Err(e) => println!("GitHub authentication failed: {e}"),
-        }
-    }
-
-    if global.access_tokens.cfcore.is_none() {
-        println!(
-            "An API key is required to use CurseForge. Log in to CurseForge for Studios \
-             <https://console.curseforge.com/> to generate a key."
-        );
-        let key = prompts::password("CurseForge API key (leave blank to skip):")?;
-        if !key.is_empty() {
-            global.access_tokens.cfcore = Some(SecretString::new(key));
-        }
-    }
-
-    if global.access_tokens.wago_addons.is_none() {
-        println!(
-            "An access token is required to use Wago Addons. Wago issues tokens to Patreon \
-             <https://addons.wago.io/patreon> subscribers above a certain tier."
-        );
-        let token = prompts::password("Wago Addons access token (leave blank to skip):")?;
-        if !token.is_empty() {
-            global.access_tokens.wago_addons = Some(SecretString::new(token));
-        }
-    }
-
-    global.write()?;
-
-    let profile = ctx::new_profile(global.clone(), profile_name, addon_dir, flavour_override)?;
-    profile.write()?;
-    Ok(profile)
-}
-
-async fn run_github_oauth_flow() -> Result<String, AppError> {
-    let http = HttpClient::new()?;
-    let auth = GitHubAuth::new();
-    let codes = auth.get_codes(&http).await?;
-    println!(
-        "Navigate to {} and paste the code below:",
-        codes.verification_uri
-    );
-    println!("  {}", codes.user_code);
-    println!("Waiting...");
-    let token = auth
-        .poll_for_access_token(
-            &http,
-            &codes.device_code,
-            Duration::from_secs(codes.interval),
-        )
-        .await?;
-    Ok(token)
 }
 
 // ============================================================================
@@ -272,12 +180,12 @@ async fn cmd_remove(cli: &Cli, args: &RemoveArgs) -> Result<i32, AppError> {
     Ok(i32::from(any_errors(&results)))
 }
 
-// ============================================================================
-// init
-// ============================================================================
-
-async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
-    let app_ctx = ensure_ctx_bootstrap(cli).await?;
+/// Switches one installed addon to a different source. `old` is looked up
+/// with `retain_unknown_source = true`, like `remove`, so it can still target
+/// a package left behind by a since-removed/disabled source; `new` must
+/// resolve against a live source since it drives a real download+install.
+async fn cmd_replace(cli: &Cli, args: &ReplaceArgs) -> Result<i32, AppError> {
+    let app_ctx = load_ctx(cli)?;
     let AppCtx {
         profile,
         mut lock,
@@ -285,19 +193,96 @@ async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
         sources,
         download_locks,
     } = app_ctx;
+    let old = parse_defn(&args.old, &sources, true)?;
+    let new = parse_defn(&args.new, &sources, false)?;
+    let pkg_ctx = pkg_management::Ctx {
+        http: &http,
+        sources: &sources,
+        download_locks: &download_locks,
+        addon_dir: &profile.addon_dir,
+        cache_dir: &profile.global_config.dirs.cache,
+        flavour: profile.product.flavour(),
+    };
+
+    let results = pkg_management::replace(&mut lock, &pkg_ctx, &[(old, new)]).await?;
+    println!("{}", format_results(&results));
+    Ok(i32::from(any_errors(&results)))
+}
+
+// ============================================================================
+// init
+// ============================================================================
+
+/// Reconciles every configured profile (`ProfileConfig::iter_profiles`) —
+/// `-p`/`--profile` is ignored, since there's no single "active" profile for
+/// this command; each profile is otherwise handled exactly as a single-profile
+/// `init` always was. For each group of untracked folders the matcher passes
+/// turn up, prompts which candidate source to install (`--auto` picks the
+/// top-priority one instead) then confirms before installing; folders that
+/// never match anything are printed at the end for the user to handle by hand.
+async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
+    let global = GlobalConfig::read_from(cli.config.as_deref())?;
+    let profile_names = ProfileConfig::iter_profiles(&global);
+    if profile_names.is_empty() {
+        println!(
+            "No profiles configured; hand-write one — see examples/config.toml and \
+             examples/profiles/example/profile.toml."
+        );
+        return Ok(0);
+    }
+
+    // Not needed at all for `--list-unreconciled`, and shared across every
+    // profile otherwise — fetched at most once, lazily, on the first profile
+    // that actually turns out to have leftovers (so e.g. an all-clean set of
+    // profiles never touches the network).
+    let mut catalogue: Option<catalogue::ComputedCatalogue> = None;
+
+    let mut any_errors = false;
+    for name in &profile_names {
+        if profile_names.len() > 1 {
+            println!("== {name} ==");
+        }
+        if let Err(e) =
+            reconcile_profile(&global, name, args, &mut catalogue).await
+        {
+            eprintln!("{name}: {e}");
+            any_errors = true;
+        }
+    }
+    Ok(i32::from(any_errors))
+}
+
+async fn reconcile_profile(
+    global: &GlobalConfig,
+    name: &str,
+    args: &InitArgs,
+    catalogue: &mut Option<catalogue::ComputedCatalogue>,
+) -> Result<(), AppError> {
+    let profile = ProfileConfig::read(global.clone(), name)?;
+    let AppCtx {
+        profile,
+        mut lock,
+        http,
+        sources,
+        download_locks,
+    } = AppCtx::from_profile(profile)?;
     let flavour = profile.product.flavour();
 
     let mut leftovers = matchers::get_unreconciled_folders(&lock, &profile.addon_dir, flavour);
     if args.list_unreconciled {
         print_unreconciled(&leftovers);
-        return Ok(0);
+        return Ok(());
     }
     if leftovers.is_empty() {
         println!("No add-ons left to reconcile.");
-        return Ok(0);
+        return Ok(());
     }
 
-    let catalogue = catalogue::synchronise(&http).await?;
+    if catalogue.is_none() {
+        *catalogue = Some(catalogue::synchronise(&http).await?);
+    }
+    let catalogue = catalogue.as_ref().expect("just populated above if it was None");
+
     let pkg_ctx = pkg_management::Ctx {
         http: &http,
         sources: &sources,
@@ -309,11 +294,11 @@ async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
 
     type Pass<'a> = Box<dyn Fn(&[matchers::AddonFolder]) -> Vec<matchers::MatcherGroup> + 'a>;
     let passes: Vec<Pass<'_>> = vec![
-        Box::new(|leftovers| matchers::match_toc_source_ids(leftovers, &catalogue, &sources)),
+        Box::new(|leftovers| matchers::match_toc_source_ids(leftovers, catalogue, &sources)),
         Box::new(|leftovers| {
-            matchers::match_folder_name_subsets(leftovers, flavour, &catalogue, &sources)
+            matchers::match_folder_name_subsets(leftovers, flavour, catalogue, &sources)
         }),
-        Box::new(|leftovers| matchers::match_addon_names_with_folder_names(leftovers, &catalogue)),
+        Box::new(|leftovers| matchers::match_addon_names_with_folder_names(leftovers, catalogue)),
     ];
 
     for pass in passes {
@@ -341,6 +326,8 @@ async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
                 continue;
             }
 
+            // `group.defns` is already priority-sorted, so the first
+            // resolvable one is the same pick `--auto` makes explicitly.
             let selection = if args.auto {
                 Some(shortlist[0].0.clone())
             } else {
@@ -387,7 +374,7 @@ async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
         print_unreconciled(&leftovers);
     }
 
-    Ok(0)
+    Ok(())
 }
 
 fn print_unreconciled(leftovers: &[matchers::AddonFolder]) {

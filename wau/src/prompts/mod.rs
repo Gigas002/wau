@@ -1,26 +1,17 @@
-//! Interactive prompts, built on `inquire`: confirm/text/password/
-//! select-one/select-multiple. No "open in browser" key binding on select
-//! widgets — `inquire` has no custom-keybinding hook for it, and it's a
-//! convenience, not core behaviour.
+//! Interactive prompts, built on `inquire`: confirm/select-one/select-multiple
+//! — used by `search` and by `init`'s per-group source picker (unless
+//! `--auto`). Profile/global config setup stays fully non-interactive; hand-write
+//! the TOML. No "open in browser" key binding on select widgets — `inquire`
+//! has no custom-keybinding hook for it, and it's a convenience, not core
+//! behaviour.
 
-use inquire::{Confirm, MultiSelect, Password, Select, Text, error::InquireResult};
+use inquire::{Confirm, MultiSelect, Select, error::InquireResult};
 
 #[cfg(test)]
 mod tests;
 
 pub fn confirm(message: &str, default: bool) -> InquireResult<bool> {
     Confirm::new(message).with_default(default).prompt()
-}
-
-pub fn text(message: &str) -> InquireResult<String> {
-    Text::new(message).prompt()
-}
-
-pub fn password(message: &str) -> InquireResult<String> {
-    Password::new(message)
-        .without_confirmation()
-        .with_display_mode(inquire::PasswordDisplayMode::Masked)
-        .prompt()
 }
 
 /// A labelled option carrying an arbitrary value, for [`select_one`]/[`select_multiple`].

@@ -77,25 +77,3 @@ fn read_profile_reads_directly_from_a_toml_path() {
         fixture_path.with_file_name("lock.toml")
     );
 }
-
-#[test]
-fn new_profile_with_a_path_argument_writes_at_that_exact_path() {
-    let dir = tempdir().unwrap();
-    let global = global_config_in(dir.path());
-    let addon_dir = dir.path().join("addons");
-    std::fs::create_dir_all(&addon_dir).unwrap();
-
-    let target = dir.path().join("bootstrapped.toml");
-    let profile = new_profile(
-        global,
-        target.to_str().unwrap(),
-        &addon_dir,
-        Some(Flavour::Mainline),
-    )
-    .unwrap();
-    profile.write().unwrap();
-
-    assert_eq!(profile.profile, "bootstrapped");
-    assert!(target.exists());
-    assert_eq!(profile.config_file_path(), target);
-}

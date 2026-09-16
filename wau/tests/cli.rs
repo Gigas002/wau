@@ -161,12 +161,100 @@ fn remove_of_a_never_installed_addon_reports_not_installed() {
 
 #[test]
 #[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
+fn replace_of_a_never_installed_addon_reports_errors_for_both_sides() {
+    let tmp = env_copy("retail");
+    // CurseForge has no API key in this fixture's config.toml, so it's
+    // disabled — resolving `new` fails fast on that check, before any
+    // network call, keeping this test deterministic without HTTP mocking.
+    let output = wau_configured(
+        &tmp,
+        &["replace", "curse:old-addon", "curse:new-addon"],
+    );
+
+    assert!(!output.status.success());
+    let text = stdout(&output);
+    assert!(text.contains("curse:old-addon"));
+    assert!(text.contains("not installed"));
+    assert!(text.contains("curse:new-addon"));
+    assert!(text.contains("disabled"));
+}
+
+/// `init` ignores `-p`/`--profile` and instead scans `<config-dir>/profiles/*`
+/// for name-based profiles, so this promotes a fixture's flat `profile.toml`
+/// (normally read via `--profile profile.toml`'s direct-path override) into
+/// that layout. The addon dir path inside it is relative to the process's
+/// working directory, not to the TOML file, so moving the file doesn't break it.
+fn promote_to_named_profile(tmp: &TempDir, name: &str) {
+    let dir = tmp.path().join("profiles").join(name);
+    fs::create_dir_all(&dir).unwrap();
+    fs::rename(tmp.path().join("profile.toml"), dir.join("profile.toml")).unwrap();
+}
+
+#[test]
+#[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
 fn init_with_an_empty_addon_dir_is_a_no_op() {
     let tmp = env_copy("retail");
-    let output = wau_configured(&tmp, &["init", "--auto"]);
+    promote_to_named_profile(&tmp, "retail");
+
+    let output = wau(&tmp, &["--config", "config.toml", "init"]);
 
     assert!(output.status.success(), "{}", stderr(&output));
     assert!(stdout(&output).contains("No add-ons left to reconcile."));
+}
+
+#[test]
+#[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
+fn init_list_unreconciled_reports_untracked_folders_without_network() {
+    let tmp = env_copy("retail");
+    promote_to_named_profile(&tmp, "retail");
+    let addon_dir = tmp
+        .path()
+        .join("_retail_")
+        .join("Interface")
+        .join("AddOns")
+        .join("SomeHandInstalledAddon");
+    fs::create_dir_all(&addon_dir).unwrap();
+    fs::write(addon_dir.join("SomeHandInstalledAddon.toc"), "## Version: 1").unwrap();
+
+    let output = wau(&tmp, &["--config", "config.toml", "init", "--list-unreconciled"]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(stdout(&output).contains("unreconciled:"));
+    assert!(stdout(&output).contains("SomeHandInstalledAddon"));
+}
+
+#[test]
+#[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
+fn init_processes_every_configured_profile_in_one_run() {
+    let tmp = env_copy("retail");
+    promote_to_named_profile(&tmp, "retail");
+    copy_dir_recursive(
+        &workspace_root()
+            .join("testing")
+            .join("classic-era")
+            .join("_classic_era_"),
+        &tmp.path().join("_classic_era_"),
+    );
+    fs::create_dir_all(tmp.path().join("profiles").join("classic-era")).unwrap();
+    fs::copy(
+        workspace_root()
+            .join("testing")
+            .join("classic-era")
+            .join("profile.toml"),
+        tmp.path()
+            .join("profiles")
+            .join("classic-era")
+            .join("profile.toml"),
+    )
+    .unwrap();
+
+    let output = wau(&tmp, &["--config", "config.toml", "init"]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.contains("== retail =="));
+    assert!(text.contains("== classic-era =="));
+    assert_eq!(text.matches("No add-ons left to reconcile.").count(), 2);
 }
 
 #[test]
@@ -181,7 +269,7 @@ fn profile_erase_then_list_reports_the_profile_as_not_configured() {
     let list = wau_configured(&tmp, &["list"]);
     assert!(!list.status.success());
     assert!(stderr(&list).contains("isn't configured"));
-    assert!(stderr(&list).contains("wau init"));
+    assert!(stderr(&list).contains("examples/config.toml"));
 }
 
 #[test]
@@ -202,5 +290,5 @@ fn unconfigured_environment_errors_with_a_helpful_message() {
 
     assert!(!output.status.success());
     assert!(stderr(&output).contains("isn't configured"));
-    assert!(stderr(&output).contains("wau init"));
+    assert!(stderr(&output).contains("examples/config.toml"));
 }

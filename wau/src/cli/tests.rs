@@ -63,6 +63,24 @@ fn remove_requires_at_least_one_addon() {
 }
 
 #[test]
+fn replace_takes_exactly_an_old_and_a_new_addon() {
+    let cli = parse(&["replace", "curse:foo", "github:someuser/foo"]);
+    match cli.command {
+        Command::Replace(args) => {
+            assert_eq!(args.old, "curse:foo");
+            assert_eq!(args.new, "github:someuser/foo");
+        }
+        _ => panic!("wrong command"),
+    }
+
+    assert!(Cli::try_parse_from(["wau", "replace"]).is_err());
+    assert!(Cli::try_parse_from(["wau", "replace", "curse:foo"]).is_err());
+    assert!(
+        Cli::try_parse_from(["wau", "replace", "curse:foo", "github:foo", "extra"]).is_err()
+    );
+}
+
+#[test]
 fn search_limit_is_bounded_between_1_and_20() {
     assert!(Cli::try_parse_from(["wau", "search", "foo", "--limit", "0"]).is_err());
     assert!(Cli::try_parse_from(["wau", "search", "foo", "--limit", "21"]).is_err());

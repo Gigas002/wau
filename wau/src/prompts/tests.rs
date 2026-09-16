@@ -1,6 +1,6 @@
-//! `confirm`/`text`/`password`/`select_one`/`select_multiple` all drive a
-//! real terminal prompt via `inquire` and aren't practically unit-testable
-//! (no TTY in CI); only the plain data carrier below has independent logic.
+//! `confirm`/`select_one`/`select_multiple` all drive a real terminal prompt
+//! via `inquire` and aren't practically unit-testable (no TTY in CI); only
+//! the plain data carrier below has independent logic.
 
 use super::*;
 

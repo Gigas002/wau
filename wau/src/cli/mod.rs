@@ -1,6 +1,5 @@
 //! Command-line surface — clap definitions only, no addon logic. Profiles are
-//! configured by hand-editing TOML or via the interactive bootstrap built
-//! into `init`.
+//! configured entirely by hand-editing TOML; there is no interactive bootstrap.
 
 use std::path::PathBuf;
 
@@ -41,8 +40,16 @@ pub enum Command {
     Sync(SyncArgs),
     /// Remove installed addons.
     Remove(RemoveArgs),
-    /// Bootstrap an unconfigured profile interactively, then match untracked
-    /// addon folders against the catalogue and import them.
+    /// Switch an installed addon to a different source: resolves and
+    /// installs the new one, then removes the old lock file entry, as one
+    /// operation (rather than the folder-conflict-prone sequencing of doing
+    /// it by hand via `remove` + `install`).
+    Replace(ReplaceArgs),
+    /// Reconcile every configured profile's untracked addon folders against
+    /// the catalogue and import them, prompting per group to pick which
+    /// source to use unless `--auto`. Ignores `-p`/`--profile` — there is no
+    /// interactive profile bootstrap; profiles must already exist (hand-write
+    /// them, see `examples/`).
     Init(InitArgs),
     /// Fuzzy-search the addon catalogue.
     Search(SearchArgs),
@@ -90,9 +97,17 @@ pub struct SyncArgs {
 pub struct RemoveArgs {
     #[arg(required = true)]
     pub addons: Vec<String>,
-    /// Delete the DB row but leave the on-disk folders in place.
+    /// Delete the lock file entry but leave the on-disk folders in place.
     #[arg(long)]
     pub keep_folders: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct ReplaceArgs {
+    /// The currently-installed `source:alias` (or URL) to replace.
+    pub old: String,
+    /// The `source:alias` (or URL) to replace it with.
+    pub new: String,
 }
 
 #[derive(Debug, Args)]
@@ -100,7 +115,7 @@ pub struct InitArgs {
     /// Pick the top match for every group without prompting.
     #[arg(short, long)]
     pub auto: bool,
-    /// Only list what would be matched.
+    /// Only list what would be matched, for every profile, without installing anything.
     #[arg(long)]
     pub list_unreconciled: bool,
 }
