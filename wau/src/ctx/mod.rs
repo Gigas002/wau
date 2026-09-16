@@ -101,16 +101,15 @@ impl AppCtx {
     pub fn build(cli: &Cli) -> Result<Self, CtxError> {
         let global = GlobalConfig::read_from(cli.config.as_deref())?;
         let profile = read_profile(global, &cli.profile)?;
-        Self::from_profile(profile, cli.no_cache)
+        Self::from_profile(profile)
     }
 
     /// Builds an [`AppCtx`] from an already-resolved [`ProfileConfig`] (e.g.
     /// one just created by an interactive `configure` prompt).
-    pub fn from_profile(profile: ProfileConfig, no_cache: bool) -> Result<Self, CtxError> {
+    pub fn from_profile(profile: ProfileConfig) -> Result<Self, CtxError> {
         profile.ensure_dirs()?;
         let conn = db::prepare_database(&profile.db_file_path())?;
-        let cache_dir = (!no_cache).then_some(profile.global_config.dirs.cache.as_path());
-        let http = HttpClient::new(cache_dir)?;
+        let http = HttpClient::new()?;
         let sources = sources::default_sources(&source_config(&profile.global_config));
 
         Ok(Self {

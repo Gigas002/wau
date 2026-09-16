@@ -24,8 +24,8 @@ use serde::Serialize;
 
 use crate::{
     cli::{
-        CacheCommand, Cli, Command, InitArgs, InstallArgs, ListFormat, ProfileCommand, RemoveArgs,
-        SearchArgs, SyncArgs,
+        Cli, Command, InitArgs, InstallArgs, ListFormat, ProfileCommand, RemoveArgs, SearchArgs,
+        SyncArgs,
     },
     ctx::{self, AppCtx, CtxError},
     output::{any_errors, format_results},
@@ -65,10 +65,6 @@ pub async fn run(cli: &Cli) -> Result<i32, AppError> {
         Command::List(args) => cmd_list(cli, &args.addons, args.format).await,
         Command::Info(args) => {
             cmd_list(cli, std::slice::from_ref(&args.addon), ListFormat::Detailed).await
-        }
-        Command::Cache(CacheCommand::Clear) => {
-            cmd_cache_clear(cli).await?;
-            Ok(0)
         }
         Command::Profile(ProfileCommand::Erase) => {
             cmd_profile_erase(cli)?;
@@ -112,7 +108,7 @@ async fn ensure_ctx_bootstrap(cli: &Cli) -> Result<AppCtx, AppError> {
             println!("Profile '{}' isn't configured yet.", cli.profile);
             let mut global = GlobalConfig::read_from(cli.config.as_deref())?;
             let profile = configure_profile_interactive(&mut global, &cli.profile).await?;
-            Ok(AppCtx::from_profile(profile, cli.no_cache)?)
+            Ok(AppCtx::from_profile(profile)?)
         }
         Err(e) => Err(e.into()),
     }
@@ -174,7 +170,7 @@ async fn configure_profile_interactive(
 }
 
 async fn run_github_oauth_flow() -> Result<String, AppError> {
-    let http = HttpClient::new(None)?;
+    let http = HttpClient::new()?;
     let auth = GitHubAuth::new();
     let codes = auth.get_codes(&http).await?;
     println!(
@@ -534,15 +530,8 @@ async fn cmd_list(cli: &Cli, addons: &[String], format: ListFormat) -> Result<i3
 }
 
 // ============================================================================
-// cache / profile / stats
+// profile / stats
 // ============================================================================
-
-async fn cmd_cache_clear(cli: &Cli) -> Result<(), AppError> {
-    let global = GlobalConfig::read_from(cli.config.as_deref())?;
-    let http = HttpClient::new(Some(&global.dirs.cache))?;
-    http.clear_cache().await?;
-    Ok(())
-}
 
 fn cmd_profile_erase(cli: &Cli) -> Result<(), AppError> {
     let global = GlobalConfig::read_from(cli.config.as_deref())?;

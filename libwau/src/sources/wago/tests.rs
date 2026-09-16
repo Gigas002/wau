@@ -48,7 +48,7 @@ async fn resolve_prefers_stable_unless_any_release_type() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let candidate = crate::sources::resolve_one(
         &resolver(&server),
         &http,
@@ -77,7 +77,7 @@ async fn resolve_any_release_type_picks_most_recent_channel() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let mut d = defn("some-addon");
     d.strategies.any_release_type = true;
     let candidate = crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &d)
@@ -97,7 +97,7 @@ async fn resolve_empty_recent_release_is_files_not_matching() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let err = crate::sources::resolve_one(
         &resolver(&server),
         &http,
@@ -122,7 +122,7 @@ async fn resolve_404_is_nonexistent() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let err =
         crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("nope"))
             .await
@@ -132,7 +132,7 @@ async fn resolve_404_is_nonexistent() {
 
 #[tokio::test]
 async fn resolve_errors_for_flavour_with_no_wago_mapping() {
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let server = mockito::Server::new_async().await;
     let err = crate::sources::resolve_one(
         &resolver(&server),

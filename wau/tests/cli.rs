@@ -161,19 +161,6 @@ fn remove_of_a_never_installed_addon_reports_not_installed() {
 
 #[test]
 #[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
-fn cache_clear_creates_an_isolated_cache_and_succeeds() {
-    let tmp = env_copy("retail");
-    let output = wau_configured(&tmp, &["cache", "clear"]);
-
-    assert!(output.status.success(), "{}", stderr(&output));
-    assert!(
-        tmp.path().join("cache").join("http_cache.sqlite").exists(),
-        "cache should have been created inside the environment's own dir, not ~/.cache/wau"
-    );
-}
-
-#[test]
-#[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
 fn init_with_an_empty_addon_dir_is_a_no_op() {
     let tmp = env_copy("retail");
     let output = wau_configured(&tmp, &["init", "--auto"]);

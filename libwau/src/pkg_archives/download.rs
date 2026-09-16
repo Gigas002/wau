@@ -14,7 +14,7 @@ use std::{
 use tokio::sync::Mutex as AsyncMutex;
 use url::Url;
 
-use crate::http::{CacheTtl, HttpClient, HttpError};
+use crate::http::{HttpClient, HttpError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DownloadError {
@@ -67,8 +67,6 @@ impl DownloadLocks {
 
 /// Downloads `download_url` to a unique file under `temp_dir`, returning its
 /// path. `file://` URLs are returned directly without any network I/O.
-/// Downloads are cached indefinitely, which relies on resolvers returning
-/// version-specific/immutable URLs.
 pub async fn download_pkg_archive(
     client: &HttpClient,
     locks: &DownloadLocks,
@@ -83,9 +81,7 @@ pub async fn download_pkg_archive(
 
     let _guard = locks.acquire(download_url).await;
 
-    let response = client
-        .get(download_url, headers, CacheTtl::Indefinite)
-        .await?;
+    let response = client.get(download_url, headers).await?;
     if !(200..300).contains(&response.status) {
         return Err(DownloadError::Status {
             status: response.status,

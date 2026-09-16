@@ -173,7 +173,7 @@ fn file_uri_to_path_round_trips_absolute_path() {
 
 #[tokio::test]
 async fn download_pkg_archive_short_circuits_file_uri() {
-    let client = HttpClient::new(None).unwrap();
+    let client = HttpClient::new().unwrap();
     let locks = DownloadLocks::new();
     let dir = tempfile::tempdir().unwrap();
 
@@ -199,7 +199,7 @@ async fn download_pkg_archive_fetches_and_writes_body() {
         .create_async()
         .await;
 
-    let client = HttpClient::new(None).unwrap();
+    let client = HttpClient::new().unwrap();
     let locks = DownloadLocks::new();
     let dir = tempfile::tempdir().unwrap();
 
@@ -226,7 +226,7 @@ async fn download_pkg_archive_errors_on_failure_status() {
         .create_async()
         .await;
 
-    let client = HttpClient::new(None).unwrap();
+    let client = HttpClient::new().unwrap();
     let locks = DownloadLocks::new();
     let dir = tempfile::tempdir().unwrap();
 
@@ -257,7 +257,7 @@ async fn concurrent_downloads_of_same_url_both_succeed_without_corrupting_each_o
         .create_async()
         .await;
 
-    let client = HttpClient::new(None).unwrap();
+    let client = HttpClient::new().unwrap();
     let locks = DownloadLocks::new();
     let dir = tempfile::tempdir().unwrap();
     let url = format!("{}/addon.zip", server.url());

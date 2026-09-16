@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests;
 
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ use url::Url;
 
 use crate::{
     config::SecretString,
-    http::{CacheTtl, HttpClient},
+    http::HttpClient,
     model::{ChangelogFormat, Defn, Flavour, HeadersIntent, SourceMetadata, Strategy},
     results::{AnyOutcome, Failure, InternalError, ManagerError},
     sources::{PkgCandidate, Resolver},
@@ -147,9 +147,7 @@ impl CurseForgeResolver {
 
         if is_numeric(&defn.alias) {
             let url = format!("{}/{}", self.mod_api_url(), defn.alias);
-            let response = http
-                .get(&url, &headers, CacheTtl::For(Duration::from_secs(15 * 60)))
-                .await?;
+            let response = http.get(&url, &headers).await?;
             if response.status == 404 {
                 return Err(ManagerError::PkgNonexistent.into());
             }
@@ -166,13 +164,7 @@ impl CurseForgeResolver {
             url.query_pairs_mut()
                 .append_pair("gameId", &WOW_GAME_ID.to_string())
                 .append_pair("slug", &defn.alias);
-            let response = http
-                .get(
-                    url.as_str(),
-                    &headers,
-                    CacheTtl::For(Duration::from_secs(15 * 60)),
-                )
-                .await?;
+            let response = http.get(url.as_str(), &headers).await?;
             if !(200..300).contains(&response.status) {
                 return Err(
                     InternalError::new(format!("HTTP {} for {url}", response.status)).into(),
@@ -213,13 +205,7 @@ impl CurseForgeResolver {
             fetched_single = true;
         }
 
-        let response = http
-            .get(
-                &files_url,
-                &headers,
-                CacheTtl::For(Duration::from_secs(3600)),
-            )
-            .await?;
+        let response = http.get(&files_url, &headers).await?;
         if !(200..300).contains(&response.status) {
             return Err(
                 InternalError::new(format!("HTTP {} for {files_url}", response.status)).into(),
@@ -253,14 +239,7 @@ impl CurseForgeResolver {
         let ids: Vec<u64> = numeric_ids.iter().filter_map(|s| s.parse().ok()).collect();
         let body = serde_json::to_vec(&ModIdsRequest { mod_ids: &ids }).unwrap_or_default();
 
-        let response = http
-            .post(
-                self.mod_api_url(),
-                &headers,
-                body,
-                CacheTtl::For(Duration::from_secs(5 * 60)),
-            )
-            .await?;
+        let response = http.post(self.mod_api_url(), &headers, body).await?;
         if !(200..300).contains(&response.status) {
             return Err(InternalError::new(format!(
                 "HTTP {} for {}",
@@ -496,7 +475,7 @@ impl Resolver for CurseForgeResolver {
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
-        let response = http.get(url, &headers, CacheTtl::Indefinite).await?;
+        let response = http.get(url, &headers).await?;
         if !(200..300).contains(&response.status) {
             return Err(InternalError::new(format!("HTTP {} for {url}", response.status)).into());
         }

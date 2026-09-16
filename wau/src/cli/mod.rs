@@ -17,10 +17,6 @@ mod tests;
     disable_help_subcommand = true
 )]
 pub struct Cli {
-    /// Bypass the on-disk HTTP response cache for this invocation.
-    #[arg(long, global = true)]
-    pub no_cache: bool,
-
     /// Path to `config.toml`, overriding the platform-conventional config
     /// dir (`profiles/` is resolved as its sibling directory). Mainly for
     /// integration tests that need an isolated config location.
@@ -55,20 +51,11 @@ pub enum Command {
     /// Show detailed info for one installed addon (alias for `list -f detailed`).
     #[command(hide = true)]
     Info(InfoArgs),
-    /// Manage the on-disk HTTP response cache.
-    #[command(subcommand)]
-    Cache(CacheCommand),
     /// Manage profiles (configured WoW installations).
     #[command(subcommand)]
     Profile(ProfileCommand),
     /// Print the active profile config, all profile names, and source metadata as JSON.
     Stats,
-}
-
-#[derive(Debug, Subcommand)]
-pub enum CacheCommand {
-    /// Clear the on-disk HTTP response cache.
-    Clear,
 }
 
 #[derive(Debug, Subcommand)]

@@ -179,9 +179,7 @@ async fn default_get_changelog<R: Resolver + ?Sized>(
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
-        let response = http
-            .get(url, &headers, crate::http::CacheTtl::Indefinite)
-            .await?;
+        let response = http.get(url, &headers).await?;
         return String::from_utf8(response.body).map_err(|e| InternalError::new(e).into());
     }
     Err(InternalError::new(format!("unsupported changelog URL scheme: {url}")).into())

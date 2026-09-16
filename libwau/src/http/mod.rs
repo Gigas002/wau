@@ -1,31 +1,17 @@
-//! HTTP client + on-disk response cache, backed by `reqwest` and a small
-//! `rusqlite`-based cache store.
+//! HTTP client, backed by `reqwest`.
 
-use std::{sync::Arc, time::Duration};
-
-mod cache;
+use std::time::Duration;
 
 #[cfg(test)]
 mod tests;
 
-pub use cache::CachedResponse;
-
-/// Every call site picks a caching policy explicitly — nothing is cached
-/// unless the caller passes one.
-#[derive(Debug, Clone, Copy)]
-pub enum CacheTtl {
-    /// Bypass the cache entirely for this request.
-    Never,
-    /// Cache for a fixed duration.
-    For(Duration),
-    /// Cache forever once fetched — relies on the URL being
-    /// version-specific/immutable (used for downloads and changelogs).
-    Indefinite,
+/// A fetched HTTP response.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HttpResponse {
+    pub status: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
 }
-
-/// Status codes worth caching: 200 (OK), 206 (Partial Content — GitHub ranged
-/// reads), 501 (Not Implemented — GitHub mislabels out-of-range as this).
-const ALLOWED_CACHE_STATUSES: [u16; 3] = [200, 206, 501];
 
 #[derive(Debug, thiserror::Error)]
 pub enum HttpError {
@@ -49,26 +35,13 @@ fn user_agent() -> String {
 pub struct HttpClient {
     default: reqwest::Client,
     cloudflare_compat: reqwest::Client,
-    cache: Option<Arc<cache::Cache>>,
 }
 
 impl HttpClient {
-    /// `cache_dir = None` disables the on-disk cache entirely.
-    pub fn new(cache_dir: Option<&std::path::Path>) -> Result<Self, HttpError> {
-        let cache = cache_dir.and_then(|dir| cache::Cache::open(dir).ok().map(Arc::new));
+    pub fn new() -> Result<Self, HttpError> {
         Ok(Self {
             default: build_client(false)?,
             cloudflare_compat: build_client(true)?,
-            cache,
-        })
-    }
-
-    #[cfg(test)]
-    fn with_in_memory_cache() -> Result<Self, HttpError> {
-        Ok(Self {
-            default: build_client(false)?,
-            cloudflare_compat: build_client(true)?,
-            cache: Some(Arc::new(cache::Cache::open_in_memory().unwrap())),
         })
     }
 
@@ -76,10 +49,8 @@ impl HttpClient {
         &self,
         url: &str,
         headers: &[(&str, &str)],
-        ttl: CacheTtl,
-    ) -> Result<CachedResponse, HttpError> {
-        self.request(reqwest::Method::GET, url, headers, None, ttl)
-            .await
+    ) -> Result<HttpResponse, HttpError> {
+        self.request(reqwest::Method::GET, url, headers, None).await
     }
 
     pub async fn post(
@@ -87,27 +58,9 @@ impl HttpClient {
         url: &str,
         headers: &[(&str, &str)],
         body: Vec<u8>,
-        ttl: CacheTtl,
-    ) -> Result<CachedResponse, HttpError> {
-        self.request(reqwest::Method::POST, url, headers, Some(body), ttl)
+    ) -> Result<HttpResponse, HttpError> {
+        self.request(reqwest::Method::POST, url, headers, Some(body))
             .await
-    }
-
-    /// Clears every cached response.
-    pub async fn clear_cache(&self) -> Result<(), HttpError> {
-        let Some(cache) = self.cache.clone() else {
-            return Ok(());
-        };
-        tokio::task::spawn_blocking(move || cache.clear())
-            .await
-            .map_err(|_| HttpError::Status {
-                status: 0,
-                url: "cache clear".to_owned(),
-            })?
-            .map_err(|_| HttpError::Status {
-                status: 0,
-                url: "cache clear".to_owned(),
-            })
     }
 
     async fn request(
@@ -116,14 +69,7 @@ impl HttpClient {
         url: &str,
         headers: &[(&str, &str)],
         body: Option<Vec<u8>>,
-        ttl: CacheTtl,
-    ) -> Result<CachedResponse, HttpError> {
-        let key = cache_key(method.as_str(), url, headers);
-
-        if let Some(cached) = self.cache_get(matches!(ttl, CacheTtl::Never), &key).await {
-            return Ok(cached);
-        }
-
+    ) -> Result<HttpResponse, HttpError> {
         let response = self
             .send(&self.default, &method, url, headers, body.as_deref())
             .await?;
@@ -148,31 +94,7 @@ impl HttpClient {
             response
         };
 
-        if ALLOWED_CACHE_STATUSES.contains(&response.status) {
-            self.cache_put(&key, response.clone(), ttl).await;
-        }
-
         Ok(response)
-    }
-
-    async fn cache_get(&self, never: bool, key: &str) -> Option<CachedResponse> {
-        if never {
-            return None;
-        }
-        let cache = self.cache.clone()?;
-        let key = key.to_owned();
-        tokio::task::spawn_blocking(move || cache.get(&key))
-            .await
-            .ok()
-            .flatten()
-    }
-
-    async fn cache_put(&self, key: &str, response: CachedResponse, ttl: CacheTtl) {
-        let Some(cache) = self.cache.clone() else {
-            return;
-        };
-        let key = key.to_owned();
-        let _ = tokio::task::spawn_blocking(move || cache.put(&key, &response, ttl)).await;
     }
 
     async fn send(
@@ -182,7 +104,7 @@ impl HttpClient {
         url: &str,
         headers: &[(&str, &str)],
         body: Option<&[u8]>,
-    ) -> Result<CachedResponse, HttpError> {
+    ) -> Result<HttpResponse, HttpError> {
         let mut builder = client.request(method.clone(), url);
         for (k, v) in headers {
             builder = builder.header(*k, *v);
@@ -200,23 +122,12 @@ impl HttpClient {
             .collect();
         let body = response.bytes().await?.to_vec();
 
-        Ok(CachedResponse {
+        Ok(HttpResponse {
             status,
             headers,
             body,
         })
     }
-}
-
-fn cache_key(method: &str, url: &str, headers: &[(&str, &str)]) -> String {
-    let mut sorted: Vec<(&str, &str)> = headers.to_vec();
-    sorted.sort_unstable();
-    let headers_str: String = sorted
-        .iter()
-        .map(|(k, v)| format!("{k}:{v}"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    format!("{method} {url}\n{headers_str}")
 }
 
 fn build_client(cloudflare_compat: bool) -> Result<reqwest::Client, HttpError> {

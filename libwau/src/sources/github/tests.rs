@@ -90,7 +90,7 @@ async fn resolve_by_alias_matches_zip_contents_and_returns_candidate() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let r = resolver(&server);
 
     let candidate = crate::sources::resolve_one(&r, &http, Flavour::Mainline, &defn("Owner/Repo"))
@@ -132,7 +132,7 @@ async fn resolve_by_numeric_id_uses_repositories_endpoint() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let r = resolver(&server);
 
     let mut d = defn("42");
@@ -152,7 +152,7 @@ async fn resolve_404_repo_is_nonexistent() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let r = resolver(&server);
 
     let err = crate::sources::resolve_one(&r, &http, Flavour::Mainline, &defn("Owner/Repo"))
@@ -177,7 +177,7 @@ async fn resolve_404_releases_is_files_missing() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let r = resolver(&server);
 
     let err = crate::sources::resolve_one(&r, &http, Flavour::Mainline, &defn("Owner/Repo"))
@@ -220,7 +220,7 @@ async fn resolve_version_eq_uses_tags_endpoint() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let r = resolver(&server);
     let d = defn("Owner/Repo").with_version("v2.0.0");
 
@@ -264,7 +264,7 @@ async fn resolve_skips_draft_releases() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let r = resolver(&server);
 
     let candidate = crate::sources::resolve_one(&r, &http, Flavour::Mainline, &defn("Owner/Repo"))
@@ -309,7 +309,7 @@ async fn resolve_prefers_stable_over_prerelease_unless_any_release_type() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let r = resolver(&server);
 
     let candidate = crate::sources::resolve_one(&r, &http, Flavour::Mainline, &defn("Owner/Repo"))
@@ -354,7 +354,7 @@ async fn resolve_skips_nolib_assets() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let r = resolver(&server);
 
     let candidate = crate::sources::resolve_one(&r, &http, Flavour::Mainline, &defn("Owner/Repo"))
@@ -413,7 +413,7 @@ async fn resolve_matches_via_release_json() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let r = resolver(&server);
 
     let candidate = crate::sources::resolve_one(&r, &http, Flavour::Mainline, &defn("Owner/Repo"))
@@ -466,7 +466,7 @@ async fn resolve_release_json_skips_nolib_subrelease() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let r = resolver(&server);
 
     let err = crate::sources::resolve_one(&r, &http, Flavour::Mainline, &defn("Owner/Repo"))
@@ -524,7 +524,7 @@ async fn resolve_uses_ranged_partial_zip_when_server_honours_range() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let r = resolver(&server);
 
     let candidate = crate::sources::resolve_one(&r, &http, Flavour::Mainline, &defn("Owner/Repo"))
@@ -571,7 +571,7 @@ async fn resolve_any_flavour_matches_non_current_flavour_toc() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let r = resolver(&server);
 
     let mut d = defn("Owner/Repo");

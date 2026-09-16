@@ -30,7 +30,7 @@ fn from_profile_assembles_a_working_ctx() {
     let profile =
         ProfileConfig::new(global, "default", addon_dir.path(), Some(Flavour::Mainline)).unwrap();
 
-    let app_ctx = AppCtx::from_profile(profile, true).unwrap();
+    let app_ctx = AppCtx::from_profile(profile).unwrap();
 
     assert_eq!(app_ctx.profile.product.flavour(), Flavour::Mainline);
     assert_eq!(app_ctx.profile.addon_dir, addon_dir.path());

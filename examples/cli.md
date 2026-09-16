@@ -23,7 +23,6 @@ Commands print plain synchronous output for now; a progress-bar renderer is futu
 ## Global flags
 
 - `--version`
-- `--no-cache` — bypass the on-disk HTTP response cache for this invocation
 - `--config <PATH>` — read `config.toml` from `<PATH>` instead of the platform-conventional
   config dir; `profiles/` is then resolved as `<PATH>`'s sibling directory. Mainly for
   integration tests that need an isolated config location.
@@ -95,10 +94,6 @@ multi-select list; confirmed selections are installed.
 ### `wau list [ADDON...]` (alias: `wau info` for `-f detailed`)
 
 Lists installed addons. `-f` / `--format {simple,detailed,json}`.
-
-### `wau cache clear`
-
-Clears the on-disk HTTP response cache.
 
 ### `wau profile erase`
 

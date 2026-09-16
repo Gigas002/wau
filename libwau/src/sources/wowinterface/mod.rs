@@ -8,14 +8,14 @@
 #[cfg(test)]
 mod tests;
 
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use url::Url;
 
 use crate::{
-    http::{CacheTtl, HttpClient},
+    http::HttpClient,
     model::{ChangelogFormat, Defn, Flavour, SourceMetadata},
     results::{AnyOutcome, Failure, InternalError, ManagerError},
     sources::{PkgCandidate, Resolver},
@@ -222,10 +222,7 @@ impl Resolver for WowInterfaceResolver {
         }
 
         let url = format!("{}/{}.json", self.details_api_base(), unique_ids.join(","));
-        let response = match http
-            .get(&url, &[], CacheTtl::For(Duration::from_secs(15 * 60)))
-            .await
-        {
+        let response = match http.get(&url, &[]).await {
             Ok(r) => r,
             Err(e) => {
                 let err: Failure = e.into();

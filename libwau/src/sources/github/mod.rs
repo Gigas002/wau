@@ -13,7 +13,7 @@
 #[cfg(test)]
 mod tests;
 
-use std::{io::Cursor, time::Duration};
+use std::io::Cursor;
 
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -21,7 +21,7 @@ use url::Url;
 
 use crate::{
     config::SecretString,
-    http::{CacheTtl, HttpClient},
+    http::HttpClient,
     model::{ChangelogFormat, Defn, Flavour, HeadersIntent, SourceMetadata, Strategy},
     results::{AnyOutcome, Failure, InternalError, ManagerError},
     sources::{PkgCandidate, Resolver},
@@ -189,7 +189,7 @@ impl GitHubResolver {
         let mut range_headers = headers.to_vec();
         range_headers.push(("Range", "bytes=-25000"));
 
-        let response = http.get(url, &range_headers, CacheTtl::Indefinite).await?;
+        let response = http.get(url, &range_headers).await?;
 
         if response.status == 200 {
             return Ok(Some((response.body, true)));
@@ -209,7 +209,7 @@ impl GitHubResolver {
 
         // 416/501 (GitHub mislabels out-of-range as 501) or an unparsable
         // partial read: fall back to a full download.
-        let full = http.get(url, headers, CacheTtl::Indefinite).await?;
+        let full = http.get(url, headers).await?;
         if !(200..300).contains(&full.status) {
             return Ok(None);
         }
@@ -351,7 +351,7 @@ impl GitHubResolver {
         headers: &[(&str, &str)],
         url: &str,
     ) -> AnyOutcome<Option<(Vec<u8>, bool)>> {
-        let full = http.get(url, headers, CacheTtl::Indefinite).await?;
+        let full = http.get(url, headers).await?;
         if !(200..300).contains(&full.status) {
             return Ok(None);
         }
@@ -371,13 +371,7 @@ impl GitHubResolver {
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
 
-        let response = http
-            .get(
-                &release_json_asset.url,
-                &download_headers,
-                CacheTtl::For(Duration::from_secs(86_400)),
-            )
-            .await?;
+        let response = http.get(&release_json_asset.url, &download_headers).await?;
         if !(200..300).contains(&response.status) {
             return Err(InternalError::new(format!(
                 "HTTP {} for {}",
@@ -511,13 +505,7 @@ impl Resolver for GitHubResolver {
             format!("{}/repos/{}", self.api_base(), defn.alias)
         };
 
-        let project_response = http
-            .get(
-                &repo_url,
-                &headers,
-                CacheTtl::For(Duration::from_secs(3600)),
-            )
-            .await?;
+        let project_response = http.get(&repo_url, &headers).await?;
         if project_response.status == 404 {
             return Err(ManagerError::PkgNonexistent.into());
         }
@@ -536,13 +524,7 @@ impl Resolver for GitHubResolver {
             None => format!("{repo_url}/releases?per_page=10"),
         };
 
-        let releases_response = http
-            .get(
-                &release_url,
-                &headers,
-                CacheTtl::For(Duration::from_secs(5 * 60)),
-            )
-            .await?;
+        let releases_response = http.get(&release_url, &headers).await?;
         if releases_response.status == 404 {
             return Err(ManagerError::PkgFilesMissing {
                 reason: "no releases found".to_owned(),

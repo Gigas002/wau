@@ -8,7 +8,7 @@ use std::{collections::HashMap, time::Duration};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    http::{CacheTtl, HttpClient},
+    http::HttpClient,
     results::{Failure, InternalError},
 };
 
@@ -118,7 +118,6 @@ impl GitHubAuth {
                 &format!("{}/login/device/code", self.base()),
                 &[("Accept", "application/json")],
                 body,
-                CacheTtl::Never,
             )
             .await?;
         if !(200..300).contains(&response.status) {
@@ -151,7 +150,6 @@ impl GitHubAuth {
                     &format!("{}/login/oauth/access_token", self.base()),
                     &[("Accept", "application/json")],
                     body,
-                    CacheTtl::Never,
                 )
                 .await?;
             if !(200..300).contains(&response.status) {
@@ -191,11 +189,7 @@ impl GitHubAuth {
         }
 
         let response = http
-            .get(
-                &format!("{}/rate_limit", self.api_base()),
-                &headers,
-                CacheTtl::Never,
-            )
+            .get(&format!("{}/rate_limit", self.api_base()), &headers)
             .await?;
         if !(200..300).contains(&response.status) {
             return Err(InternalError::new(format!(

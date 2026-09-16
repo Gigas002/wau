@@ -8,8 +8,7 @@ fn parse(args: &[&str]) -> Cli {
 
 #[test]
 fn global_flags_parse() {
-    let cli = parse(&["--no-cache", "-p", "retail", "stats"]);
-    assert!(cli.no_cache);
+    let cli = parse(&["-p", "retail", "stats"]);
     assert_eq!(cli.profile, "retail");
 }
 
@@ -109,12 +108,6 @@ fn list_format_accepts_detailed_and_json() {
         _ => panic!("wrong command"),
     }
     assert!(Cli::try_parse_from(["wau", "list", "-f", "bogus"]).is_err());
-}
-
-#[test]
-fn cache_clear_subcommand_parses() {
-    let cli = parse(&["cache", "clear"]);
-    assert!(matches!(cli.command, Command::Cache(CacheCommand::Clear)));
 }
 
 #[test]

@@ -5,13 +5,13 @@
 //! Generating the catalogue data itself is out of scope here — this only
 //! consumes the already-published, pre-built catalogue JSON.
 
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 use crate::{
-    http::{CacheTtl, HttpClient},
+    http::HttpClient,
     model::Flavour,
     results::{Failure, InternalError},
 };
@@ -199,15 +199,9 @@ impl ComputedCatalogue {
     }
 }
 
-/// Fetches and parses the published aggregate catalogue, cached for 4 hours.
+/// Fetches and parses the published aggregate catalogue.
 pub async fn synchronise(http: &HttpClient) -> Result<ComputedCatalogue, Failure> {
-    let response = http
-        .get(
-            &catalogue_url(),
-            &[],
-            CacheTtl::For(Duration::from_secs(4 * 3600)),
-        )
-        .await?;
+    let response = http.get(&catalogue_url(), &[]).await?;
     if !(200..300).contains(&response.status) {
         return Err(InternalError::new(format!("HTTP {} for catalogue", response.status)).into());
     }

@@ -48,7 +48,7 @@ async fn resolve_by_numeric_id_fetches_mod_directly() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let candidate =
         crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("12345"))
             .await
@@ -68,7 +68,7 @@ async fn resolve_by_numeric_id_404_is_nonexistent() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let err =
         crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("12345"))
             .await
@@ -98,7 +98,7 @@ async fn resolve_by_slug_searches_and_takes_single_match() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let candidate = crate::sources::resolve_one(
         &resolver(&server),
         &http,
@@ -122,7 +122,7 @@ async fn resolve_by_slug_no_match_is_nonexistent() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let err =
         crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("nope"))
             .await
@@ -154,7 +154,7 @@ async fn resolve_picks_highest_id_among_matching_flavour_files() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let candidate =
         crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("1"))
             .await
@@ -173,7 +173,7 @@ async fn resolve_falls_back_to_any_flavour_when_strategy_set() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let mut d = defn("1");
     d.strategies.any_flavour = true;
 
@@ -194,7 +194,7 @@ async fn resolve_without_any_flavour_errors_when_no_match() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let err = crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("1"))
         .await
         .unwrap_err();
@@ -216,7 +216,7 @@ async fn resolve_prefers_stable_over_beta_unless_any_release_type() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let candidate =
         crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("1"))
             .await
@@ -236,7 +236,7 @@ async fn resolve_allows_beta_when_no_stable_exists() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let candidate =
         crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("1"))
             .await
@@ -256,7 +256,7 @@ async fn resolve_excludes_expose_as_alternative_files() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let candidate =
         crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("1"))
             .await
@@ -280,7 +280,7 @@ async fn resolve_errors_when_download_url_missing() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let err = crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("1"))
         .await
         .unwrap_err();
@@ -307,7 +307,7 @@ async fn resolve_reports_forbidden_distribution_reason() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let err = crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("1"))
         .await
         .unwrap_err();
@@ -340,7 +340,7 @@ async fn version_eq_uses_latest_files_when_file_id_present() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let d = defn("1").with_version("v5_5");
     let candidate = crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &d)
         .await
@@ -365,7 +365,7 @@ async fn version_eq_fetches_specific_file_when_not_in_latest_files() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let d = defn("1").with_version("vOld_77");
     let candidate = crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &d)
         .await
@@ -392,7 +392,7 @@ async fn resolve_includes_only_required_dependencies() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let candidate =
         crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("1"))
             .await
@@ -424,7 +424,7 @@ async fn resolve_batches_numeric_ids_into_one_post() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let r = resolver(&server);
     let defns = vec![defn("1"), defn("2")];
     let results = Resolver::resolve(&r, &http, Flavour::Mainline, &defns).await;
@@ -444,7 +444,7 @@ async fn resolve_batch_failure_applies_same_error_to_every_defn() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let r = resolver(&server);
     let defns = vec![defn("1"), defn("2")];
     let results = Resolver::resolve(&r, &http, Flavour::Mainline, &defns).await;

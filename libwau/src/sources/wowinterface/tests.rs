@@ -31,7 +31,7 @@ async fn resolve_batches_and_matches_by_uid() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let candidate = crate::sources::resolve_one(
         &resolver(&server),
         &http,
@@ -56,7 +56,7 @@ async fn resolve_pending_file_is_files_missing() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let err = crate::sources::resolve_one(
         &resolver(&server),
         &http,
@@ -84,7 +84,7 @@ async fn resolve_unknown_uid_in_batch_response_is_nonexistent() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let err =
         crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("99999"))
             .await
@@ -101,7 +101,7 @@ async fn resolve_404_batch_falls_back_to_nonexistent_for_all() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let err =
         crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("12345"))
             .await
@@ -111,7 +111,7 @@ async fn resolve_404_batch_falls_back_to_nonexistent_for_all() {
 
 #[tokio::test]
 async fn resolve_no_numeric_alias_is_nonexistent_without_request() {
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let server = mockito::Server::new_async().await;
     let err = crate::sources::resolve_one(
         &resolver(&server),

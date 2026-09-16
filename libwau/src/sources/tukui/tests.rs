@@ -33,7 +33,7 @@ async fn resolve_matches_flavour_via_patch_list() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let candidate =
         crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("elvui"))
             .await
@@ -57,7 +57,7 @@ async fn resolve_errors_when_flavour_not_in_patch_list() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let err = crate::sources::resolve_one(
         &resolver(&server),
         &http,
@@ -81,7 +81,7 @@ async fn resolve_404_is_nonexistent() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let err =
         crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("nope"))
             .await
@@ -91,7 +91,7 @@ async fn resolve_404_is_nonexistent() {
 
 #[tokio::test]
 async fn unsupported_strategy_is_rejected() {
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let mut server = mockito::Server::new_async().await;
     server
         .mock("GET", "/addon/elvui")

@@ -144,7 +144,7 @@ impl Harness {
             addon_dir,
             cache_dir,
             conn: db::prepare_in_memory().unwrap(),
-            http: HttpClient::new(None).unwrap(),
+            http: HttpClient::new().unwrap(),
             locks: DownloadLocks::new(),
             sources,
         }

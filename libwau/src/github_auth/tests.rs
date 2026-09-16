@@ -28,7 +28,7 @@ async fn get_codes_returns_parsed_response() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let codes = auth(&server).get_codes(&http).await.unwrap();
     assert_eq!(codes.user_code, "ABCD-1234");
     assert_eq!(codes.interval, 5);
@@ -43,7 +43,7 @@ async fn get_codes_errors_on_bad_status() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let err = auth(&server).get_codes(&http).await.unwrap_err();
     assert!(matches!(err, Failure::Internal(_)));
 }
@@ -69,7 +69,7 @@ async fn poll_for_access_token_retries_on_authorization_pending_then_succeeds() 
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let token = auth(&server)
         .poll_for_access_token(&http, "dev123", Duration::from_millis(1))
         .await
@@ -87,7 +87,7 @@ async fn poll_for_access_token_errors_on_other_error_codes() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     let err = auth(&server)
         .poll_for_access_token(&http, "dev123", Duration::from_millis(1))
         .await
@@ -106,7 +106,7 @@ async fn get_rate_limit_status_includes_auth_header_when_token_present() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     auth(&server)
         .get_rate_limit_status(&http, Some("tok-123"))
         .await
@@ -125,7 +125,7 @@ async fn get_rate_limit_status_omits_auth_header_without_token() {
         .create_async()
         .await;
 
-    let http = HttpClient::new(None).unwrap();
+    let http = HttpClient::new().unwrap();
     auth(&server)
         .get_rate_limit_status(&http, None)
         .await
