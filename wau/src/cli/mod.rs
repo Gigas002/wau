@@ -65,8 +65,6 @@ pub enum Command {
     /// Manage profiles (configured WoW installations).
     #[command(subcommand)]
     Profile(ProfileCommand),
-    /// Print the active profile config, all profile names, and source metadata as JSON.
-    Stats,
 }
 
 #[derive(Debug, Subcommand)]

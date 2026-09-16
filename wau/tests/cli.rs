@@ -88,50 +88,6 @@ fn stderr(output: &Output) -> String {
 
 #[test]
 #[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
-fn stats_reports_the_expected_flavour_and_addon_dir_per_environment() {
-    let cases = [
-        ("retail", "mainline", "_retail_/Interface/AddOns"),
-        (
-            "classic-era",
-            "vanilla_classic",
-            "_classic_era_/Interface/AddOns",
-        ),
-        (
-            "classic-mists",
-            "mists_classic",
-            "_classic_/Interface/AddOns",
-        ),
-        (
-            "custom-server",
-            "mainline",
-            "MyPrivateServer/Interface/AddOns",
-        ),
-    ];
-
-    for (env, flavour, addon_dir) in cases {
-        let tmp = env_copy(env);
-        let output = wau_configured(&tmp, &["stats"]);
-        assert!(
-            output.status.success(),
-            "{env}: wau stats failed: {}",
-            stderr(&output)
-        );
-
-        let json: serde_json::Value = serde_json::from_str(&stdout(&output))
-            .unwrap_or_else(|e| panic!("{env}: stats output wasn't JSON: {e}"));
-        assert_eq!(
-            json["active_profile_config"]["flavour"], flavour,
-            "{env}: unexpected flavour"
-        );
-        assert_eq!(
-            json["active_profile_config"]["addon_dir"], addon_dir,
-            "{env}: unexpected addon_dir"
-        );
-    }
-}
-
-#[test]
-#[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
 fn list_on_a_fresh_profile_prints_nothing_and_succeeds() {
     let tmp = env_copy("retail");
     let output = wau_configured(&tmp, &["list"]);

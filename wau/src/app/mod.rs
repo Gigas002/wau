@@ -2,7 +2,7 @@
 //! addon logic lives here beyond `Defn`/installed-package lookup glue;
 //! every actual operation delegates to `libwau`.
 
-use std::{collections::HashSet, path::PathBuf};
+use std::collections::HashSet;
 
 use libwau::{
     catalogue::{
@@ -12,13 +12,11 @@ use libwau::{
     config::{ConfigError, GlobalConfig, ProfileConfig},
     lockfile::Pkg,
     matchers,
-    model::{Defn, Flavour},
+    model::Defn,
     pkg_management,
     results::{Failure, ManagerError},
     sources::{PkgCandidate, Resolver},
 };
-
-use serde::Serialize;
 
 use crate::{
     cli::{
@@ -68,10 +66,6 @@ pub async fn run(cli: &Cli) -> Result<i32, AppError> {
         }
         Command::Profile(ProfileCommand::Erase) => {
             cmd_profile_erase(cli)?;
-            Ok(0)
-        }
-        Command::Stats => {
-            cmd_stats(cli)?;
             Ok(0)
         }
     }
@@ -554,7 +548,7 @@ async fn cmd_list(cli: &Cli, addons: &[String], format: ListFormat) -> Result<i3
 }
 
 // ============================================================================
-// profile / stats
+// profile
 // ============================================================================
 
 fn cmd_profile_erase(cli: &Cli) -> Result<(), AppError> {
@@ -562,71 +556,6 @@ fn cmd_profile_erase(cli: &Cli) -> Result<(), AppError> {
     let profile = ctx::resolve_profile(global, cli.profile.as_deref())
         .map_err(|e| describe_config_error(cli, e))?;
     profile.delete()?;
-    Ok(())
-}
-
-#[derive(Serialize)]
-struct StatsOutput {
-    active_profile: Option<String>,
-    profiles: Vec<String>,
-    active_profile_config: Option<StatsProfileConfig>,
-    global_config: StatsGlobalConfig,
-    sources: Vec<StatsSourceMeta>,
-}
-
-#[derive(Serialize)]
-struct StatsProfileConfig {
-    addon_dir: PathBuf,
-    flavour: Flavour,
-}
-
-#[derive(Serialize)]
-struct StatsGlobalConfig {
-    log_level: libwau::config::LogLevel,
-    dirs: libwau::config::Dirs,
-}
-
-#[derive(Serialize)]
-struct StatsSourceMeta {
-    #[serde(flatten)]
-    metadata: libwau::model::SourceMetadata,
-    disabled_reason: Option<String>,
-}
-
-fn cmd_stats(cli: &Cli) -> Result<(), AppError> {
-    let global = GlobalConfig::read_from(cli.config.as_deref())?;
-    let profiles = ProfileConfig::iter_profiles(&global);
-    let active_profile_config = ctx::resolve_profile(global.clone(), cli.profile.as_deref()).ok();
-    let sources = libwau::sources::default_sources(&ctx::source_config(&global));
-
-    let source_meta: Vec<StatsSourceMeta> = sources
-        .iter()
-        .map(|r| StatsSourceMeta {
-            metadata: r.metadata(),
-            disabled_reason: r.get_disabled_reason(),
-        })
-        .collect();
-
-    let output = StatsOutput {
-        active_profile: active_profile_config
-            .as_ref()
-            .map(|p| p.profile.clone())
-            .or_else(|| cli.profile.clone()),
-        profiles,
-        active_profile_config: active_profile_config.map(|p| StatsProfileConfig {
-            addon_dir: p.addon_dir,
-            flavour: p.product.flavour(),
-        }),
-        global_config: StatsGlobalConfig {
-            log_level: global.log_level,
-            dirs: global.dirs,
-        },
-        sources: source_meta,
-    };
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&output).unwrap_or_default()
-    );
     Ok(())
 }
 

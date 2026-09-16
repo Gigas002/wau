@@ -18,8 +18,8 @@ environment variables.
 - `wau/src/output/mod.rs` — result/`list`/search-result formatting, all `color: bool`-parameterized.
 - `wau/src/style.rs` — `owo-colors` wrappers everything in `output/` and most of `app/`'s direct
   `println!`s go through; `style::color_enabled()` (stdout `is_terminal()`, never an environment
-  variable) is the one place that decides whether to colorize. `list -f json`/`stats` are never
-  colorized — they're machine-readable output.
+  variable) is the one place that decides whether to colorize. `list -f json` is never
+  colorized — it's machine-readable output.
 - `wau/src/app/mod.rs` — command dispatch; `main` stays thin.
 
 All addon/DB/provider logic lives in `libwau`; `wau` only parses args, prompts, and prints.
@@ -130,10 +130,6 @@ Lists installed addons. `-f` / `--format {simple,detailed,json}`.
 ### `wau profile erase`
 
 Deletes the active profile's config and lock file. No confirmation prompt.
-
-### `wau stats`
-
-Prints the active profile config, all known profile names, and source metadata as JSON.
 
 ---
 

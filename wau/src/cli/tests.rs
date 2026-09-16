@@ -8,7 +8,7 @@ fn parse(args: &[&str]) -> Cli {
 
 #[test]
 fn global_flags_parse() {
-    let cli = parse(&["-p", "retail", "stats"]);
+    let cli = parse(&["-p", "retail", "list"]);
     assert_eq!(cli.profile.as_deref(), Some("retail"));
 }
 
@@ -17,14 +17,14 @@ fn no_profile_flag_leaves_it_unset() {
     // No implicit "default"-named profile — omitting `-p` means "figure it
     // out from what's configured" (see `ctx::resolve_profile`), not a
     // hardcoded name.
-    let cli = parse(&["stats"]);
+    let cli = parse(&["list"]);
     assert_eq!(cli.profile, None);
     assert_eq!(cli.config, None);
 }
 
 #[test]
 fn config_flag_parses_as_a_path() {
-    let cli = parse(&["--config", "/tmp/fixture/config.toml", "stats"]);
+    let cli = parse(&["--config", "/tmp/fixture/config.toml", "list"]);
     assert_eq!(
         cli.config,
         Some(std::path::PathBuf::from("/tmp/fixture/config.toml"))
@@ -33,7 +33,7 @@ fn config_flag_parses_as_a_path() {
 
 #[test]
 fn profile_flag_accepts_a_path_value() {
-    let cli = parse(&["-p", "/tmp/fixture/profile.toml", "stats"]);
+    let cli = parse(&["-p", "/tmp/fixture/profile.toml", "list"]);
     assert_eq!(cli.profile.as_deref(), Some("/tmp/fixture/profile.toml"));
 }
 
