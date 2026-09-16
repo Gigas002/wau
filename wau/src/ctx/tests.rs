@@ -34,7 +34,7 @@ fn from_profile_assembles_a_working_ctx() {
 
     assert_eq!(app_ctx.profile.product.flavour(), Flavour::Mainline);
     assert_eq!(app_ctx.profile.addon_dir, addon_dir.path());
-    assert!(db::get_all_pkgs(&app_ctx.conn).unwrap().is_empty());
+    assert!(app_ctx.lock.get_all_pkgs().is_empty());
 }
 
 #[test]
@@ -73,8 +73,8 @@ fn read_profile_reads_directly_from_a_toml_path() {
     assert_eq!(profile.profile, "fixture");
     assert_eq!(profile.config_file_path(), fixture_path);
     assert_eq!(
-        profile.db_file_path(),
-        fixture_path.with_extension("sqlite")
+        profile.lock_file_path(),
+        fixture_path.with_file_name("lock.toml")
     );
 }
 

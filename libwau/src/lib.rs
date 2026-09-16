@@ -1,10 +1,10 @@
 pub mod catalogue;
 pub mod config;
-pub mod db;
 pub mod error;
 pub mod fs;
 pub mod github_auth;
 pub mod http;
+pub mod lockfile;
 pub mod matchers;
 pub mod model;
 pub mod pkg_archives;

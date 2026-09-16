@@ -5,7 +5,7 @@ use chrono::{TimeZone, Utc};
 use super::*;
 use crate::{
     catalogue::{AddonKey, CatalogueEntry},
-    db::PkgFolder,
+    lockfile::PkgFolder,
     model::ChangelogFormat,
 };
 
@@ -160,20 +160,30 @@ fn get_unreconciled_folders_skips_tracked_and_untracked_without_toc() {
     write_toc(dir.path(), "Untracked", "Untracked.toc", "## Version: 1");
     std::fs::create_dir_all(dir.path().join("NoToc")).unwrap();
 
-    let conn = crate::db::prepare_in_memory().unwrap();
-    conn.execute(
-        "INSERT INTO pkg (source,id,slug,name,description,url,download_url,date_published,version,changelog_url) VALUES ('s','1','slug','name','','','',datetime('now'),'1','')",
-        [],
-    )
-    .unwrap();
-    conn.execute("INSERT INTO pkg_options (any_flavour,any_release_type,version_eq,pkg_source,pkg_id) VALUES (0,0,0,'s','1')", []).unwrap();
-    conn.execute(
-        "INSERT INTO pkg_folder (name,pkg_source,pkg_id) VALUES ('Tracked','s','1')",
-        [],
-    )
-    .unwrap();
+    let mut lock = crate::lockfile::LockFile::in_memory();
+    lock.insert_pkg(crate::lockfile::Pkg {
+        source: "s".into(),
+        id: "1".into(),
+        slug: "slug".into(),
+        name: "name".into(),
+        description: "".into(),
+        url: "".into(),
+        download_url: "".into(),
+        date_published: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        version: "1".into(),
+        changelog_url: "".into(),
+        options: crate::lockfile::PkgOptions {
+            any_flavour: false,
+            any_release_type: false,
+            version_eq: false,
+        },
+        folders: vec![PkgFolder {
+            name: "Tracked".into(),
+        }],
+        deps: vec![],
+    });
 
-    let unreconciled = get_unreconciled_folders(&conn, dir.path(), Flavour::Mainline);
+    let unreconciled = get_unreconciled_folders(&lock, dir.path(), Flavour::Mainline);
     let names: Vec<&str> = unreconciled.iter().map(|a| a.name.as_str()).collect();
     assert_eq!(names, vec!["Untracked"]);
 }
@@ -333,7 +343,7 @@ fn find_equivalent_pkg_defns_uses_catalogue_same_as_and_toc_keys() {
         date_published: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
         version: "1.0".into(),
         changelog_url: "".into(),
-        options: crate::db::PkgOptions {
+        options: crate::lockfile::PkgOptions {
             any_flavour: false,
             any_release_type: false,
             version_eq: false,
@@ -372,7 +382,7 @@ fn find_equivalent_pkg_defns_omits_packages_with_no_equivalents() {
         date_published: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
         version: "1.0".into(),
         changelog_url: "".into(),
-        options: crate::db::PkgOptions {
+        options: crate::lockfile::PkgOptions {
             any_flavour: false,
             any_release_type: false,
             version_eq: false,

@@ -10,12 +10,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rusqlite::Connection;
-
 use crate::{
-    db::{self, Pkg, PkgDep, PkgFolder, PkgOptions},
     fs as trash_fs,
     http::HttpClient,
+    lockfile::{LockFile, Pkg, PkgDep, PkgFolder, PkgOptions},
     model::{Defn, Flavour, HeadersIntent, Strategy},
     pkg_archives::{self, DownloadLocks},
     results::{AnyOutcome, Failure, InternalError, ManagerError, PkgRef},
@@ -26,7 +24,7 @@ use crate::{
 mod tests;
 
 /// The shared, read-only collaborators every orchestration function needs.
-/// `Connection` is passed separately since mutating operations need `&mut`.
+/// `LockFile` is passed separately since mutating operations need `&mut`.
 pub struct Ctx<'a> {
     pub http: &'a HttpClient,
     pub sources: &'a [Box<dyn Resolver>],
@@ -290,7 +288,7 @@ fn resolve_deps<'a>(
 // ============================================================================
 
 fn mutate_install(
-    conn: &mut Connection,
+    lock: &mut LockFile,
     addon_dir: &Path,
     defn: &Defn,
     candidate: &PkgCandidate,
@@ -300,8 +298,7 @@ fn mutate_install(
     let archive = pkg_archives::open_zip_archive(archive_path).map_err(InternalError::new)?;
     let folder_names: Vec<String> = archive.top_level_folders.iter().cloned().collect();
 
-    let conflicts =
-        db::find_pkgs_owning_folders(conn, &folder_names).map_err(InternalError::new)?;
+    let conflicts = lock.find_pkgs_owning_folders(&folder_names);
     if !conflicts.is_empty() {
         return Err(ManagerError::PkgConflictsWithInstalled {
             conflicting: conflicts.iter().map(pkg_to_ref).collect(),
@@ -334,9 +331,8 @@ fn mutate_install(
     archive.extract(addon_dir).map_err(InternalError::new)?;
 
     let pkg = build_pkg(defn, candidate, folder_names);
-    let tx = conn.transaction().map_err(InternalError::new)?;
-    db::insert_pkg(&tx, &pkg).map_err(InternalError::new)?;
-    tx.commit().map_err(InternalError::new)?;
+    lock.insert_pkg(pkg.clone());
+    lock.save().map_err(InternalError::new)?;
 
     Ok(Outcome::PkgInstalled {
         pkg,
@@ -345,7 +341,7 @@ fn mutate_install(
 }
 
 fn mutate_update(
-    conn: &mut Connection,
+    lock: &mut LockFile,
     addon_dir: &Path,
     defn: &Defn,
     old_pkg: &Pkg,
@@ -356,8 +352,7 @@ fn mutate_update(
     let folder_names: Vec<String> = archive.top_level_folders.iter().cloned().collect();
 
     let conflicts =
-        db::find_pkgs_owning_folders_excluding(conn, &folder_names, &defn.source, &candidate.id)
-            .map_err(InternalError::new)?;
+        lock.find_pkgs_owning_folders_excluding(&folder_names, &defn.source, &candidate.id);
     if !conflicts.is_empty() {
         return Err(ManagerError::PkgConflictsWithInstalled {
             conflicting: conflicts.iter().map(pkg_to_ref).collect(),
@@ -390,10 +385,9 @@ fn mutate_update(
     archive.extract(addon_dir).map_err(InternalError::new)?;
 
     let new_pkg = build_pkg(defn, candidate, folder_names);
-    let tx = conn.transaction().map_err(InternalError::new)?;
-    db::delete_pkg(&tx, &old_pkg.source, &old_pkg.id).map_err(InternalError::new)?;
-    db::insert_pkg(&tx, &new_pkg).map_err(InternalError::new)?;
-    tx.commit().map_err(InternalError::new)?;
+    lock.delete_pkg(&old_pkg.source, &old_pkg.id);
+    lock.insert_pkg(new_pkg.clone());
+    lock.save().map_err(InternalError::new)?;
 
     Ok(Outcome::PkgUpdated {
         old: old_pkg.clone(),
@@ -403,7 +397,7 @@ fn mutate_update(
 }
 
 fn mutate_remove(
-    conn: &mut Connection,
+    lock: &mut LockFile,
     addon_dir: &Path,
     pkg: &Pkg,
     keep_folders: bool,
@@ -416,17 +410,18 @@ fn mutate_remove(
             }
         }
     }
-    let tx = conn.transaction().map_err(InternalError::new)?;
-    db::delete_pkg(&tx, &pkg.source, &pkg.id).map_err(InternalError::new)?;
-    tx.commit().map_err(InternalError::new)?;
+    lock.delete_pkg(&pkg.source, &pkg.id);
+    lock.save().map_err(InternalError::new)?;
 
     Ok(Outcome::PkgRemoved { pkg: pkg.clone() })
 }
 
-fn mutate_pin(conn: &Connection, defn: &Defn, pkg: &Pkg) -> AnyOutcome<Outcome> {
+fn mutate_pin(lock: &mut LockFile, defn: &Defn, pkg: &Pkg) -> AnyOutcome<Outcome> {
     let version_eq = defn.strategies.version_eq.is_some();
-    let new_value =
-        db::pin_pkg(conn, &pkg.source, &pkg.id, version_eq).map_err(InternalError::new)?;
+    let new_value = lock
+        .pin_pkg(&pkg.source, &pkg.id, version_eq)
+        .ok_or(ManagerError::PkgNotInstalled)?;
+    lock.save().map_err(InternalError::new)?;
     let mut updated = pkg.clone();
     updated.options.version_eq = new_value;
     Ok(Outcome::PkgInstalled {
@@ -486,7 +481,7 @@ async fn download_all(
 /// Installs `defns`, following one level of dependencies. Already-installed
 /// defns are reported as `PkgAlreadyInstalled` without re-resolving.
 pub async fn install(
-    conn: &mut Connection,
+    lock: &mut LockFile,
     ctx: &Ctx<'_>,
     defns: &[Defn],
     replace_folders: bool,
@@ -496,8 +491,7 @@ pub async fn install(
         return HashMap::new();
     }
 
-    let not_installed =
-        db::check_pkgs_not_exist(conn, defns).unwrap_or_else(|_| vec![false; defns.len()]);
+    let not_installed = lock.check_pkgs_not_exist(defns);
     let to_resolve: Vec<Defn> = defns
         .iter()
         .zip(&not_installed)
@@ -516,8 +510,7 @@ pub async fn install(
             d2
         })
         .collect();
-    let still_not_installed =
-        db::check_pkgs_not_exist(conn, &with_id).unwrap_or_else(|_| vec![false; with_id.len()]);
+    let still_not_installed = lock.check_pkgs_not_exist(&with_id);
     let candidates: HashMap<Defn, PkgCandidate> = candidates
         .into_iter()
         .zip(still_not_installed)
@@ -548,7 +541,7 @@ pub async fn install(
 
     for (d, path) in archive_paths {
         let candidate = &candidates[&d];
-        let outcome = mutate_install(conn, ctx.addon_dir, &d, candidate, &path, replace_folders);
+        let outcome = mutate_install(lock, ctx.addon_dir, &d, candidate, &path, replace_folders);
         results.insert(d, outcome);
     }
 
@@ -565,14 +558,14 @@ pub enum UpdateTarget {
 /// strategies. Requesting a `Defn` that isn't installed reports
 /// `PkgNotInstalled`; one that's already current reports `PkgUpToDate`.
 pub async fn update(
-    conn: &mut Connection,
+    lock: &mut LockFile,
     ctx: &Ctx<'_>,
     target: UpdateTarget,
     dry_run: bool,
 ) -> HashMap<Defn, AnyOutcome<Outcome>> {
     let (defns, defns_to_pkgs, resolve_defns) = match target {
         UpdateTarget::All => {
-            let all_pkgs = db::get_all_pkgs(conn).unwrap_or_default();
+            let all_pkgs = lock.get_all_pkgs();
             let mut defns = Vec::new();
             let mut defns_to_pkgs = HashMap::new();
             let mut resolve_defns = HashMap::new();
@@ -585,8 +578,7 @@ pub async fn update(
             (defns, defns_to_pkgs, resolve_defns)
         }
         UpdateTarget::Specific(requested) => {
-            let pkgs =
-                db::get_pkgs(conn, &requested).unwrap_or_else(|_| vec![None; requested.len()]);
+            let pkgs = lock.get_pkgs(&requested);
             let mut defns_to_pkgs = HashMap::new();
             for (d, p) in requested.iter().zip(pkgs) {
                 if let Some(p) = p {
@@ -693,8 +685,8 @@ pub async fn update(
     for (d, path) in archive_paths {
         let (old, candidate) = &updatables[&d];
         let outcome = match old {
-            Some(o) => mutate_update(conn, ctx.addon_dir, &d, o, candidate, &path),
-            None => mutate_install(conn, ctx.addon_dir, &d, candidate, &path, false),
+            Some(o) => mutate_update(lock, ctx.addon_dir, &d, o, candidate, &path),
+            None => mutate_install(lock, ctx.addon_dir, &d, candidate, &path, false),
         };
         results.insert(d, outcome);
     }
@@ -704,18 +696,18 @@ pub async fn update(
 
 /// Removes installed packages by `Defn`.
 pub fn remove(
-    conn: &mut Connection,
+    lock: &mut LockFile,
     addon_dir: &Path,
     defns: &[Defn],
     keep_folders: bool,
 ) -> HashMap<Defn, AnyOutcome<Outcome>> {
-    let pkgs = db::get_pkgs(conn, defns).unwrap_or_else(|_| vec![None; defns.len()]);
+    let pkgs = lock.get_pkgs(defns);
     defns
         .iter()
         .zip(pkgs)
         .map(|(d, p)| {
             let outcome = match p {
-                Some(pkg) => mutate_remove(conn, addon_dir, &pkg, keep_folders),
+                Some(pkg) => mutate_remove(lock, addon_dir, &pkg, keep_folders),
                 None => Err(ManagerError::PkgNotInstalled.into()),
             };
             (d.clone(), outcome)
@@ -724,14 +716,14 @@ pub fn remove(
 }
 
 /// Pins/unpins installed packages — sets `Strategy::VersionEq` on/off. This
-/// only flips a DB flag; the pinned version is whatever `pkg.version`
-/// already holds, there's no separate stored pin target.
+/// only flips a flag; the pinned version is whatever `pkg.version` already
+/// holds, there's no separate stored pin target.
 pub fn pin(
-    conn: &Connection,
+    lock: &mut LockFile,
     sources: &[Box<dyn Resolver>],
     defns: &[Defn],
 ) -> HashMap<Defn, AnyOutcome<Outcome>> {
-    let pkgs = db::get_pkgs(conn, defns).unwrap_or_else(|_| vec![None; defns.len()]);
+    let pkgs = lock.get_pkgs(defns);
     defns
         .iter()
         .zip(pkgs)
@@ -757,7 +749,7 @@ pub fn pin(
                     }
                     .into());
                 }
-                mutate_pin(conn, d, &pkg)
+                mutate_pin(lock, d, &pkg)
             })();
             (d.clone(), outcome)
         })
@@ -768,7 +760,7 @@ pub fn pin(
 /// paired `Defn` values resolve to (used by `rereconcile`: switching an
 /// installed addon to a different source while preserving its presence).
 pub async fn replace(
-    conn: &mut Connection,
+    lock: &mut LockFile,
     ctx: &Ctx<'_>,
     defns: &[(Defn, Defn)],
 ) -> Result<HashMap<Defn, AnyOutcome<Outcome>>, Failure> {
@@ -780,8 +772,7 @@ pub async fn replace(
     }
 
     let old_defns: Vec<Defn> = defns.iter().map(|(o, _)| o.clone()).collect();
-    let old_pkgs_vec =
-        db::get_pkgs(conn, &old_defns).unwrap_or_else(|_| vec![None; old_defns.len()]);
+    let old_pkgs_vec = lock.get_pkgs(&old_defns);
     let old_pkgs: HashMap<Defn, Pkg> = old_defns
         .iter()
         .zip(old_pkgs_vec)
@@ -789,8 +780,7 @@ pub async fn replace(
         .collect();
 
     let new_defns: Vec<Defn> = defns.iter().map(|(_, n)| n.clone()).collect();
-    let not_installed =
-        db::check_pkgs_not_exist(conn, &new_defns).unwrap_or_else(|_| vec![false; new_defns.len()]);
+    let not_installed = lock.check_pkgs_not_exist(&new_defns);
     let to_resolve: Vec<Defn> = new_defns
         .iter()
         .zip(&not_installed)
@@ -809,8 +799,7 @@ pub async fn replace(
             d2
         })
         .collect();
-    let still_not_installed =
-        db::check_pkgs_not_exist(conn, &with_id).unwrap_or_else(|_| vec![false; with_id.len()]);
+    let still_not_installed = lock.check_pkgs_not_exist(&with_id);
     let candidates: HashMap<Defn, PkgCandidate> = candidates
         .into_iter()
         .zip(still_not_installed)
@@ -842,11 +831,11 @@ pub async fn replace(
         let candidate = candidates[&new_defn].clone();
 
         if let Some(old_pkg) = old_pkgs.get(&old_defn) {
-            let remove_outcome = mutate_remove(conn, ctx.addon_dir, old_pkg, false);
+            let remove_outcome = mutate_remove(lock, ctx.addon_dir, old_pkg, false);
             results.insert(old_defn, Some(remove_outcome));
         }
         let install_outcome =
-            mutate_install(conn, ctx.addon_dir, &new_defn, &candidate, &path, false);
+            mutate_install(lock, ctx.addon_dir, &new_defn, &candidate, &path, false);
         results.insert(new_defn, Some(install_outcome));
     }
 

@@ -255,7 +255,7 @@ fn profile_config_write_then_read_round_trips() {
             .starts_with(profiles_dir_path(&global))
     );
     assert_eq!(profile.config_file_path().extension().unwrap(), "toml");
-    assert_eq!(profile.db_file_path().extension().unwrap(), "sqlite");
+    assert_eq!(profile.lock_file_path().extension().unwrap(), "toml");
 
     let read_back = ProfileConfig::read(global, "retail-main").unwrap();
     assert_eq!(read_back.profile, "retail-main");
@@ -281,10 +281,8 @@ fn profile_config_uses_a_name_subdirectory_with_a_fixed_file_name() {
             .join("profile.toml")
     );
     assert_eq!(
-        profile.db_file_path(),
-        profiles_dir_path(&global)
-            .join("retail")
-            .join("profile.sqlite")
+        profile.lock_file_path(),
+        profiles_dir_path(&global).join("retail").join("lock.toml")
     );
 }
 
@@ -368,7 +366,7 @@ fn iter_profile_installations_extracts_installation_dirs() {
 }
 
 #[test]
-fn profile_config_delete_trashes_config_file_and_db() {
+fn profile_config_delete_trashes_config_file_and_lock_file() {
     let dir = tempfile::tempdir().unwrap();
     let global = global_config_in(dir.path());
     let addon_dir = dir.path().join("addons");
@@ -377,13 +375,13 @@ fn profile_config_delete_trashes_config_file_and_db() {
     let profile =
         ProfileConfig::new(global, "gone-soon", &addon_dir, Some(Flavour::Mainline)).unwrap();
     profile.write().unwrap();
-    fs::write(profile.db_file_path(), b"fake-db").unwrap();
+    fs::write(profile.lock_file_path(), b"version = 1\n").unwrap();
     assert!(profile.config_file_path().exists());
-    assert!(profile.db_file_path().exists());
+    assert!(profile.lock_file_path().exists());
 
     profile.delete().unwrap();
     assert!(!profile.config_file_path().exists());
-    assert!(!profile.db_file_path().exists());
+    assert!(!profile.lock_file_path().exists());
 }
 
 #[test]
@@ -406,8 +404,8 @@ fn profile_config_read_from_path_bypasses_name_based_lookup() {
     assert_eq!(profile.addon_dir, addon_dir);
     assert_eq!(profile.config_file_path(), fixture_path);
     assert_eq!(
-        profile.db_file_path(),
-        fixture_path.with_extension("sqlite")
+        profile.lock_file_path(),
+        fixture_path.with_file_name("lock.toml")
     );
 }
 
@@ -431,20 +429,23 @@ fn profile_config_with_path_override_writes_to_that_exact_path() {
 
     assert!(target.exists());
     assert_eq!(profile.config_file_path(), target);
-    assert_eq!(profile.db_file_path(), target.with_extension("sqlite"));
+    assert_eq!(
+        profile.lock_file_path(),
+        target.with_file_name("lock.toml")
+    );
 }
 
 #[test]
-fn profile_config_delete_without_db_file_still_succeeds() {
+fn profile_config_delete_without_lock_file_still_succeeds() {
     let dir = tempfile::tempdir().unwrap();
     let global = global_config_in(dir.path());
     let addon_dir = dir.path().join("addons");
     fs::create_dir_all(&addon_dir).unwrap();
 
     let profile =
-        ProfileConfig::new(global, "no-db-yet", &addon_dir, Some(Flavour::Mainline)).unwrap();
+        ProfileConfig::new(global, "no-lock-yet", &addon_dir, Some(Flavour::Mainline)).unwrap();
     profile.write().unwrap();
-    assert!(!profile.db_file_path().exists());
+    assert!(!profile.lock_file_path().exists());
 
     profile.delete().unwrap();
     assert!(!profile.config_file_path().exists());

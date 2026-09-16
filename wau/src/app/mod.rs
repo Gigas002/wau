@@ -10,9 +10,9 @@ use libwau::{
         search::{self, FilterInstalled, SearchOptions},
     },
     config::{ConfigError, GlobalConfig, ProfileConfig, SecretString},
-    db::{self, Pkg},
     github_auth::GitHubAuth,
     http::HttpClient,
+    lockfile::Pkg,
     matchers,
     model::{Defn, Flavour, infer_product_from_addon_dir},
     pkg_management,
@@ -42,11 +42,9 @@ pub enum AppError {
     #[error(transparent)]
     Config(#[from] ConfigError),
     #[error(transparent)]
-    Db(#[from] db::DbError),
+    Lock(#[from] libwau::lockfile::LockError),
     #[error(transparent)]
     Http(#[from] libwau::http::HttpError),
-    #[error(transparent)]
-    Sqlite(#[from] rusqlite::Error),
     #[error(transparent)]
     Failure(#[from] Failure),
     #[error(transparent)]
@@ -197,7 +195,7 @@ async fn cmd_install(cli: &Cli, args: &InstallArgs) -> Result<i32, AppError> {
     let app_ctx = load_ctx(cli)?;
     let AppCtx {
         profile,
-        mut conn,
+        mut lock,
         http,
         sources,
         download_locks,
@@ -213,7 +211,7 @@ async fn cmd_install(cli: &Cli, args: &InstallArgs) -> Result<i32, AppError> {
     };
 
     let results =
-        pkg_management::install(&mut conn, &pkg_ctx, &defns, args.replace, args.dry_run).await;
+        pkg_management::install(&mut lock, &pkg_ctx, &defns, args.replace, args.dry_run).await;
     println!("{}", format_results(&results));
     Ok(i32::from(any_errors(&results)))
 }
@@ -222,7 +220,7 @@ async fn cmd_sync(cli: &Cli, args: &SyncArgs) -> Result<i32, AppError> {
     let app_ctx = load_ctx(cli)?;
     let AppCtx {
         profile,
-        mut conn,
+        mut lock,
         http,
         sources,
         download_locks,
@@ -242,7 +240,7 @@ async fn cmd_sync(cli: &Cli, args: &SyncArgs) -> Result<i32, AppError> {
         pkg_management::UpdateTarget::Specific(parse_defns(&args.addons, &sources)?)
     };
 
-    let mut results = pkg_management::update(&mut conn, &pkg_ctx, target, args.dry_run).await;
+    let mut results = pkg_management::update(&mut lock, &pkg_ctx, target, args.dry_run).await;
     if args.addons.is_empty() {
         // Syncing "all": don't clutter output with already-up-to-date,
         // unpinned packages.
@@ -263,13 +261,13 @@ async fn cmd_remove(cli: &Cli, args: &RemoveArgs) -> Result<i32, AppError> {
     let app_ctx = load_ctx(cli)?;
     let AppCtx {
         profile,
-        mut conn,
+        mut lock,
         sources,
         ..
     } = app_ctx;
     let defns = parse_defns_retain(&args.addons, &sources)?;
 
-    let results = pkg_management::remove(&mut conn, &profile.addon_dir, &defns, args.keep_folders);
+    let results = pkg_management::remove(&mut lock, &profile.addon_dir, &defns, args.keep_folders);
     println!("{}", format_results(&results));
     Ok(i32::from(any_errors(&results)))
 }
@@ -282,14 +280,14 @@ async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
     let app_ctx = ensure_ctx_bootstrap(cli).await?;
     let AppCtx {
         profile,
-        mut conn,
+        mut lock,
         http,
         sources,
         download_locks,
     } = app_ctx;
     let flavour = profile.product.flavour();
 
-    let mut leftovers = matchers::get_unreconciled_folders(&conn, &profile.addon_dir, flavour);
+    let mut leftovers = matchers::get_unreconciled_folders(&lock, &profile.addon_dir, flavour);
     if args.list_unreconciled {
         print_unreconciled(&leftovers);
         return Ok(0);
@@ -373,12 +371,12 @@ async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
             let proceed = args.auto || prompts::confirm("Install selected add-ons?", true)?;
             if proceed {
                 let results =
-                    pkg_management::install(&mut conn, &pkg_ctx, &selections, true, false).await;
+                    pkg_management::install(&mut lock, &pkg_ctx, &selections, true, false).await;
                 println!("{}", format_results(&results));
             }
         }
 
-        leftovers = matchers::get_unreconciled_folders(&conn, &profile.addon_dir, flavour);
+        leftovers = matchers::get_unreconciled_folders(&lock, &profile.addon_dir, flavour);
         if leftovers.is_empty() {
             break;
         }
@@ -413,7 +411,7 @@ async fn cmd_search(cli: &Cli, args: &SearchArgs) -> Result<i32, AppError> {
     let app_ctx = load_ctx(cli)?;
     let AppCtx {
         profile,
-        mut conn,
+        mut lock,
         http,
         sources,
         download_locks,
@@ -421,7 +419,8 @@ async fn cmd_search(cli: &Cli, args: &SearchArgs) -> Result<i32, AppError> {
     let flavour = profile.product.flavour();
 
     let catalogue = catalogue::synchronise(&http).await?;
-    let installed_keys: HashSet<(String, String)> = db::get_all_pkgs(&conn)?
+    let installed_keys: HashSet<(String, String)> = lock
+        .get_all_pkgs()
         .into_iter()
         .map(|p| (p.source, p.id))
         .collect();
@@ -500,7 +499,7 @@ async fn cmd_search(cli: &Cli, args: &SearchArgs) -> Result<i32, AppError> {
         cache_dir: &profile.global_config.dirs.cache,
         flavour,
     };
-    let results = pkg_management::install(&mut conn, &pkg_ctx, &selections, false, false).await;
+    let results = pkg_management::install(&mut lock, &pkg_ctx, &selections, false, false).await;
     println!("{}", format_results(&results));
     Ok(i32::from(any_errors(&results)))
 }
@@ -511,7 +510,7 @@ async fn cmd_search(cli: &Cli, args: &SearchArgs) -> Result<i32, AppError> {
 
 async fn cmd_list(cli: &Cli, addons: &[String], format: ListFormat) -> Result<i32, AppError> {
     let app_ctx = load_ctx(cli)?;
-    let all = db::get_all_pkgs(&app_ctx.conn)?;
+    let all = app_ctx.lock.get_all_pkgs();
     let mut pkgs = filter_pkgs_by_addons(&all, addons);
     pkgs.sort_by(|a, b| {
         (&a.source, a.name.to_lowercase()).cmp(&(&b.source, b.name.to_lowercase()))

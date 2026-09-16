@@ -3,7 +3,8 @@
 //! Two independent TOML documents: a **global config** (`config.toml`:
 //! logging, cache path, provider API keys) and one **profile config** per WoW
 //! installation (`profiles/<name>/profile.toml`, alongside its sibling
-//! `profiles/<name>/profile.sqlite`). No environment variables are ever read —
+//! `profiles/<name>/lock.toml` — the installed-package lock file, see
+//! [`crate::lockfile`]). No environment variables are ever read —
 //! everything comes from these files or their built-in defaults; config/cache
 //! base dirs are resolved via platform-conventional locations (the `dirs`
 //! crate) by default. Both can be pointed at an explicit path instead
@@ -428,7 +429,7 @@ struct ProfileConfigFile {
 }
 
 /// One WoW installation's config: which profile, which `Interface/AddOns`
-/// directory, and (implicitly) its own `db.sqlite` (see [`ProfileConfig::db_file_path`]).
+/// directory, and (implicitly) its own `lock.toml` (see [`ProfileConfig::lock_file_path`]).
 #[derive(Debug, Clone)]
 pub struct ProfileConfig {
     pub global_config: GlobalConfig,
@@ -437,21 +438,21 @@ pub struct ProfileConfig {
     pub flavour_override: Option<Flavour>,
     pub product: InstalledProduct,
     /// Set only by [`Self::read_from_path`]; makes [`Self::config_file_path`]
-    /// return that exact path and [`Self::db_file_path`] its `.sqlite`
+    /// return that exact path and [`Self::lock_file_path`] a `lock.toml`
     /// sibling, instead of deriving both from `profile`/`profiles_dir_path`.
     config_path_override: Option<PathBuf>,
 }
 
 const PROFILE_FILE_NAME: &str = "profile.toml";
-const PROFILE_DB_FILE_NAME: &str = "profile.sqlite";
+const LOCK_FILE_NAME: &str = "lock.toml";
 
 fn profiles_dir_path(global_config: &GlobalConfig) -> PathBuf {
     global_config.dirs.config.join("profiles")
 }
 
 /// Each profile owns a subdirectory named after it (`profiles/<name>/`), so
-/// unrelated per-profile files (config, DB, ...) stay grouped instead of
-/// colliding by filename in a single flat `profiles/` dir.
+/// unrelated per-profile files (config, lock file, ...) stay grouped instead
+/// of colliding by filename in a single flat `profiles/` dir.
 fn profile_dir_path(global_config: &GlobalConfig, profile: &str) -> PathBuf {
     profiles_dir_path(global_config).join(profile)
 }
@@ -460,8 +461,8 @@ fn profile_config_file_path(global_config: &GlobalConfig, profile: &str) -> Path
     profile_dir_path(global_config, profile).join(PROFILE_FILE_NAME)
 }
 
-fn profile_db_file_path(global_config: &GlobalConfig, profile: &str) -> PathBuf {
-    profile_dir_path(global_config, profile).join(PROFILE_DB_FILE_NAME)
+fn profile_lock_file_path(global_config: &GlobalConfig, profile: &str) -> PathBuf {
+    profile_dir_path(global_config, profile).join(LOCK_FILE_NAME)
 }
 
 impl ProfileConfig {
@@ -503,10 +504,10 @@ impl ProfileConfig {
         })
     }
 
-    /// Makes [`Self::config_file_path`]/[`Self::db_file_path`] resolve to
-    /// `path` (and its `.sqlite` sibling) instead of the name-based
-    /// `profiles/<profile>/profile.*` layout. Used when bootstrapping a new
-    /// profile from a `--profile` value that looked like a path (see
+    /// Makes [`Self::config_file_path`] resolve to `path` and
+    /// [`Self::lock_file_path`] to a `lock.toml` sibling of it, instead of
+    /// the name-based `profiles/<profile>/*` layout. Used when bootstrapping
+    /// a new profile from a `--profile` value that looked like a path (see
     /// `wau::ctx::new_profile`).
     pub fn with_path_override(mut self, path: impl Into<PathBuf>) -> Self {
         self.config_path_override = Some(path.into());
@@ -524,9 +525,9 @@ impl ProfileConfig {
     /// lookup inside `global_config`'s `profiles/` dir entirely. Used by the
     /// CLI's `--profile` flag when given a path instead of a name, mainly so
     /// integration tests can point at a fixture file in an arbitrary
-    /// location. [`Self::db_file_path`] resolves to `path` with a `.sqlite`
-    /// extension, colocating the DB with the fixture rather than assuming a
-    /// `profiles/` layout.
+    /// location. [`Self::lock_file_path`] resolves to a `lock.toml` sibling
+    /// of `path`, colocating the lock file with the fixture rather than
+    /// assuming a `profiles/` layout.
     pub fn read_from_path(
         global_config: GlobalConfig,
         path: impl Into<PathBuf>,
@@ -590,10 +591,14 @@ impl ProfileConfig {
             .unwrap_or_else(|| profile_config_file_path(&self.global_config, &self.profile))
     }
 
-    pub fn db_file_path(&self) -> PathBuf {
+    /// The installed-package lock file (see [`crate::lockfile`]) — always a
+    /// `lock.toml` sibling of [`Self::config_file_path`], whether that's the
+    /// name-based `profiles/<profile>/profile.toml` or a `--profile` path
+    /// override.
+    pub fn lock_file_path(&self) -> PathBuf {
         match &self.config_path_override {
-            Some(path) => path.with_extension("sqlite"),
-            None => profile_db_file_path(&self.global_config, &self.profile),
+            Some(path) => path.with_file_name(LOCK_FILE_NAME),
+            None => profile_lock_file_path(&self.global_config, &self.profile),
         }
     }
 
@@ -620,12 +625,12 @@ impl ProfileConfig {
         Ok(())
     }
 
-    /// Trashes the profile's config file and its sibling `db.sqlite`, if any.
+    /// Trashes the profile's config file and its sibling `lock.toml`, if any.
     pub fn delete(&self) -> Result<(), ConfigError> {
         crate::fs::trash(&self.config_file_path())?;
-        let db_path = self.db_file_path();
-        if db_path.exists() {
-            crate::fs::trash(&db_path)?;
+        let lock_path = self.lock_file_path();
+        if lock_path.exists() {
+            crate::fs::trash(&lock_path)?;
         }
         Ok(())
     }

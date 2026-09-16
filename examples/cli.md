@@ -29,8 +29,9 @@ Commands print plain synchronous output for now; a progress-bar renderer is futu
 - `-p` / `--profile <NAME-OR-PATH>` — target profile (default `default`); see
   `examples/profiles/example/profile.toml`. A bare name is looked up as
   `<config-dir>/profiles/<name>/profile.toml`; a value containing a path separator or ending in
-  `.toml` is read directly from that path instead (its sibling `.sqlite` is the DB), bypassing
-  name-based lookup entirely — again mainly for integration tests pointing at a fixture file.
+  `.toml` is read directly from that path instead (its `lock.toml` sibling is the installed-package
+  lock file — see `examples/profiles/example/lock.toml`), bypassing name-based lookup entirely —
+  again mainly for integration tests pointing at a fixture file.
 
 Log verbosity is not a CLI flag — it comes from `[logging].level` in `config.toml` (default
 `warn` if unset). There is no `$RUST_LOG` support either: `wau` never reads environment

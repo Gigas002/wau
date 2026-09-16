@@ -1,6 +1,6 @@
 use chrono::{TimeZone, Utc};
 use libwau::{
-    db::{Pkg, PkgDep, PkgFolder, PkgOptions},
+    lockfile::{Pkg, PkgDep, PkgFolder, PkgOptions},
     results::{InternalError, ManagerError},
 };
 

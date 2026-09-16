@@ -1,40 +1,45 @@
-//! Row models for the `pkg`/`pkg_options`/`pkg_folder`/`pkg_dep` tables.
+//! Row-equivalent models for the installed-package lock file.
 
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use crate::model::{Defn, Strategies};
 
-/// Maps to `pkg_options` (minus the `pkg_source`/`pkg_id` foreign key columns).
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Maps to one package's `[package.options]` table.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PkgOptions {
     pub any_flavour: bool,
     pub any_release_type: bool,
     pub version_eq: bool,
 }
 
-/// Maps to one `pkg_folder` row (minus the foreign key columns).
+/// One folder a package owns on disk.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PkgFolder {
     pub name: String,
 }
 
-/// Maps to one `pkg_dep` row (minus the foreign key columns) — the
-/// *dependency's* id within the same source.
+/// One of a package's dependencies — the *dependency's* id within the same source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PkgDep {
     pub id: String,
 }
 
-/// Maps to one `pkg_version_log` row.
+/// One entry from the install-history log (see [`super::LockFile::get_pkg_logged_versions`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PkgLoggedVersion {
     pub version: String,
     pub install_time: DateTime<Utc>,
 }
 
-/// An installed package: the `pkg` row plus its `pkg_options` (1:1),
-/// `pkg_folder` (1:N), and `pkg_dep` (1:N) rows.
-#[derive(Debug, Clone)]
+/// An installed package: its own fields plus `options` (1:1), `folders`
+/// (1:N), and `deps` (1:N) — one `[[package]]` entry in `lock.toml`.
+///
+/// (De)serializes through [`super::RawPkg`] (`#[serde(into, from)]`) so the
+/// on-disk shape can store `folders`/`deps` as plain string arrays while this
+/// type keeps the richer wrapper structs its callers already expect.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(into = "super::RawPkg", from = "super::RawPkg")]
 pub struct Pkg {
     pub source: String,
     pub id: String,

@@ -1,5 +1,5 @@
 use chrono::{TimeZone, Utc};
-use libwau::db::{Pkg, PkgDep, PkgFolder, PkgOptions};
+use libwau::lockfile::{Pkg, PkgDep, PkgFolder, PkgOptions};
 
 use super::*;
 

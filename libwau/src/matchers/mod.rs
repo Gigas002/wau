@@ -6,11 +6,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rusqlite::Connection;
-
 use crate::{
     catalogue::ComputedCatalogue,
-    db::Pkg,
+    lockfile::{LockFile, Pkg},
     model::{Defn, Flavour},
     sources::Resolver,
     toc::{self, TocFile},
@@ -122,18 +120,15 @@ fn merge_intersecting_sets<T: Clone + Eq + std::hash::Hash>(
 /// that isn't a symlink, and successfully parses as an [`AddonFolder`] for
 /// `flavour` — the working set fed to the reconciliation matchers.
 pub fn get_unreconciled_folders(
-    conn: &Connection,
+    lock: &LockFile,
     addon_dir: &Path,
     flavour: Flavour,
 ) -> Vec<AddonFolder> {
-    let tracked: HashSet<String> = {
-        let Ok(mut stmt) = conn.prepare("SELECT name FROM pkg_folder") else {
-            return Vec::new();
-        };
-        stmt.query_map([], |row| row.get::<_, String>(0))
-            .map(|rows| rows.flatten().collect())
-            .unwrap_or_default()
-    };
+    let tracked: HashSet<String> = lock
+        .get_all_pkgs()
+        .iter()
+        .flat_map(|p| p.folders.iter().map(|f| f.name.clone()))
+        .collect();
 
     let Ok(entries) = std::fs::read_dir(addon_dir) else {
         return Vec::new();

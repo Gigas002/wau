@@ -5,13 +5,12 @@ use std::path::{Path, PathBuf};
 
 use libwau::{
     config::{ConfigError, GlobalConfig, ProfileConfig},
-    db,
     http::{HttpClient, HttpError},
+    lockfile::{LockError, LockFile},
     model::Flavour,
     pkg_archives::DownloadLocks,
     sources::{self, Resolver, SourceConfig},
 };
-use rusqlite::Connection;
 
 use crate::cli::Cli;
 
@@ -23,7 +22,7 @@ pub enum CtxError {
     #[error(transparent)]
     Config(#[from] ConfigError),
     #[error(transparent)]
-    Db(#[from] db::DbError),
+    Lock(#[from] LockError),
     #[error(transparent)]
     Http(#[from] HttpError),
 }
@@ -31,7 +30,7 @@ pub enum CtxError {
 /// Everything a command needs to operate on one profile.
 pub struct AppCtx {
     pub profile: ProfileConfig,
-    pub conn: Connection,
+    pub lock: LockFile,
     pub http: HttpClient,
     pub sources: Vec<Box<dyn Resolver>>,
     pub download_locks: DownloadLocks,
@@ -108,13 +107,13 @@ impl AppCtx {
     /// one just created by an interactive `configure` prompt).
     pub fn from_profile(profile: ProfileConfig) -> Result<Self, CtxError> {
         profile.ensure_dirs()?;
-        let conn = db::prepare_database(&profile.db_file_path())?;
+        let lock = LockFile::open(&profile.lock_file_path())?;
         let http = HttpClient::new()?;
         let sources = sources::default_sources(&source_config(&profile.global_config));
 
         Ok(Self {
             profile,
-            conn,
+            lock,
             http,
             sources,
             download_locks: DownloadLocks::new(),

@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use libwau::{
-    db::Pkg,
+    lockfile::Pkg,
     model::Defn,
     pkg_management::Outcome,
     results::{AnyOutcome, Failure},

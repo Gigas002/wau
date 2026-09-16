@@ -125,7 +125,7 @@ struct Harness {
     _tmp: tempfile::TempDir,
     addon_dir: PathBuf,
     cache_dir: PathBuf,
-    conn: Connection,
+    lock: LockFile,
     http: HttpClient,
     locks: DownloadLocks,
     sources: Vec<Box<dyn Resolver>>,
@@ -143,7 +143,7 @@ impl Harness {
             _tmp: tmp,
             addon_dir,
             cache_dir,
-            conn: db::prepare_in_memory().unwrap(),
+            lock: LockFile::in_memory(),
             http: HttpClient::new().unwrap(),
             locks: DownloadLocks::new(),
             sources,
@@ -153,7 +153,7 @@ impl Harness {
 
 /// Builds a `Ctx` by directly projecting `$h`'s fields inline at the call
 /// site, so the borrow checker sees disjoint borrows of `$h.http`/`sources`/…
-/// alongside a separate `&mut $h.conn` argument in the same call — going
+/// alongside a separate `&mut $h.lock` argument in the same call — going
 /// through a `&self` method here would borrow all of `$h` and conflict.
 macro_rules! ctx {
     ($h:expr) => {
@@ -184,7 +184,7 @@ async fn install_fresh_addon_writes_files_and_db_row() {
         TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url)),
     )]);
 
-    let results = install(&mut h.conn, &ctx!(h), &[defn("test", "foo")], false, false).await;
+    let results = install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
 
     let outcome = results.get(&defn("test", "foo")).unwrap();
     assert!(matches!(
@@ -193,7 +193,7 @@ async fn install_fresh_addon_writes_files_and_db_row() {
     ));
     assert!(h.addon_dir.join("Foo").join("Foo.toc").is_file());
 
-    let pkgs = db::get_all_pkgs(&h.conn).unwrap();
+    let pkgs = h.lock.get_all_pkgs();
     assert_eq!(pkgs.len(), 1);
     assert_eq!(pkgs[0].slug, "foo");
 }
@@ -206,8 +206,8 @@ async fn install_already_installed_is_reported_without_reresolving() {
         TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url)),
     )]);
 
-    install(&mut h.conn, &ctx!(h), &[defn("test", "foo")], false, false).await;
-    let results = install(&mut h.conn, &ctx!(h), &[defn("test", "foo")], false, false).await;
+    install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
+    let results = install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
     assert!(matches!(
         results.get(&defn("test", "foo")).unwrap(),
         Err(Failure::Manager(ManagerError::PkgAlreadyInstalled))
@@ -222,12 +222,12 @@ async fn install_dry_run_makes_no_changes() {
         TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url)),
     )]);
 
-    let results = install(&mut h.conn, &ctx!(h), &[defn("test", "foo")], false, true).await;
+    let results = install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, true).await;
     assert!(matches!(
         results.get(&defn("test", "foo")).unwrap(),
         Ok(Outcome::PkgInstalled { dry_run: true, .. })
     ));
-    assert!(db::get_all_pkgs(&h.conn).unwrap().is_empty());
+    assert!(h.lock.get_all_pkgs().is_empty());
     assert!(!h.addon_dir.join("Foo").exists());
 }
 
@@ -242,8 +242,8 @@ async fn install_conflicts_with_installed_package() {
             .with_candidate("b", candidate("2", "b", "1.0.0", url_b)),
     )]);
 
-    install(&mut h.conn, &ctx!(h), &[defn("test", "a")], false, false).await;
-    let results = install(&mut h.conn, &ctx!(h), &[defn("test", "b")], false, false).await;
+    install(&mut h.lock, &ctx!(h), &[defn("test", "a")], false, false).await;
+    let results = install(&mut h.lock, &ctx!(h), &[defn("test", "b")], false, false).await;
 
     assert!(matches!(
         results.get(&defn("test", "b")).unwrap(),
@@ -263,7 +263,7 @@ async fn install_conflicts_with_unreconciled_folder_unless_replace() {
     std::fs::create_dir_all(h.addon_dir.join("Foo")).unwrap();
     std::fs::write(h.addon_dir.join("Foo").join("hand-placed.txt"), b"x").unwrap();
 
-    let results = install(&mut h.conn, &ctx!(h), &[defn("test", "foo")], false, false).await;
+    let results = install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
     assert!(matches!(
         results.get(&defn("test", "foo")).unwrap(),
         Err(Failure::Manager(
@@ -271,7 +271,7 @@ async fn install_conflicts_with_unreconciled_folder_unless_replace() {
         ))
     ));
 
-    let results = install(&mut h.conn, &ctx!(h), &[defn("test", "foo")], true, false).await;
+    let results = install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], true, false).await;
     assert!(matches!(
         results.get(&defn("test", "foo")).unwrap(),
         Ok(Outcome::PkgInstalled { .. })
@@ -282,7 +282,7 @@ async fn install_conflicts_with_unreconciled_folder_unless_replace() {
 #[tokio::test]
 async fn install_unknown_source_is_source_invalid() {
     let mut h = Harness::new(vec![]);
-    let results = install(&mut h.conn, &ctx!(h), &[defn("bogus", "foo")], false, false).await;
+    let results = install(&mut h.lock, &ctx!(h), &[defn("bogus", "foo")], false, false).await;
     assert!(matches!(
         results.get(&defn("bogus", "foo")).unwrap(),
         Err(Failure::Manager(ManagerError::PkgSourceInvalid))
@@ -300,7 +300,7 @@ async fn update_all_installs_new_version_when_changed() {
     let mut h = Harness::new(vec![Box::new(
         TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url_v1)),
     )]);
-    install(&mut h.conn, &ctx!(h), &[defn("test", "foo")], false, false).await;
+    install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
 
     let url_v2 = make_zip_file(
         url_dir.path(),
@@ -311,11 +311,11 @@ async fn update_all_installs_new_version_when_changed() {
     h.sources = vec![Box::new(
         TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "2.0.0", url_v2)),
     )];
-    let results = update(&mut h.conn, &ctx!(h), UpdateTarget::All, false).await;
+    let results = update(&mut h.lock, &ctx!(h), UpdateTarget::All, false).await;
 
     let outcome = results.values().next().unwrap();
     assert!(matches!(outcome, Ok(Outcome::PkgUpdated { .. })));
-    let pkgs = db::get_all_pkgs(&h.conn).unwrap();
+    let pkgs = h.lock.get_all_pkgs();
     assert_eq!(pkgs[0].version, "2.0.0");
 }
 
@@ -326,9 +326,9 @@ async fn update_reports_up_to_date_when_version_unchanged() {
     let mut h = Harness::new(vec![Box::new(
         TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url)),
     )]);
-    install(&mut h.conn, &ctx!(h), &[defn("test", "foo")], false, false).await;
+    install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
 
-    let results = update(&mut h.conn, &ctx!(h), UpdateTarget::All, false).await;
+    let results = update(&mut h.lock, &ctx!(h), UpdateTarget::All, false).await;
     let outcome = results.values().next().unwrap();
     assert!(matches!(
         outcome,
@@ -345,11 +345,11 @@ async fn update_reinstalls_when_folder_missing_even_if_version_unchanged() {
     let mut h = Harness::new(vec![Box::new(
         TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url)),
     )]);
-    install(&mut h.conn, &ctx!(h), &[defn("test", "foo")], false, false).await;
+    install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
 
     std::fs::remove_dir_all(h.addon_dir.join("Foo")).unwrap();
 
-    let results = update(&mut h.conn, &ctx!(h), UpdateTarget::All, false).await;
+    let results = update(&mut h.lock, &ctx!(h), UpdateTarget::All, false).await;
     let outcome = results.values().next().unwrap();
     assert!(matches!(outcome, Ok(Outcome::PkgUpdated { .. })));
     assert!(h.addon_dir.join("Foo").join("Foo.toc").is_file());
@@ -359,7 +359,7 @@ async fn update_reinstalls_when_folder_missing_even_if_version_unchanged() {
 async fn update_specific_defn_not_installed_reports_not_installed() {
     let mut h = Harness::new(vec![Box::new(TestResolver::new("test"))]);
     let results = update(
-        &mut h.conn,
+        &mut h.lock,
         &ctx!(h),
         UpdateTarget::Specific(vec![defn("test", "foo")]),
         false,
@@ -382,14 +382,14 @@ async fn remove_deletes_db_row_and_trashes_folder_by_default() {
     let mut h = Harness::new(vec![Box::new(
         TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url)),
     )]);
-    install(&mut h.conn, &ctx!(h), &[defn("test", "foo")], false, false).await;
+    install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
 
-    let results = remove(&mut h.conn, &h.addon_dir, &[defn("test", "foo")], false);
+    let results = remove(&mut h.lock, &h.addon_dir, &[defn("test", "foo")], false);
     assert!(matches!(
         results.get(&defn("test", "foo")).unwrap(),
         Ok(Outcome::PkgRemoved { .. })
     ));
-    assert!(db::get_all_pkgs(&h.conn).unwrap().is_empty());
+    assert!(h.lock.get_all_pkgs().is_empty());
     assert!(!h.addon_dir.join("Foo").exists());
 }
 
@@ -400,16 +400,16 @@ async fn remove_keep_folders_leaves_files_on_disk() {
     let mut h = Harness::new(vec![Box::new(
         TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url)),
     )]);
-    install(&mut h.conn, &ctx!(h), &[defn("test", "foo")], false, false).await;
+    install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
 
-    remove(&mut h.conn, &h.addon_dir, &[defn("test", "foo")], true);
+    remove(&mut h.lock, &h.addon_dir, &[defn("test", "foo")], true);
     assert!(h.addon_dir.join("Foo").join("Foo.toc").is_file());
 }
 
 #[tokio::test]
 async fn remove_not_installed_is_reported() {
     let mut h = Harness::new(vec![]);
-    let results = remove(&mut h.conn, &h.addon_dir, &[defn("test", "foo")], false);
+    let results = remove(&mut h.lock, &h.addon_dir, &[defn("test", "foo")], false);
     assert!(matches!(
         results.get(&defn("test", "foo")).unwrap(),
         Err(Failure::Manager(ManagerError::PkgNotInstalled))
@@ -427,16 +427,16 @@ async fn pin_flips_version_eq_when_matching_installed_version() {
     let mut h = Harness::new(vec![Box::new(
         TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url)),
     )]);
-    install(&mut h.conn, &ctx!(h), &[defn("test", "foo")], false, false).await;
+    install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
 
     let d = defn("test", "foo").with_version("1.0.0");
-    let results = pin(&h.conn, &h.sources, std::slice::from_ref(&d));
+    let results = pin(&mut h.lock, &h.sources, std::slice::from_ref(&d));
     assert!(matches!(
         results.get(&d).unwrap(),
         Ok(Outcome::PkgInstalled { .. })
     ));
 
-    let pkgs = db::get_all_pkgs(&h.conn).unwrap();
+    let pkgs = h.lock.get_all_pkgs();
     assert!(pkgs[0].options.version_eq);
 }
 
@@ -447,10 +447,10 @@ async fn pin_errors_when_requested_version_does_not_match_installed() {
     let mut h = Harness::new(vec![Box::new(
         TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url)),
     )]);
-    install(&mut h.conn, &ctx!(h), &[defn("test", "foo")], false, false).await;
+    install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
 
     let d = defn("test", "foo").with_version("9.9.9");
-    let results = pin(&h.conn, &h.sources, std::slice::from_ref(&d));
+    let results = pin(&mut h.lock, &h.sources, std::slice::from_ref(&d));
     assert!(matches!(
         results.get(&d).unwrap(),
         Err(Failure::Manager(ManagerError::PkgFilesNotMatching { .. }))
@@ -459,8 +459,8 @@ async fn pin_errors_when_requested_version_does_not_match_installed() {
 
 #[tokio::test]
 async fn pin_unsupported_source_strategy_is_rejected() {
-    let h = Harness::new(vec![Box::new(NoStrategiesResolver)]);
-    let results = pin(&h.conn, &h.sources, &[defn("nostrat", "foo")]);
+    let mut h = Harness::new(vec![Box::new(NoStrategiesResolver)]);
+    let results = pin(&mut h.lock, &h.sources, &[defn("nostrat", "foo")]);
     assert!(matches!(
         results.get(&defn("nostrat", "foo")).unwrap(),
         Err(Failure::Manager(
@@ -471,8 +471,8 @@ async fn pin_unsupported_source_strategy_is_rejected() {
 
 #[tokio::test]
 async fn pin_not_installed_is_reported() {
-    let h = Harness::new(vec![Box::new(TestResolver::new("test"))]);
-    let results = pin(&h.conn, &h.sources, &[defn("test", "foo")]);
+    let mut h = Harness::new(vec![Box::new(TestResolver::new("test"))]);
+    let results = pin(&mut h.lock, &h.sources, &[defn("test", "foo")]);
     assert!(matches!(
         results.get(&defn("test", "foo")).unwrap(),
         Err(Failure::Manager(ManagerError::PkgNotInstalled))
@@ -511,7 +511,7 @@ async fn replace_switches_installed_package_to_new_source() {
             .with_candidate("foo", candidate("1", "foo", "1.0.0", url_old)),
     )]);
     install(
-        &mut h.conn,
+        &mut h.lock,
         &ctx!(h),
         &[defn("old-source", "foo")],
         false,
@@ -525,7 +525,7 @@ async fn replace_switches_installed_package_to_new_source() {
     )];
 
     let pairs = vec![(defn("old-source", "foo"), defn("new-source", "foo"))];
-    let results = replace(&mut h.conn, &ctx!(h), &pairs).await.unwrap();
+    let results = replace(&mut h.lock, &ctx!(h), &pairs).await.unwrap();
 
     assert!(matches!(
         results.get(&defn("old-source", "foo")).unwrap(),
@@ -536,7 +536,7 @@ async fn replace_switches_installed_package_to_new_source() {
         Ok(Outcome::PkgInstalled { .. })
     ));
 
-    let pkgs = db::get_all_pkgs(&h.conn).unwrap();
+    let pkgs = h.lock.get_all_pkgs();
     assert_eq!(pkgs.len(), 1);
     assert_eq!(pkgs[0].source, "new-source");
 }
@@ -547,7 +547,7 @@ async fn replace_switches_installed_package_to_new_source() {
 
 #[test]
 fn outcome_display_messages() {
-    let pkg = crate::db::Pkg {
+    let pkg = crate::lockfile::Pkg {
         source: "test".into(),
         id: "1".into(),
         slug: "foo".into(),
