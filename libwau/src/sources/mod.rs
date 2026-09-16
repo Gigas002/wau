@@ -8,7 +8,7 @@
 use chrono::{DateTime, Utc};
 
 use crate::{
-    config::SecretString,
+    config::{GitHubHandler, SecretString},
     http::HttpError,
     model::{Defn, Flavour, HeadersIntent, SourceMetadata, Strategy},
     pkg_archives::DownloadError,
@@ -238,6 +238,7 @@ pub struct SourceConfig {
     /// `https://api.curseforge.com/v1`.
     pub cfcore_api_url: Option<String>,
     pub github_token: Option<SecretString>,
+    pub github_handler: GitHubHandler,
     pub wago_addons_token: Option<SecretString>,
 }
 
@@ -254,6 +255,7 @@ pub fn default_sources(config: &SourceConfig) -> Vec<Box<dyn Resolver>> {
     #[cfg(feature = "github")]
     sources.push(Box::new(github::GitHubResolver::new(
         config.github_token.clone(),
+        config.github_handler,
     )));
     #[cfg(feature = "curseforge")]
     sources.push(Box::new(curseforge::CurseForgeResolver::new(

@@ -14,7 +14,7 @@ workspace = true
 [features]
 default = ["curseforge", "github", "tukui", "wowinterface", "wago"]
 curseforge = []
-github = []
+github = ["tokio/process"]
 tukui = []
 wowinterface = []
 wago = []

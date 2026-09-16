@@ -12,3 +12,5 @@ api_key = "your-wago-api-key"
 
 [providers.github]
 api_key = "your-github-api-key"
+# handler = "gh"  # optional: use the system `gh` CLI (its own `gh auth login`
+# auth) instead of throwing requests directly with `api_key` (the default).

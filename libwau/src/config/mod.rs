@@ -244,6 +244,18 @@ pub struct AccessTokens {
     pub wago_addons: Option<SecretString>,
 }
 
+/// How the `github` source makes its requests: either it throws them
+/// directly (optionally bearing [`AccessTokens::github`] as a bearer
+/// token, same as every other provider), or it shells out to the system
+/// `gh` CLI, which carries its own auth (`gh auth login`) instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GitHubHandler {
+    #[default]
+    Token,
+    Gh,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct LoggingConfigFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -262,6 +274,16 @@ struct ProviderConfigFile {
     api_key: Option<SecretString>,
 }
 
+/// `[providers.github]` — same `api_key` every provider has, plus
+/// `handler` to opt into the `gh`-CLI request path instead.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct GitHubProviderConfigFile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    api_key: Option<SecretString>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    handler: Option<GitHubHandler>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct ProvidersConfigFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -269,7 +291,7 @@ struct ProvidersConfigFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     wago: Option<ProviderConfigFile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    github: Option<ProviderConfigFile>,
+    github: Option<GitHubProviderConfigFile>,
 }
 
 /// On-disk shape of `config.toml` — [`Dirs`] are computed, never persisted.
@@ -287,6 +309,7 @@ struct GlobalConfigFile {
 pub struct GlobalConfig {
     pub log_level: LogLevel,
     pub access_tokens: AccessTokens,
+    pub github_handler: GitHubHandler,
     pub dirs: Dirs,
     /// Set only by [`Self::read_from`] with an explicit path; makes
     /// [`Self::config_file_path`] return that exact path instead of
@@ -301,26 +324,23 @@ impl GlobalConfig {
     }
 
     fn from_file(file: GlobalConfigFile) -> Self {
-        let log_level = file
-            .logging
-            .and_then(|l| l.level)
-            .unwrap_or_default();
+        let log_level = file.logging.and_then(|l| l.level).unwrap_or_default();
 
-        let cache_override = file
-            .paths
-            .and_then(|p| p.cache)
-            .map(expand_tilde);
+        let cache_override = file.paths.and_then(|p| p.cache).map(expand_tilde);
 
         let providers = file.providers.unwrap_or_default();
+        let github_provider = providers.github.unwrap_or_default();
         let access_tokens = AccessTokens {
             cfcore: providers.curseforge.and_then(|p| p.api_key),
-            github: providers.github.and_then(|p| p.api_key),
+            github: github_provider.api_key,
             wago_addons: providers.wago.and_then(|p| p.api_key),
         };
+        let github_handler = github_provider.handler.unwrap_or_default();
 
         GlobalConfig {
             log_level,
             access_tokens,
+            github_handler,
             dirs: Dirs::default_dirs(cache_override),
             config_path_override: None,
         }
@@ -374,31 +394,34 @@ impl GlobalConfig {
 
     pub fn write(&self) -> Result<(), ConfigError> {
         self.ensure_dirs()?;
-        let file = GlobalConfigFile {
-            logging: Some(LoggingConfigFile {
-                level: Some(self.log_level),
-            }),
-            paths: Some(PathsConfigFile {
-                cache: Some(self.dirs.cache.clone()),
-            }),
-            providers: Some(ProvidersConfigFile {
-                curseforge: self.access_tokens.cfcore.clone().map(|api_key| {
-                    ProviderConfigFile {
-                        api_key: Some(api_key),
-                    }
+        let file =
+            GlobalConfigFile {
+                logging: Some(LoggingConfigFile {
+                    level: Some(self.log_level),
                 }),
-                github: self.access_tokens.github.clone().map(|api_key| {
-                    ProviderConfigFile {
-                        api_key: Some(api_key),
-                    }
+                paths: Some(PathsConfigFile {
+                    cache: Some(self.dirs.cache.clone()),
                 }),
-                wago: self.access_tokens.wago_addons.clone().map(|api_key| {
-                    ProviderConfigFile {
-                        api_key: Some(api_key),
-                    }
+                providers: Some(ProvidersConfigFile {
+                    curseforge: self.access_tokens.cfcore.clone().map(|api_key| {
+                        ProviderConfigFile {
+                            api_key: Some(api_key),
+                        }
+                    }),
+                    wago: self.access_tokens.wago_addons.clone().map(|api_key| {
+                        ProviderConfigFile {
+                            api_key: Some(api_key),
+                        }
+                    }),
+                    github: {
+                        let api_key = self.access_tokens.github.clone();
+                        let handler = (self.github_handler != GitHubHandler::default())
+                            .then_some(self.github_handler);
+                        (api_key.is_some() || handler.is_some())
+                            .then_some(GitHubProviderConfigFile { api_key, handler })
+                    },
                 }),
-            }),
-        };
+            };
         fs::write(self.config_file_path(), toml::to_string_pretty(&file)?)?;
         Ok(())
     }

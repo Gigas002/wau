@@ -71,6 +71,7 @@ fn global_config_defaults_when_no_file() {
     assert!(config.access_tokens.cfcore.is_none());
     assert!(config.access_tokens.github.is_none());
     assert!(config.access_tokens.wago_addons.is_none());
+    assert_eq!(config.github_handler, GitHubHandler::Token);
 }
 
 #[test]
@@ -111,6 +112,43 @@ fn global_config_write_persists_all_three_providers() {
     assert_eq!(
         providers.wago.unwrap().api_key.unwrap().expose(),
         "wago-token"
+    );
+}
+
+#[test]
+fn global_config_github_handler_defaults_to_token_and_is_omitted_on_write() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = global_config_in(dir.path());
+    assert_eq!(config.github_handler, GitHubHandler::Token);
+    config.write().unwrap();
+
+    let raw = fs::read_to_string(config.config_file_path()).unwrap();
+    let file: GlobalConfigFile = toml::from_str(&raw).unwrap();
+    // Default handler round-trips to "unset" on disk, not an explicit
+    // `handler = "token"` — same as every other unset provider setting.
+    assert!(file.providers.unwrap().github.is_none());
+}
+
+#[test]
+fn global_config_github_handler_parses_gh_and_persists_it() {
+    let toml = r#"
+        [providers.github]
+        handler = "gh"
+    "#;
+    let file: GlobalConfigFile = toml::from_str(toml).unwrap();
+    let config = GlobalConfig::from_file(file);
+    assert_eq!(config.github_handler, GitHubHandler::Gh);
+
+    let dir = tempfile::tempdir().unwrap();
+    let mut written = global_config_in(dir.path());
+    written.github_handler = GitHubHandler::Gh;
+    written.write().unwrap();
+
+    let raw = fs::read_to_string(written.config_file_path()).unwrap();
+    let file: GlobalConfigFile = toml::from_str(&raw).unwrap();
+    assert_eq!(
+        file.providers.unwrap().github.unwrap().handler,
+        Some(GitHubHandler::Gh)
     );
 }
 

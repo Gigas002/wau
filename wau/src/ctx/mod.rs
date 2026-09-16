@@ -76,6 +76,7 @@ pub fn source_config(global: &GlobalConfig) -> SourceConfig {
         cfcore_api_key: global.access_tokens.cfcore.clone(),
         cfcore_api_url: None,
         github_token: global.access_tokens.github.clone(),
+        github_handler: global.github_handler,
         wago_addons_token: global.access_tokens.wago_addons.clone(),
     }
 }

@@ -10,6 +10,7 @@
 //! typical addon-sized zips) where the initial 25 KB tail read isn't already
 //! the whole archive.
 
+mod gh_cli;
 #[cfg(test)]
 mod tests;
 
@@ -20,8 +21,8 @@ use serde::Deserialize;
 use url::Url;
 
 use crate::{
-    config::SecretString,
-    http::HttpClient,
+    config::{GitHubHandler, SecretString},
+    http::{HttpClient, HttpResponse},
     model::{ChangelogFormat, Defn, Flavour, HeadersIntent, SourceMetadata, Strategy},
     results::{AnyOutcome, Failure, InternalError, ManagerError},
     sources::{PkgCandidate, Resolver},
@@ -145,35 +146,62 @@ fn content_range_total(headers: &[(String, String)]) -> Option<u64> {
 
 pub struct GitHubResolver {
     token: Option<SecretString>,
+    handler: GitHubHandler,
     /// Overridable only in tests (mockito needs a local base URL); the real
     /// resolver always targets the actual GitHub API.
     #[cfg(test)]
-    api_url: String,
+    api_url: Option<String>,
 }
 
 impl GitHubResolver {
-    pub fn new(token: Option<SecretString>) -> Self {
+    pub fn new(token: Option<SecretString>, handler: GitHubHandler) -> Self {
         Self {
             token,
+            handler,
             #[cfg(test)]
-            api_url: API_URL.to_owned(),
+            api_url: None,
         }
     }
 
     #[cfg(test)]
-    fn new_with_api_url(token: Option<SecretString>, api_url: String) -> Self {
-        Self { token, api_url }
+    fn new_with_api_url(
+        token: Option<SecretString>,
+        handler: GitHubHandler,
+        api_url: String,
+    ) -> Self {
+        Self {
+            token,
+            handler,
+            api_url: Some(api_url),
+        }
     }
 
     fn api_base(&self) -> &str {
         #[cfg(test)]
-        return &self.api_url;
+        return self.api_url.as_deref().unwrap_or(API_URL);
         #[cfg(not(test))]
         return API_URL;
     }
 
     fn headers(&self, intent: HeadersIntent) -> Vec<(String, String)> {
         Resolver::make_request_headers(self, intent)
+    }
+
+    /// Dispatches a GET through the request path [`Self::handler`] selects:
+    /// [`GitHubHandler::Gh`] shells out to the system `gh` CLI (its own
+    /// auth, no client-side token); [`GitHubHandler::Token`] throws the
+    /// request directly, `headers` already carrying `Authorization` if a
+    /// token was configured (see [`Resolver::make_request_headers`]).
+    async fn fetch(
+        &self,
+        http: &HttpClient,
+        url: &str,
+        headers: &[(&str, &str)],
+    ) -> AnyOutcome<HttpResponse> {
+        match self.handler {
+            GitHubHandler::Gh => gh_cli::get(http, url, headers).await,
+            GitHubHandler::Token => Ok(http.get(url, headers).await?),
+        }
     }
 
     /// Ranged tail fetch (`bytes=-25000`) for the archive's central
@@ -189,7 +217,7 @@ impl GitHubResolver {
         let mut range_headers = headers.to_vec();
         range_headers.push(("Range", "bytes=-25000"));
 
-        let response = http.get(url, &range_headers).await?;
+        let response = self.fetch(http, url, &range_headers).await?;
 
         if response.status == 200 {
             return Ok(Some((response.body, true)));
@@ -209,7 +237,7 @@ impl GitHubResolver {
 
         // 416/501 (GitHub mislabels out-of-range as 501) or an unparsable
         // partial read: fall back to a full download.
-        let full = http.get(url, headers).await?;
+        let full = self.fetch(http, url, headers).await?;
         if !(200..300).contains(&full.status) {
             return Ok(None);
         }
@@ -351,7 +379,7 @@ impl GitHubResolver {
         headers: &[(&str, &str)],
         url: &str,
     ) -> AnyOutcome<Option<(Vec<u8>, bool)>> {
-        let full = http.get(url, headers).await?;
+        let full = self.fetch(http, url, headers).await?;
         if !(200..300).contains(&full.status) {
             return Ok(None);
         }
@@ -371,7 +399,9 @@ impl GitHubResolver {
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
 
-        let response = http.get(&release_json_asset.url, &download_headers).await?;
+        let response = self
+            .fetch(http, &release_json_asset.url, &download_headers)
+            .await?;
         if !(200..300).contains(&response.status) {
             return Err(InternalError::new(format!(
                 "HTTP {} for {}",
@@ -469,6 +499,31 @@ impl Resolver for GitHubResolver {
         }
     }
 
+    /// Only [`GitHubHandler::Gh`] has a pre-flight check: `gh` itself needs
+    /// to be on `PATH`. [`GitHubHandler::Token`] is never disabled here —
+    /// same as before this handler existed, a missing/invalid token just
+    /// means anonymous (lower-rate-limited) requests, not a hard failure.
+    /// A missing/expired `gh auth login` similarly surfaces as a normal
+    /// `gh api` failure on the actual request, not here.
+    fn get_disabled_reason(&self) -> Option<String> {
+        if self.handler != GitHubHandler::Gh {
+            return None;
+        }
+        #[cfg(test)]
+        return None;
+        #[cfg(not(test))]
+        {
+            match std::process::Command::new("gh").arg("--version").output() {
+                Ok(output) if output.status.success() => None,
+                _ => Some(
+                    "gh CLI not found on PATH — install it (https://cli.github.com) and run \
+                     `gh auth login`"
+                        .to_owned(),
+                ),
+            }
+        }
+    }
+
     fn make_request_headers(&self, intent: HeadersIntent) -> Vec<(String, String)> {
         let mut headers = vec![("X-GitHub-Api-Version".to_owned(), "2022-11-28".to_owned())];
         let accept = if intent == HeadersIntent::Download {
@@ -477,7 +532,11 @@ impl Resolver for GitHubResolver {
             "application/vnd.github+json"
         };
         headers.push(("Accept".to_owned(), accept.to_owned()));
-        if let Some(token) = &self.token {
+        // `gh` carries its own auth; a client-side Authorization header is
+        // only meaningful (and only ever added) for the direct-HTTP path.
+        if self.handler == GitHubHandler::Token
+            && let Some(token) = &self.token
+        {
             headers.push((
                 "Authorization".to_owned(),
                 format!("token {}", token.expose()),
@@ -505,7 +564,7 @@ impl Resolver for GitHubResolver {
             format!("{}/repos/{}", self.api_base(), defn.alias)
         };
 
-        let project_response = http.get(&repo_url, &headers).await?;
+        let project_response = self.fetch(http, &repo_url, &headers).await?;
         if project_response.status == 404 {
             return Err(ManagerError::PkgNonexistent.into());
         }
@@ -524,7 +583,7 @@ impl Resolver for GitHubResolver {
             None => format!("{repo_url}/releases?per_page=10"),
         };
 
-        let releases_response = http.get(&release_url, &headers).await?;
+        let releases_response = self.fetch(http, &release_url, &headers).await?;
         if releases_response.status == 404 {
             return Err(ManagerError::PkgFilesMissing {
                 reason: "no releases found".to_owned(),

@@ -2,7 +2,6 @@ pub mod catalogue;
 pub mod config;
 pub mod error;
 pub mod fs;
-pub mod github_auth;
 pub mod http;
 pub mod lockfile;
 pub mod matchers;

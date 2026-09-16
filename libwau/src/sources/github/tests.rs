@@ -22,7 +22,11 @@ fn defn(alias: &str) -> Defn {
 }
 
 fn resolver(server: &mockito::ServerGuard) -> GitHubResolver {
-    GitHubResolver::new_with_api_url(None, server.url())
+    GitHubResolver::new_with_api_url(None, GitHubHandler::Token, server.url())
+}
+
+fn gh_resolver(server: &mockito::ServerGuard) -> GitHubResolver {
+    GitHubResolver::new_with_api_url(None, GitHubHandler::Gh, server.url())
 }
 
 fn repo_json() -> serde_json::Value {
@@ -101,6 +105,50 @@ async fn resolve_by_alias_matches_zip_contents_and_returns_candidate() {
     assert_eq!(candidate.version, "v1.0.0");
     assert_eq!(candidate.download_url, asset_url);
     assert_eq!(candidate.changelog_url, "data:,release%20notes");
+}
+
+#[tokio::test]
+async fn resolve_with_gh_handler_matches_zip_contents_and_returns_candidate() {
+    // Same scenario as above but through `GitHubHandler::Gh` — proves
+    // `GitHubResolver::fetch` actually dispatches to `gh_cli::get` for that
+    // handler (whose `#[cfg(test)]` branch still goes through `http`/
+    // mockito, so this is a real code-path check, not a duplicate).
+    let mut server = mockito::Server::new_async().await;
+    let asset_url = format!("{}/download/Foo.zip", server.url());
+
+    server
+        .mock("GET", "/repos/Owner/Repo")
+        .with_status(200)
+        .with_body(repo_json().to_string())
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/repos/Owner/Repo/releases")
+        .match_query(mockito::Matcher::Any)
+        .with_status(200)
+        .with_body(
+            serde_json::json!([release_json(
+                "v1.0.0",
+                serde_json::json!([zip_asset(&asset_url, "Foo.zip")])
+            )])
+            .to_string(),
+        )
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/download/Foo.zip")
+        .with_status(200)
+        .with_body(make_test_zip(&[("Foo/Foo.toc", b"## Interface: 110000")]))
+        .create_async()
+        .await;
+
+    let http = HttpClient::new().unwrap();
+    let r = gh_resolver(&server);
+
+    let candidate = crate::sources::resolve_one(&r, &http, Flavour::Mainline, &defn("Owner/Repo"))
+        .await
+        .unwrap();
+    assert_eq!(candidate.download_url, asset_url);
 }
 
 #[tokio::test]
@@ -587,8 +635,8 @@ async fn resolve_any_flavour_matches_non_current_flavour_toc() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn headers_differ_by_intent_and_include_token() {
-    let r = GitHubResolver::new(Some(SecretString::new("tok")));
+fn headers_include_authorization_for_token_handler_with_token() {
+    let r = GitHubResolver::new(Some(SecretString::new("tok")), GitHubHandler::Token);
     let fetch = r.make_request_headers(HeadersIntent::Fetch);
     assert!(fetch.contains(&(
         "Accept".to_owned(),
@@ -601,15 +649,24 @@ fn headers_differ_by_intent_and_include_token() {
 }
 
 #[test]
-fn headers_omit_authorization_without_token() {
-    let r = GitHubResolver::new(None);
+fn headers_omit_authorization_for_token_handler_without_token() {
+    let r = GitHubResolver::new(None, GitHubHandler::Token);
+    let headers = r.make_request_headers(HeadersIntent::Fetch);
+    assert!(!headers.iter().any(|(k, _)| k == "Authorization"));
+}
+
+#[test]
+fn headers_omit_authorization_for_gh_handler_even_with_token() {
+    // `gh` carries its own auth; a configured token is never sent as a
+    // client-side header once the `gh` handler is selected.
+    let r = GitHubResolver::new(Some(SecretString::new("tok")), GitHubHandler::Gh);
     let headers = r.make_request_headers(HeadersIntent::Fetch);
     assert!(!headers.iter().any(|(k, _)| k == "Authorization"));
 }
 
 #[test]
 fn get_alias_from_url_parses_owner_repo() {
-    let r = GitHubResolver::new(None);
+    let r = GitHubResolver::new(None, GitHubHandler::Token);
     assert_eq!(
         r.get_alias_from_url("https://github.com/Owner/Repo"),
         Some("Owner/Repo".to_owned())
@@ -617,6 +674,34 @@ fn get_alias_from_url_parses_owner_repo() {
     assert_eq!(
         r.get_alias_from_url("https://example.invalid/Owner/Repo"),
         None
+    );
+}
+
+#[test]
+fn disabled_reason_is_none_for_token_handler() {
+    // Never disabled, regardless of token presence — a missing/invalid
+    // token just means anonymous (lower-rate-limited) requests.
+    assert!(
+        GitHubResolver::new(None, GitHubHandler::Token)
+            .get_disabled_reason()
+            .is_none()
+    );
+    assert!(
+        GitHubResolver::new(Some(SecretString::new("tok")), GitHubHandler::Token)
+            .get_disabled_reason()
+            .is_none()
+    );
+}
+
+#[test]
+fn disabled_reason_is_none_in_tests_for_gh_handler() {
+    // The real `gh --version` probe only runs under `#[cfg(not(test))]` —
+    // unit-testable behaviour ends at "there's a check", not the presence
+    // of a real `gh` binary on whatever machine runs the suite.
+    assert!(
+        GitHubResolver::new(None, GitHubHandler::Gh)
+            .get_disabled_reason()
+            .is_none()
     );
 }
 
