@@ -1,7 +1,7 @@
 # wau CLI
 
 A native, CLI-only World of Warcraft addon manager. Configs are TOML — see
-`examples/config.toml` and `examples/profiles/example.toml` — and the app never reads
+`examples/config.toml` and `examples/profiles/example/profile.toml` — and the app never reads
 environment variables.
 
 ---
@@ -27,8 +27,8 @@ Commands print plain synchronous output for now; a progress-bar renderer is futu
   config dir; `profiles/` is then resolved as `<PATH>`'s sibling directory. Mainly for
   integration tests that need an isolated config location.
 - `-p` / `--profile <NAME-OR-PATH>` — target profile (default `default`); see
-  `examples/profiles/example.toml`. A bare name is looked up as
-  `<config-dir>/profiles/<name>.toml`; a value containing a path separator or ending in
+  `examples/profiles/example/profile.toml`. A bare name is looked up as
+  `<config-dir>/profiles/<name>/profile.toml`; a value containing a path separator or ending in
   `.toml` is read directly from that path instead (its sibling `.sqlite` is the DB), bypassing
   name-based lookup entirely — again mainly for integration tests pointing at a fixture file.
 
@@ -42,8 +42,8 @@ There is no `configure` command. A profile is configured by either:
 
 - running `wau init` against it, which prompts interactively and writes the files, or
 - hand-writing `<config-dir>/config.toml` (global) and
-  `<config-dir>/profiles/<name>.toml` (per-profile) yourself, copying
-  `examples/config.toml` / `examples/profiles/example.toml` as a starting point.
+  `<config-dir>/profiles/<name>/profile.toml` (per-profile) yourself, copying
+  `examples/config.toml` / `examples/profiles/example/profile.toml` as a starting point.
 
 `<config-dir>` is the platform-conventional config directory (`~/.config/wau` on Linux,
 `~/Library/Application Support/wau` on macOS, `%APPDATA%\wau` on Windows) by default —
@@ -74,10 +74,11 @@ directories in place (DB row removed only).
 ### `wau init`
 
 The only command that bootstraps an unconfigured profile: if `-p`'s profile has no
-`profiles/<name>.toml` yet, prompts interactively for the addon directory, game flavour, and
-optional GitHub/CurseForge/Wago Addons auth, and writes it (plus `config.toml`, if that's
-also missing). Every other command errors out instead — pointing at `wau init` and
-`examples/config.toml` / `examples/profiles/example.toml` — if the profile isn't configured.
+`profiles/<name>/profile.toml` yet, prompts interactively for the addon directory, game
+flavour, and optional GitHub/CurseForge/Wago Addons auth, and writes it (plus `config.toml`,
+if that's also missing). Every other command errors out instead — pointing at `wau init` and
+`examples/config.toml` / `examples/profiles/example/profile.toml` — if the profile isn't
+configured.
 
 Once the profile exists (or was just created), matches un-tracked addon folders (installed by
 hand or by another tool) against catalogue/TOC metadata and imports them, in three

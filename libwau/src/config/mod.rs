@@ -2,8 +2,8 @@
 //!
 //! Two independent TOML documents: a **global config** (`config.toml`:
 //! logging, cache path, provider API keys) and one **profile config** per WoW
-//! installation (`profiles/<name>.toml`, alongside its sibling
-//! `profiles/<name>.sqlite`). No environment variables are ever read —
+//! installation (`profiles/<name>/profile.toml`, alongside its sibling
+//! `profiles/<name>/profile.sqlite`). No environment variables are ever read —
 //! everything comes from these files or their built-in defaults; config/cache
 //! base dirs are resolved via platform-conventional locations (the `dirs`
 //! crate) by default. Both can be pointed at an explicit path instead
@@ -418,7 +418,7 @@ impl InstalledProduct {
     }
 }
 
-/// On-disk shape of `profiles/<name>.toml`.
+/// On-disk shape of `profiles/<name>/profile.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ProfileConfigFile {
     profile: String,
@@ -442,16 +442,26 @@ pub struct ProfileConfig {
     config_path_override: Option<PathBuf>,
 }
 
+const PROFILE_FILE_NAME: &str = "profile.toml";
+const PROFILE_DB_FILE_NAME: &str = "profile.sqlite";
+
 fn profiles_dir_path(global_config: &GlobalConfig) -> PathBuf {
     global_config.dirs.config.join("profiles")
 }
 
+/// Each profile owns a subdirectory named after it (`profiles/<name>/`), so
+/// unrelated per-profile files (config, DB, ...) stay grouped instead of
+/// colliding by filename in a single flat `profiles/` dir.
+fn profile_dir_path(global_config: &GlobalConfig, profile: &str) -> PathBuf {
+    profiles_dir_path(global_config).join(profile)
+}
+
 fn profile_config_file_path(global_config: &GlobalConfig, profile: &str) -> PathBuf {
-    profiles_dir_path(global_config).join(format!("{profile}.toml"))
+    profile_dir_path(global_config, profile).join(PROFILE_FILE_NAME)
 }
 
 fn profile_db_file_path(global_config: &GlobalConfig, profile: &str) -> PathBuf {
-    profiles_dir_path(global_config).join(format!("{profile}.sqlite"))
+    profile_dir_path(global_config, profile).join(PROFILE_DB_FILE_NAME)
 }
 
 impl ProfileConfig {
@@ -495,16 +505,16 @@ impl ProfileConfig {
 
     /// Makes [`Self::config_file_path`]/[`Self::db_file_path`] resolve to
     /// `path` (and its `.sqlite` sibling) instead of the name-based
-    /// `profiles/<profile>.*` layout. Used when bootstrapping a new profile
-    /// from a `--profile` value that looked like a path (see
+    /// `profiles/<profile>/profile.*` layout. Used when bootstrapping a new
+    /// profile from a `--profile` value that looked like a path (see
     /// `wau::ctx::new_profile`).
     pub fn with_path_override(mut self, path: impl Into<PathBuf>) -> Self {
         self.config_path_override = Some(path.into());
         self
     }
 
-    /// Reads `profiles/<profile>.toml` by name inside `global_config`'s
-    /// config dir.
+    /// Reads `profiles/<profile>/profile.toml` by name inside
+    /// `global_config`'s config dir.
     pub fn read(global_config: GlobalConfig, profile: &str) -> Result<Self, ConfigError> {
         let path = profile_config_file_path(&global_config, profile);
         Self::read_toml_at(global_config, &path, None)
@@ -545,20 +555,15 @@ impl ProfileConfig {
         Ok(profile)
     }
 
-    /// Every configured profile name (`profiles/*.toml`), sorted.
+    /// Every configured profile name (`profiles/<name>/profile.toml`), sorted.
     pub fn iter_profiles(global_config: &GlobalConfig) -> Vec<String> {
         let Ok(entries) = fs::read_dir(profiles_dir_path(global_config)) else {
             return Vec::new();
         };
         let mut names: Vec<String> = entries
             .flatten()
-            .filter(|e| e.path().extension().is_some_and(|ext| ext == "toml"))
-            .filter_map(|e| {
-                e.path()
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .map(str::to_owned)
-            })
+            .filter(|e| e.path().join(PROFILE_FILE_NAME).is_file())
+            .filter_map(|e| e.file_name().to_str().map(str::to_owned))
             .collect();
         names.sort();
         names
@@ -598,7 +603,7 @@ impl ProfileConfig {
                 .parent()
                 .map(Path::to_path_buf)
                 .unwrap_or_else(|| PathBuf::from(".")),
-            None => profiles_dir_path(&self.global_config),
+            None => profile_dir_path(&self.global_config, &self.profile),
         };
         fs::create_dir_all(dir)?;
         Ok(())

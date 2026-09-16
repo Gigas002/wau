@@ -90,7 +90,7 @@ fn load_ctx(cli: &Cli) -> Result<AppCtx, AppError> {
         CtxError::Config(ConfigError::NotFound { path }) => AppError::Other(format!(
             "profile '{}' isn't configured (expected {}); run `wau init` to set it up \
              interactively, or hand-write it — see examples/config.toml and \
-             examples/profiles/example.toml",
+             examples/profiles/example/profile.toml",
             cli.profile,
             path.display()
         )),

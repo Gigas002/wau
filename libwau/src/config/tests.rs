@@ -264,6 +264,47 @@ fn profile_config_write_then_read_round_trips() {
 }
 
 #[test]
+fn profile_config_uses_a_name_subdirectory_with_a_fixed_file_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let global = global_config_in(dir.path());
+    let addon_dir = dir.path().join("addons");
+    fs::create_dir_all(&addon_dir).unwrap();
+
+    let profile =
+        ProfileConfig::new(global.clone(), "retail", &addon_dir, Some(Flavour::Mainline)).unwrap();
+    profile.write().unwrap();
+
+    assert_eq!(
+        profile.config_file_path(),
+        profiles_dir_path(&global)
+            .join("retail")
+            .join("profile.toml")
+    );
+    assert_eq!(
+        profile.db_file_path(),
+        profiles_dir_path(&global)
+            .join("retail")
+            .join("profile.sqlite")
+    );
+}
+
+#[test]
+fn iter_profiles_ignores_directories_without_a_profile_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let global = global_config_in(dir.path());
+    let addon_dir = dir.path().join("addons");
+    fs::create_dir_all(&addon_dir).unwrap();
+
+    ProfileConfig::new(global.clone(), "real", &addon_dir, Some(Flavour::Mainline))
+        .unwrap()
+        .write()
+        .unwrap();
+    fs::create_dir_all(profiles_dir_path(&global).join("junk")).unwrap();
+
+    assert_eq!(ProfileConfig::iter_profiles(&global), vec!["real".to_owned()]);
+}
+
+#[test]
 fn profile_config_file_uses_path_and_flavour_keys() {
     let dir = tempfile::tempdir().unwrap();
     let global = global_config_in(dir.path());
