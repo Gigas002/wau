@@ -28,6 +28,7 @@ use crate::{
     ctx::{self, AppCtx, CtxError},
     output::{any_errors, format_results},
     prompts::{self, Choice},
+    style,
 };
 
 #[cfg(test)]
@@ -47,6 +48,8 @@ pub enum AppError {
     Failure(#[from] Failure),
     #[error(transparent)]
     Prompt(#[from] inquire::InquireError),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
     #[error("{0}")]
     Other(String),
 }
@@ -120,7 +123,7 @@ async fn cmd_install(cli: &Cli, args: &InstallArgs) -> Result<i32, AppError> {
 
     let results =
         pkg_management::install(&mut lock, &pkg_ctx, &defns, args.replace, args.dry_run).await;
-    println!("{}", format_results(&results));
+    println!("{}", format_results(&results, style::color_enabled()));
     Ok(i32::from(any_errors(&results)))
 }
 
@@ -161,7 +164,7 @@ async fn cmd_sync(cli: &Cli, args: &SyncArgs) -> Result<i32, AppError> {
             )
         });
     }
-    println!("{}", format_results(&results));
+    println!("{}", format_results(&results, style::color_enabled()));
     Ok(i32::from(any_errors(&results)))
 }
 
@@ -176,7 +179,7 @@ async fn cmd_remove(cli: &Cli, args: &RemoveArgs) -> Result<i32, AppError> {
     let defns = parse_defns_retain(&args.addons, &sources)?;
 
     let results = pkg_management::remove(&mut lock, &profile.addon_dir, &defns, args.keep_folders);
-    println!("{}", format_results(&results));
+    println!("{}", format_results(&results, style::color_enabled()));
     Ok(i32::from(any_errors(&results)))
 }
 
@@ -205,7 +208,7 @@ async fn cmd_replace(cli: &Cli, args: &ReplaceArgs) -> Result<i32, AppError> {
     };
 
     let results = pkg_management::replace(&mut lock, &pkg_ctx, &[(old, new)]).await?;
-    println!("{}", format_results(&results));
+    println!("{}", format_results(&results, style::color_enabled()));
     Ok(i32::from(any_errors(&results)))
 }
 
@@ -242,9 +245,7 @@ async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
         if profile_names.len() > 1 {
             println!("== {name} ==");
         }
-        if let Err(e) =
-            reconcile_profile(&global, name, args, &mut catalogue).await
-        {
+        if let Err(e) = reconcile_profile(&global, name, args, &mut catalogue).await {
             eprintln!("{name}: {e}");
             any_errors = true;
         }
@@ -270,7 +271,7 @@ async fn reconcile_profile(
 
     let mut leftovers = matchers::get_unreconciled_folders(&lock, &profile.addon_dir, flavour);
     if args.list_unreconciled {
-        print_unreconciled(&leftovers);
+        print_unreconciled(&leftovers, style::color_enabled());
         return Ok(());
     }
     if leftovers.is_empty() {
@@ -281,7 +282,9 @@ async fn reconcile_profile(
     if catalogue.is_none() {
         *catalogue = Some(catalogue::synchronise(&http).await?);
     }
-    let catalogue = catalogue.as_ref().expect("just populated above if it was None");
+    let catalogue = catalogue
+        .as_ref()
+        .expect("just populated above if it was None");
 
     let pkg_ctx = pkg_management::Ctx {
         http: &http,
@@ -359,7 +362,7 @@ async fn reconcile_profile(
             if proceed {
                 let results =
                     pkg_management::install(&mut lock, &pkg_ctx, &selections, true, false).await;
-                println!("{}", format_results(&results));
+                println!("{}", format_results(&results, style::color_enabled()));
             }
         }
 
@@ -371,13 +374,13 @@ async fn reconcile_profile(
 
     if !leftovers.is_empty() {
         println!();
-        print_unreconciled(&leftovers);
+        print_unreconciled(&leftovers, style::color_enabled());
     }
 
     Ok(())
 }
 
-fn print_unreconciled(leftovers: &[matchers::AddonFolder]) {
+fn print_unreconciled(leftovers: &[matchers::AddonFolder], color: bool) {
     if leftovers.is_empty() {
         println!("No add-ons left to reconcile.");
         return;
@@ -386,7 +389,7 @@ fn print_unreconciled(leftovers: &[matchers::AddonFolder]) {
     names.sort_unstable();
     println!("unreconciled:");
     for name in names {
-        println!("  {name}");
+        println!("  {}", style::name(color, name));
     }
 }
 
@@ -454,29 +457,34 @@ async fn cmd_search(cli: &Cli, args: &SearchArgs) -> Result<i32, AppError> {
         return Ok(0);
     }
 
-    let choices: Vec<Choice<Defn>> = entries
-        .iter()
-        .map(|e| {
+    let color = style::color_enabled();
+    println!(
+        "{}",
+        crate::output::format_search_results(&entries, &installed_keys, color)
+    );
+    println!(
+        "{} Packages to install (eg: 1 2 3, 1-3):",
+        style::marker(color)
+    );
+    let input = prompts::read_line(&format!("{} ", style::marker(color)))?;
+
+    let picked = parse_selection(&input, entries.len());
+    if picked.is_empty() {
+        println!("Nothing selected.");
+        return Ok(0);
+    }
+    let selections: Vec<Defn> = picked
+        .into_iter()
+        .map(|i| {
+            let e = entries[i];
             let alias = if e.slug.is_empty() {
                 e.id.clone()
             } else {
                 e.slug.clone()
             };
-            let defn = Defn::new(e.source.clone(), alias);
-            Choice::new(format!("{}  ({})", e.name, defn.as_uri(false, false)), defn)
+            Defn::new(e.source.clone(), alias)
         })
         .collect();
-
-    let selections = prompts::select_multiple("Select add-ons to install", choices)?;
-    if selections.is_empty() {
-        println!(
-            "Nothing was selected; select add-ons with <space> and confirm by pressing <enter>."
-        );
-        return Ok(0);
-    }
-    if !prompts::confirm("Install selected add-ons?", true)? {
-        return Ok(0);
-    }
 
     let pkg_ctx = pkg_management::Ctx {
         http: &http,
@@ -487,7 +495,7 @@ async fn cmd_search(cli: &Cli, args: &SearchArgs) -> Result<i32, AppError> {
         flavour,
     };
     let results = pkg_management::install(&mut lock, &pkg_ctx, &selections, false, false).await;
-    println!("{}", format_results(&results));
+    println!("{}", format_results(&results, style::color_enabled()));
     Ok(i32::from(any_errors(&results)))
 }
 
@@ -504,9 +512,10 @@ async fn cmd_list(cli: &Cli, addons: &[String], format: ListFormat) -> Result<i3
     });
 
     let refs: Vec<&Pkg> = pkgs.iter().collect();
+    let color = style::color_enabled();
     let rendered = match format {
-        ListFormat::Simple => crate::output::format_list_simple(&refs),
-        ListFormat::Detailed => crate::output::format_list_detailed(&refs),
+        ListFormat::Simple => crate::output::format_list_simple(&refs, color),
+        ListFormat::Detailed => crate::output::format_list_detailed(&refs, color),
         ListFormat::Json => crate::output::format_list_json(&refs),
     };
     if !rendered.is_empty() {
@@ -586,6 +595,44 @@ fn cmd_stats(cli: &Cli) -> Result<(), AppError> {
         serde_json::to_string_pretty(&output).unwrap_or_default()
     );
     Ok(())
+}
+
+// ============================================================================
+// search selection parsing
+// ============================================================================
+
+/// Parses a paru-style selection line (`"1 2 3"`, `"1,2 4-6"`, ...) against
+/// `max` results, returning 0-indexed positions into the original results
+/// slice, deduplicated, in first-seen order. Tokens are split on whitespace
+/// and commas; each is either a bare number or an inclusive `a-b` range
+/// (either order). Out-of-range or unparseable tokens are silently dropped
+/// rather than erroring the whole line out — matching how paru itself
+/// tolerates a stray typo in an otherwise-valid selection.
+fn parse_selection(input: &str, max: usize) -> Vec<usize> {
+    let mut picked: Vec<usize> = Vec::new();
+    let mut push_valid = |n: usize| {
+        if n >= 1 && n <= max && !picked.contains(&(n - 1)) {
+            picked.push(n - 1);
+        }
+    };
+
+    for token in input.split([' ', ',']).map(str::trim) {
+        if token.is_empty() {
+            continue;
+        }
+        if let Some((a, b)) = token.split_once('-')
+            && let (Ok(a), Ok(b)) = (a.parse::<usize>(), b.parse::<usize>())
+        {
+            let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+            for n in lo..=hi {
+                push_valid(n);
+            }
+        } else if let Ok(n) = token.parse::<usize>() {
+            push_valid(n);
+        }
+    }
+
+    picked
 }
 
 // ============================================================================

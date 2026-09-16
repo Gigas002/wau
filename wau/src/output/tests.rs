@@ -1,10 +1,34 @@
 use chrono::{TimeZone, Utc};
 use libwau::{
     lockfile::{Pkg, PkgDep, PkgFolder, PkgOptions},
+    model::Flavour,
     results::{InternalError, ManagerError},
 };
 
 use super::*;
+
+fn catalogue_entry(
+    source: &str,
+    id: &str,
+    slug: &str,
+    name: &str,
+    download_count: u64,
+) -> CatalogueEntry {
+    CatalogueEntry {
+        source: source.to_owned(),
+        id: id.to_owned(),
+        slug: slug.to_owned(),
+        name: name.to_owned(),
+        url: format!("https://example.com/{slug}"),
+        game_flavours: vec![Flavour::Mainline],
+        download_count,
+        last_updated: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        folders: vec![],
+        same_as: vec![],
+        normalised_name: slug.to_owned(),
+        derived_download_score: download_count as f64,
+    }
+}
 
 fn sample_pkg(source: &str, slug: &str) -> Pkg {
     Pkg {
@@ -51,8 +75,19 @@ fn symbol_for_maps_ok_manager_and_internal_distinctly() {
 fn format_result_includes_uri_and_indented_detail() {
     let defn = Defn::new("curse", "foo");
     let outcome: AnyOutcome<Outcome> = Err(ManagerError::PkgAlreadyInstalled.into());
-    let rendered = format_result(&defn, &outcome);
+    let rendered = format_result(&defn, &outcome, false);
     assert_eq!(rendered, "✗ curse:foo\n  package already installed");
+}
+
+#[test]
+fn format_result_with_color_emits_ansi_escapes() {
+    let defn = Defn::new("curse", "foo");
+    let outcome: AnyOutcome<Outcome> = Err(ManagerError::PkgAlreadyInstalled.into());
+    let rendered = format_result(&defn, &outcome, true);
+    assert!(rendered.contains('\u{1b}'));
+    // Still readable as plain text once escapes are stripped isn't checked
+    // here — the point is just that *something* got colored.
+    assert!(rendered.contains("curse:foo"));
 }
 
 #[test]
@@ -71,7 +106,7 @@ fn format_results_sorts_by_uri() {
         }),
     );
 
-    let rendered = format_results(&results);
+    let rendered = format_results(&results, false);
     let alpha_pos = rendered.find("alpha").unwrap();
     let zeta_pos = rendered.find("zeta").unwrap();
     assert!(alpha_pos < zeta_pos);
@@ -99,18 +134,42 @@ fn any_errors_detects_at_least_one_failure() {
 fn format_list_simple_renders_bare_source_slug_uris() {
     let pkgs = [sample_pkg("curse", "foo"), sample_pkg("github", "bar")];
     let refs: Vec<&Pkg> = pkgs.iter().collect();
-    assert_eq!(format_list_simple(&refs), "curse:foo\ngithub:bar");
+    assert_eq!(format_list_simple(&refs, false), "curse:foo\ngithub:bar");
 }
 
 #[test]
 fn format_list_detailed_includes_key_fields() {
     let pkg = sample_pkg("curse", "foo");
-    let rendered = format_list_detailed(&[&pkg]);
+    let rendered = format_list_detailed(&[&pkg], false);
     assert!(rendered.contains("name: Foo"));
     assert!(rendered.contains("description: A test addon"));
     assert!(rendered.contains("folders: Foo"));
     assert!(rendered.contains("dependencies: curse:456"));
     assert!(rendered.contains("version: 1.0.0"));
+}
+
+#[test]
+fn format_search_results_numbers_best_match_as_one_at_the_bottom() {
+    let best = catalogue_entry("curse", "1", "best-match", "Best Match", 500);
+    let worst = catalogue_entry("curse", "2", "worst-match", "Worst Match", 10);
+    let entries = vec![&best, &worst];
+
+    let rendered = format_search_results(&entries, &HashSet::new(), false);
+    let lines: Vec<&str> = rendered.lines().collect();
+    // best-first input -> best (index 0) printed last, labelled "1".
+    assert!(lines[0].starts_with("2 curse/worst-match"));
+    assert!(lines[2].starts_with("1 curse/best-match"));
+}
+
+#[test]
+fn format_search_results_tags_installed_entries() {
+    let entry = catalogue_entry("curse", "1", "foo", "Foo", 1);
+    let entries = vec![&entry];
+    let installed: HashSet<(String, String)> =
+        [("curse".to_owned(), "1".to_owned())].into_iter().collect();
+
+    let rendered = format_search_results(&entries, &installed, false);
+    assert!(rendered.contains("[Installed]"));
 }
 
 #[test]

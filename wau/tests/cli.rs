@@ -166,10 +166,7 @@ fn replace_of_a_never_installed_addon_reports_errors_for_both_sides() {
     // CurseForge has no API key in this fixture's config.toml, so it's
     // disabled — resolving `new` fails fast on that check, before any
     // network call, keeping this test deterministic without HTTP mocking.
-    let output = wau_configured(
-        &tmp,
-        &["replace", "curse:old-addon", "curse:new-addon"],
-    );
+    let output = wau_configured(&tmp, &["replace", "curse:old-addon", "curse:new-addon"]);
 
     assert!(!output.status.success());
     let text = stdout(&output);
@@ -214,9 +211,16 @@ fn init_list_unreconciled_reports_untracked_folders_without_network() {
         .join("AddOns")
         .join("SomeHandInstalledAddon");
     fs::create_dir_all(&addon_dir).unwrap();
-    fs::write(addon_dir.join("SomeHandInstalledAddon.toc"), "## Version: 1").unwrap();
+    fs::write(
+        addon_dir.join("SomeHandInstalledAddon.toc"),
+        "## Version: 1",
+    )
+    .unwrap();
 
-    let output = wau(&tmp, &["--config", "config.toml", "init", "--list-unreconciled"]);
+    let output = wau(
+        &tmp,
+        &["--config", "config.toml", "init", "--list-unreconciled"],
+    );
 
     assert!(output.status.success(), "{}", stderr(&output));
     assert!(stdout(&output).contains("unreconciled:"));

@@ -3,6 +3,7 @@ mod cli;
 mod ctx;
 mod output;
 mod prompts;
+mod style;
 
 use clap::Parser;
 use libwau::config::LogLevel;

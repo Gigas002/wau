@@ -78,3 +78,35 @@ fn parse_defn_errors_on_a_bare_alias_with_no_colon_and_no_matching_source() {
     let err = parse_defn("just-a-name", &[], false).unwrap_err();
     assert!(matches!(err, AppError::Other(_)));
 }
+
+#[test]
+fn parse_selection_accepts_space_and_comma_separated_numbers() {
+    assert_eq!(parse_selection("1 3", 5), vec![0, 2]);
+    assert_eq!(parse_selection("1,3", 5), vec![0, 2]);
+    assert_eq!(parse_selection("1, 3 5", 5), vec![0, 2, 4]);
+}
+
+#[test]
+fn parse_selection_expands_ranges_in_either_order() {
+    // A "reversed" range (`3-1`) still normalizes to ascending bounds, not a
+    // reversed iteration order.
+    assert_eq!(parse_selection("1-3", 5), vec![0, 1, 2]);
+    assert_eq!(parse_selection("3-1", 5), vec![0, 1, 2]);
+}
+
+#[test]
+fn parse_selection_drops_out_of_range_and_unparseable_tokens() {
+    assert_eq!(parse_selection("0 6 2", 5), vec![1]);
+    assert_eq!(parse_selection("abc 2 1-abc", 5), vec![1]);
+}
+
+#[test]
+fn parse_selection_deduplicates_preserving_first_seen_order() {
+    assert_eq!(parse_selection("2 1-3 2", 5), vec![1, 0, 2]);
+}
+
+#[test]
+fn parse_selection_of_blank_input_is_empty() {
+    assert!(parse_selection("", 5).is_empty());
+    assert!(parse_selection("   ", 5).is_empty());
+}

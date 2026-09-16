@@ -75,9 +75,7 @@ fn replace_takes_exactly_an_old_and_a_new_addon() {
 
     assert!(Cli::try_parse_from(["wau", "replace"]).is_err());
     assert!(Cli::try_parse_from(["wau", "replace", "curse:foo"]).is_err());
-    assert!(
-        Cli::try_parse_from(["wau", "replace", "curse:foo", "github:foo", "extra"]).is_err()
-    );
+    assert!(Cli::try_parse_from(["wau", "replace", "curse:foo", "github:foo", "extra"]).is_err());
 }
 
 #[test]
