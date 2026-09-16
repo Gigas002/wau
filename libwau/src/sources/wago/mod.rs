@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -11,7 +11,7 @@ use url::Url;
 
 use crate::{
     config::SecretString,
-    http::HttpClient,
+    http::{CacheTtl, HttpClient},
     model::{ChangelogFormat, Defn, Flavour, HeadersIntent, SourceMetadata, Strategy},
     results::{AnyOutcome, Failure, InternalError, ManagerError},
     sources::{PkgCandidate, Resolver},
@@ -157,7 +157,13 @@ impl Resolver for WagoAddonsResolver {
         url.query_pairs_mut()
             .append_pair("game_version", game_version);
 
-        let response = http.get(url.as_str(), &headers).await?;
+        let response = http
+            .get(
+                url.as_str(),
+                &headers,
+                CacheTtl::For(Duration::from_secs(5 * 60)),
+            )
+            .await?;
         if response.status == 404 {
             return Err(ManagerError::PkgNonexistent.into());
         }

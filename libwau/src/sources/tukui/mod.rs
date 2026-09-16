@@ -3,12 +3,14 @@
 #[cfg(test)]
 mod tests;
 
+use std::time::Duration;
+
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Deserialize;
 use url::Url;
 
 use crate::{
-    http::HttpClient,
+    http::{CacheTtl, HttpClient},
     model::{ChangelogFormat, Defn, Flavour, SourceMetadata},
     results::{AnyOutcome, Failure, InternalError, ManagerError},
     sources::{PkgCandidate, Resolver},
@@ -86,7 +88,9 @@ impl Resolver for TukuiResolver {
         defn: &Defn,
     ) -> AnyOutcome<PkgCandidate> {
         let url = format!("{}/addon/{}", self.api_base(), defn.alias);
-        let response = http.get(&url, &[]).await?;
+        let response = http
+            .get(&url, &[], CacheTtl::For(Duration::from_secs(5 * 60)))
+            .await?;
         if response.status == 404 {
             return Err(ManagerError::PkgNonexistent.into());
         }

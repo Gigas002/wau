@@ -2,30 +2,29 @@
 //! `wau` negotiating or storing its own GitHub credentials — auth is
 //! whatever `gh auth login` has already configured on the host.
 
-#[cfg(test)]
-mod tests;
-
 #[cfg(not(test))]
 use crate::results::InternalError;
 use crate::{
-    http::{HttpClient, HttpResponse},
+    http::{CacheTtl, HttpClient, HttpResponse},
     results::AnyOutcome,
 };
 
 /// Fetches `url` (with extra request `headers`) the way [`HttpClient::get`]
 /// used to. Overridable only in tests (mockito needs a real HTTP client to
 /// mock against — `gh` itself can't be pointed at a local server), so the
-/// real flow always shells out to `gh api`.
+/// real flow always shells out to `gh api`. `ttl` only takes effect on that
+/// test path — `gh` has no client-side cache of its own to steer.
 pub(super) async fn get(
     http: &HttpClient,
     url: &str,
     headers: &[(&str, &str)],
+    ttl: CacheTtl,
 ) -> AnyOutcome<HttpResponse> {
     #[cfg(test)]
-    return Ok(http.get(url, headers).await?);
+    return Ok(http.get(url, headers, ttl).await?);
     #[cfg(not(test))]
     {
-        let _ = http;
+        let _ = (http, ttl);
         run_gh_api(url, headers).await
     }
 }
@@ -60,7 +59,7 @@ async fn run_gh_api(url: &str, headers: &[(&str, &str)]) -> AnyOutcome<HttpRespo
 /// every header line (and the header/body separator) with `\r\n` — `str`'s
 /// `lines()` handles both uniformly, since it strips an optional trailing
 /// `\r` regardless.
-fn parse_response(raw: &[u8]) -> Option<HttpResponse> {
+pub(super) fn parse_response(raw: &[u8]) -> Option<HttpResponse> {
     const SEP: &[u8] = b"\r\n\r\n";
     let split_at = raw.windows(SEP.len()).position(|w| w == SEP)?;
     let head = String::from_utf8_lossy(&raw[..split_at]).into_owned();

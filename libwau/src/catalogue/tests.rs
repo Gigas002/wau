@@ -136,3 +136,85 @@ fn unparsable_last_updated_drops_the_entry() {
     let catalogue = parse(vec![entry]);
     assert!(catalogue.entries.is_empty());
 }
+
+mod git_cache {
+    use std::path::Path;
+
+    use crate::catalogue::git_cache::resolve;
+
+    async fn init_source_repo(dir: &Path, branch: &str, filename: &str, contents: &str) {
+        let git = |args: &[&str]| {
+            let dir = dir.to_owned();
+            let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+            async move {
+                let status = tokio::process::Command::new("git")
+                    .args(&args)
+                    .current_dir(&dir)
+                    .status()
+                    .await
+                    .unwrap();
+                assert!(status.success(), "git {args:?} failed");
+            }
+        };
+        tokio::fs::create_dir_all(dir).await.unwrap();
+        git(&["init", "--quiet", "--initial-branch", branch]).await;
+        git(&["config", "user.email", "test@example.invalid"]).await;
+        git(&["config", "user.name", "test"]).await;
+        tokio::fs::write(dir.join(filename), contents)
+            .await
+            .unwrap();
+        git(&["add", filename]).await;
+        git(&["commit", "--quiet", "-m", "data"]).await;
+    }
+
+    #[tokio::test]
+    async fn clones_then_updates_on_change() {
+        let src = tempfile::tempdir().unwrap();
+        let cache = tempfile::tempdir().unwrap();
+        init_source_repo(src.path(), "data", "catalogue.json", "v1").await;
+
+        let repo_url = src.path().to_string_lossy().into_owned();
+        let path = resolve(&repo_url, "data", cache.path(), "catalogue.json")
+            .await
+            .unwrap();
+        assert_eq!(tokio::fs::read_to_string(&path).await.unwrap(), "v1");
+
+        init_source_repo(src.path(), "data", "catalogue.json", "v2").await;
+        let path = resolve(&repo_url, "data", cache.path(), "catalogue.json")
+            .await
+            .unwrap();
+        assert_eq!(tokio::fs::read_to_string(&path).await.unwrap(), "v2");
+    }
+
+    #[tokio::test]
+    async fn falls_back_to_stale_copy_when_update_fails() {
+        let src = tempfile::tempdir().unwrap();
+        let cache = tempfile::tempdir().unwrap();
+        init_source_repo(src.path(), "data", "catalogue.json", "v1").await;
+
+        let repo_url = src.path().to_string_lossy().into_owned();
+        resolve(&repo_url, "data", cache.path(), "catalogue.json")
+            .await
+            .unwrap();
+
+        // The remote's gone, but the local clone is intact.
+        drop(src);
+        let path = resolve(&repo_url, "data", cache.path(), "catalogue.json")
+            .await
+            .unwrap();
+        assert_eq!(tokio::fs::read_to_string(&path).await.unwrap(), "v1");
+    }
+
+    #[tokio::test]
+    async fn errors_when_first_clone_fails() {
+        let cache = tempfile::tempdir().unwrap();
+        let err = resolve(
+            "/nonexistent/instawow-data",
+            "data",
+            cache.path(),
+            "catalogue.json",
+        )
+        .await;
+        assert!(err.is_err());
+    }
+}

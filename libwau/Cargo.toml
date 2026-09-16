@@ -14,7 +14,7 @@ workspace = true
 [features]
 default = ["curseforge", "github", "tukui", "wowinterface", "wago"]
 curseforge = []
-github = ["tokio/process"]
+github = []
 tukui = []
 wowinterface = []
 wago = []
@@ -26,7 +26,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
 url = "2"
 chrono = { version = "0.4", features = ["serde"] }
-tokio = { workspace = true, features = ["fs", "time"] }
+tokio = { workspace = true, features = ["fs", "time", "process"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "gzip", "rustls"] }
 zip = { version = "8", default-features = false, features = ["deflate"] }
 async-trait = "0.1"

@@ -299,7 +299,7 @@ async fn reconcile_profile(
     }
 
     if catalogue.is_none() {
-        *catalogue = Some(catalogue::synchronise(&http).await?);
+        *catalogue = Some(catalogue::synchronise(&profile.global_config.dirs.cache).await?);
     }
     let catalogue = catalogue
         .as_ref()
@@ -427,7 +427,7 @@ async fn cmd_search(cli: &Cli, args: &SearchArgs) -> Result<i32, AppError> {
     } = app_ctx;
     let flavour = profile.product.flavour();
 
-    let catalogue = catalogue::synchronise(&http).await?;
+    let catalogue = catalogue::synchronise(&profile.global_config.dirs.cache).await?;
     let installed_versions: HashMap<(String, String), String> = lock
         .get_all_pkgs()
         .into_iter()

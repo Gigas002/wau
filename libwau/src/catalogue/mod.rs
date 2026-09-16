@@ -5,17 +5,17 @@
 //! Generating the catalogue data itself is out of scope here — this only
 //! consumes the already-published, pre-built catalogue JSON.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 use crate::{
-    http::HttpClient,
     model::Flavour,
     results::{Failure, InternalError},
 };
 
+mod git_cache;
 #[cfg(test)]
 mod tests;
 
@@ -23,11 +23,11 @@ pub mod search;
 
 const CATALOGUE_VERSION: u32 = 8;
 const GITHUB_SOURCE_ID: &str = "github";
+const DATA_REPO_URL: &str = "https://github.com/layday/instawow-data.git";
+const DATA_BRANCH: &str = "data";
 
-fn catalogue_url() -> String {
-    format!(
-        "https://raw.githubusercontent.com/layday/instawow-data/data/base-catalogue-v{CATALOGUE_VERSION}.compact.json"
-    )
+fn catalogue_filename() -> String {
+    format!("base-catalogue-v{CATALOGUE_VERSION}.compact.json")
 }
 
 /// Strips non-ASCII-alphanumeric characters and casefolds.
@@ -199,12 +199,13 @@ impl ComputedCatalogue {
     }
 }
 
-/// Fetches and parses the published aggregate catalogue.
-pub async fn synchronise(http: &HttpClient) -> Result<ComputedCatalogue, Failure> {
-    let response = http.get(&catalogue_url(), &[]).await?;
-    if !(200..300).contains(&response.status) {
-        return Err(InternalError::new(format!("HTTP {} for catalogue", response.status)).into());
-    }
-    let raw: RawCatalogue = serde_json::from_slice(&response.body)?;
+/// Resolves and parses the published aggregate catalogue from a local mirror
+/// of `instawow-data`'s `data` branch under `cache_dir`, cloning or updating
+/// it as needed — see [`git_cache`].
+pub async fn synchronise(cache_dir: &Path) -> Result<ComputedCatalogue, Failure> {
+    let filename = catalogue_filename();
+    let path = git_cache::resolve(DATA_REPO_URL, DATA_BRANCH, cache_dir, &filename).await?;
+    let bytes = tokio::fs::read(&path).await.map_err(InternalError::new)?;
+    let raw: RawCatalogue = serde_json::from_slice(&bytes)?;
     Ok(ComputedCatalogue::from_raw(raw))
 }

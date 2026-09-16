@@ -99,7 +99,7 @@ impl AppCtx {
     pub fn from_profile(profile: ProfileConfig) -> Result<Self, CtxError> {
         profile.ensure_dirs()?;
         let lock = LockFile::open(&profile.lock_file_path())?;
-        let http = HttpClient::new()?;
+        let http = HttpClient::with_cache_dir(&profile.global_config.dirs.cache)?;
         let sources = sources::default_sources(&source_config(&profile.global_config));
 
         Ok(Self {

@@ -9,7 +9,7 @@ use chrono::{DateTime, Utc};
 
 use crate::{
     config::{GitHubHandler, SecretString},
-    http::HttpError,
+    http::{CacheTtl, HttpError},
     model::{Defn, Flavour, HeadersIntent, SourceMetadata, Strategy},
     pkg_archives::DownloadError,
     results::{AnyOutcome, Failure, InternalError, ManagerError},
@@ -179,7 +179,7 @@ async fn default_get_changelog<R: Resolver + ?Sized>(
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
-        let response = http.get(url, &headers).await?;
+        let response = http.get(url, &headers, CacheTtl::Indefinite).await?;
         return String::from_utf8(response.body).map_err(|e| InternalError::new(e).into());
     }
     Err(InternalError::new(format!("unsupported changelog URL scheme: {url}")).into())
