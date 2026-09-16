@@ -55,6 +55,12 @@ pub enum ConfigError {
 
     #[error("game flavour cannot be detected for '{}'; set flavour", .path.display())]
     NoFlavourDetected { path: PathBuf },
+
+    #[error("no profile configured")]
+    NoProfilesConfigured,
+
+    #[error("multiple profiles configured: {}", .available.join(", "))]
+    AmbiguousProfile { available: Vec<String> },
 }
 
 // ============================================================================
@@ -519,6 +525,21 @@ impl ProfileConfig {
     pub fn read(global_config: GlobalConfig, profile: &str) -> Result<Self, ConfigError> {
         let path = profile_config_file_path(&global_config, profile);
         Self::read_toml_at(global_config, &path, None)
+    }
+
+    /// Reads the one configured profile — for callers with no explicit name
+    /// to resolve against (no implicit "default"-named profile). Errors with
+    /// [`ConfigError::NoProfilesConfigured`]/[`ConfigError::AmbiguousProfile`]
+    /// if zero or multiple profiles exist; callers that already know which
+    /// profile they want should go through [`Self::read`]/
+    /// [`Self::read_from_path`] instead.
+    pub fn read_sole(global_config: GlobalConfig) -> Result<Self, ConfigError> {
+        let names = Self::iter_profiles(&global_config);
+        match names.as_slice() {
+            [] => Err(ConfigError::NoProfilesConfigured),
+            [only] => Self::read(global_config, only),
+            _ => Err(ConfigError::AmbiguousProfile { available: names }),
+        }
     }
 
     /// Reads a profile config directly from `path`, bypassing name-based

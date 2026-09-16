@@ -88,14 +88,33 @@ pub async fn run(cli: &Cli) -> Result<i32, AppError> {
 /// other command.
 fn load_ctx(cli: &Cli) -> Result<AppCtx, AppError> {
     AppCtx::build(cli).map_err(|e| match e {
-        CtxError::Config(ConfigError::NotFound { path }) => AppError::Other(format!(
-            "profile '{}' isn't configured (expected {}); hand-write it — see \
-             examples/config.toml and examples/profiles/example/profile.toml",
-            cli.profile,
-            path.display()
-        )),
+        CtxError::Config(e) => describe_config_error(cli, e),
         e => e.into(),
     })
+}
+
+/// Turns a [`ConfigError`] into a message pointing at the specific `-p`/
+/// hand-write fix, rather than the terse library-level Display each variant
+/// otherwise has.
+fn describe_config_error(cli: &Cli, e: ConfigError) -> AppError {
+    match e {
+        ConfigError::NotFound { path } => AppError::Other(format!(
+            "profile '{}' isn't configured (expected {}); hand-write it — see \
+             examples/config.toml and examples/profiles/example/profile.toml",
+            cli.profile.as_deref().unwrap_or("?"),
+            path.display()
+        )),
+        ConfigError::NoProfilesConfigured => AppError::Other(
+            "no profiles configured; hand-write one — see examples/config.toml and \
+             examples/profiles/example/profile.toml"
+                .to_owned(),
+        ),
+        ConfigError::AmbiguousProfile { available } => AppError::Other(format!(
+            "multiple profiles configured ({}); specify one with -p/--profile",
+            available.join(", ")
+        )),
+        e => e.into(),
+    }
 }
 
 // ============================================================================
@@ -216,23 +235,32 @@ async fn cmd_replace(cli: &Cli, args: &ReplaceArgs) -> Result<i32, AppError> {
 // init
 // ============================================================================
 
-/// Reconciles every configured profile (`ProfileConfig::iter_profiles`) —
-/// `-p`/`--profile` is ignored, since there's no single "active" profile for
-/// this command; each profile is otherwise handled exactly as a single-profile
-/// `init` always was. For each group of untracked folders the matcher passes
-/// turn up, prompts which candidate source to install (`--auto` picks the
-/// top-priority one instead) then confirms before installing; folders that
-/// never match anything are printed at the end for the user to handle by hand.
+/// With `-p`/`--profile` given, reconciles just that one profile (name or
+/// path, same resolution as every other command). Without it, reconciles
+/// *every* configured profile (`ProfileConfig::iter_profiles`) in turn —
+/// there's no implicit "default" to fall back to instead. Each profile is
+/// otherwise handled exactly as a single-profile `init` always was: for
+/// each group of untracked folders the matcher passes turn up, prompts
+/// which candidate source to install (`--auto` picks the top-priority one
+/// instead) then confirms before installing; folders that never match
+/// anything are printed at the end for the user to handle by hand.
 async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
     let global = GlobalConfig::read_from(cli.config.as_deref())?;
-    let profile_names = ProfileConfig::iter_profiles(&global);
-    if profile_names.is_empty() {
-        println!(
-            "No profiles configured; hand-write one — see examples/config.toml and \
-             examples/profiles/example/profile.toml."
-        );
-        return Ok(0);
-    }
+
+    let targets: Vec<String> = match &cli.profile {
+        Some(arg) => vec![arg.clone()],
+        None => {
+            let names = ProfileConfig::iter_profiles(&global);
+            if names.is_empty() {
+                println!(
+                    "No profiles configured; hand-write one — see examples/config.toml and \
+                     examples/profiles/example/profile.toml."
+                );
+                return Ok(0);
+            }
+            names
+        }
+    };
 
     // Not needed at all for `--list-unreconciled`, and shared across every
     // profile otherwise — fetched at most once, lazily, on the first profile
@@ -241,12 +269,13 @@ async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
     let mut catalogue: Option<catalogue::ComputedCatalogue> = None;
 
     let mut any_errors = false;
-    for name in &profile_names {
-        if profile_names.len() > 1 {
-            println!("== {name} ==");
+    let print_headers = targets.len() > 1;
+    for target in &targets {
+        if print_headers {
+            println!("== {target} ==");
         }
-        if let Err(e) = reconcile_profile(&global, name, args, &mut catalogue).await {
-            eprintln!("{name}: {e}");
+        if let Err(e) = reconcile_profile(&global, target, args, &mut catalogue).await {
+            eprintln!("{target}: {e}");
             any_errors = true;
         }
     }
@@ -255,11 +284,11 @@ async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
 
 async fn reconcile_profile(
     global: &GlobalConfig,
-    name: &str,
+    profile_arg: &str,
     args: &InitArgs,
     catalogue: &mut Option<catalogue::ComputedCatalogue>,
 ) -> Result<(), AppError> {
-    let profile = ProfileConfig::read(global.clone(), name)?;
+    let profile = ctx::read_profile(global.clone(), profile_arg)?;
     let AppCtx {
         profile,
         mut lock,
@@ -530,14 +559,15 @@ async fn cmd_list(cli: &Cli, addons: &[String], format: ListFormat) -> Result<i3
 
 fn cmd_profile_erase(cli: &Cli) -> Result<(), AppError> {
     let global = GlobalConfig::read_from(cli.config.as_deref())?;
-    let profile = ctx::read_profile(global, &cli.profile)?;
+    let profile = ctx::resolve_profile(global, cli.profile.as_deref())
+        .map_err(|e| describe_config_error(cli, e))?;
     profile.delete()?;
     Ok(())
 }
 
 #[derive(Serialize)]
 struct StatsOutput {
-    active_profile: String,
+    active_profile: Option<String>,
     profiles: Vec<String>,
     active_profile_config: Option<StatsProfileConfig>,
     global_config: StatsGlobalConfig,
@@ -566,7 +596,7 @@ struct StatsSourceMeta {
 fn cmd_stats(cli: &Cli) -> Result<(), AppError> {
     let global = GlobalConfig::read_from(cli.config.as_deref())?;
     let profiles = ProfileConfig::iter_profiles(&global);
-    let active_profile_config = ctx::read_profile(global.clone(), &cli.profile).ok();
+    let active_profile_config = ctx::resolve_profile(global.clone(), cli.profile.as_deref()).ok();
     let sources = libwau::sources::default_sources(&ctx::source_config(&global));
 
     let source_meta: Vec<StatsSourceMeta> = sources
@@ -578,7 +608,10 @@ fn cmd_stats(cli: &Cli) -> Result<(), AppError> {
         .collect();
 
     let output = StatsOutput {
-        active_profile: cli.profile.clone(),
+        active_profile: active_profile_config
+            .as_ref()
+            .map(|p| p.profile.clone())
+            .or_else(|| cli.profile.clone()),
         profiles,
         active_profile_config: active_profile_config.map(|p| StatsProfileConfig {
             addon_dir: p.addon_dir,

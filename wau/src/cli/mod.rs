@@ -24,9 +24,12 @@ pub struct Cli {
 
     /// Target profile: a name (looked up in the config dir's `profiles/`),
     /// or a path to a profile TOML file read directly — detected by
-    /// containing a path separator or ending in `.toml`.
-    #[arg(short, long, global = true, default_value = "default")]
-    pub profile: String,
+    /// containing a path separator or ending in `.toml`. If omitted, the
+    /// sole configured profile is used automatically; with zero or several
+    /// configured, commands that need exactly one error out listing what's
+    /// available. There is no implicit "default"-named profile.
+    #[arg(short, long, global = true)]
+    pub profile: Option<String>,
 
     #[command(subcommand)]
     pub command: Command,
@@ -45,11 +48,12 @@ pub enum Command {
     /// operation (rather than the folder-conflict-prone sequencing of doing
     /// it by hand via `remove` + `install`).
     Replace(ReplaceArgs),
-    /// Reconcile every configured profile's untracked addon folders against
-    /// the catalogue and import them, prompting per group to pick which
-    /// source to use unless `--auto`. Ignores `-p`/`--profile` — there is no
-    /// interactive profile bootstrap; profiles must already exist (hand-write
-    /// them, see `examples/`).
+    /// Reconcile a profile's untracked addon folders against the catalogue
+    /// and import them, prompting per group to pick which source to use
+    /// unless `--auto`. With `-p`/`--profile`, reconciles just that one;
+    /// without it, reconciles every configured profile in turn — there is
+    /// no interactive profile bootstrap, so profiles must already exist
+    /// (hand-write them, see `examples/`).
     Init(InitArgs),
     /// Fuzzy-search the addon catalogue.
     Search(SearchArgs),

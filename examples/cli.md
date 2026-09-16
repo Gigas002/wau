@@ -34,12 +34,16 @@ long-running operations is still future polish.
 - `--config <PATH>` — read `config.toml` from `<PATH>` instead of the platform-conventional
   config dir; `profiles/` is then resolved as `<PATH>`'s sibling directory. Mainly for
   integration tests that need an isolated config location.
-- `-p` / `--profile <NAME-OR-PATH>` — target profile (default `default`); see
-  `examples/profiles/example/profile.toml`. A bare name is looked up as
-  `<config-dir>/profiles/<name>/profile.toml`; a value containing a path separator or ending in
-  `.toml` is read directly from that path instead (its `lock.toml` sibling is the installed-package
-  lock file — see `examples/profiles/example/lock.toml`), bypassing name-based lookup entirely —
-  again mainly for integration tests pointing at a fixture file.
+- `-p` / `--profile <NAME-OR-PATH>` — target profile; see `examples/profiles/example/profile.toml`.
+  A bare name is looked up as `<config-dir>/profiles/<name>/profile.toml`; a value containing a
+  path separator or ending in `.toml` is read directly from that path instead (its `lock.toml`
+  sibling is the installed-package lock file — see `examples/profiles/example/lock.toml`),
+  bypassing name-based lookup entirely — again mainly for integration tests pointing at a fixture
+  file. **No default value, no implicit `default`-named profile**: omit it and, with exactly one
+  profile configured, that one is used automatically; with zero or several, the command errors out
+  instead of guessing. `init` is the one exception — omitting `-p` there reconciles *every*
+  configured profile in turn rather than erroring on "several configured"; give it explicitly to
+  restrict `init` to just that one profile (see below).
 
 Log verbosity is not a CLI flag — it comes from `[logging].level` in `config.toml` (default
 `warn` if unset). There is no `$RUST_LOG` support either: `wau` never reads environment
@@ -57,9 +61,8 @@ configured by hand-writing `<config-dir>/config.toml` (global) and
 override it for a single invocation with `--config` (see above); there is no environment
 variable equivalent. The default cache directory is likewise platform-conventional
 (`~/.cache/wau` on Linux); override it with `[paths].cache` in `config.toml`. Every command
-except `init` errors out immediately if the active (`-p`-selected) profile's config doesn't
-exist; `init` ignores `-p` and instead reports if there are no profiles configured at all (see
-below).
+errors out immediately if the profile it needs doesn't exist; without `-p`, `init` reports
+instead if there are no profiles configured at all, rather than erroring (see below).
 
 ## Commands
 
@@ -94,11 +97,11 @@ behind, keyed to the old `(source, id)`.
 
 ### `wau init`
 
-Reconciles **every** configured profile (`<config-dir>/profiles/*/profile.toml`) in one run —
-ignores `-p`/`--profile`, since there's no single "active" profile for this command; prints
-`== <name> ==` between profiles when there's more than one. If no profiles exist yet, says so
-and exits — profiles are never created by `init` or anything else; hand-write them (see
-`examples/config.toml` / `examples/profiles/example/profile.toml`).
+With `-p`/`--profile`, reconciles just that one profile, same as every other command. Without
+it, reconciles **every** configured profile (`<config-dir>/profiles/*/profile.toml`) in one
+run, printing `== <name> ==` between profiles when there's more than one. If no profiles exist
+yet (and none was given via `-p`), says so and exits — profiles are never created by `init` or
+anything else; hand-write them (see `examples/config.toml` / `examples/profiles/example/profile.toml`).
 
 For each profile, matches un-tracked addon folders (installed by hand or by another tool)
 against catalogue/TOC metadata and imports them, in three decreasing-precision passes (TOC

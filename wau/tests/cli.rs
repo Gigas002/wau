@@ -263,6 +263,107 @@ fn init_processes_every_configured_profile_in_one_run() {
 
 #[test]
 #[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
+fn init_with_explicit_profile_flag_only_reconciles_that_one() {
+    let tmp = env_copy("retail");
+    promote_to_named_profile(&tmp, "retail");
+    copy_dir_recursive(
+        &workspace_root()
+            .join("testing")
+            .join("classic-era")
+            .join("_classic_era_"),
+        &tmp.path().join("_classic_era_"),
+    );
+    fs::create_dir_all(tmp.path().join("profiles").join("classic-era")).unwrap();
+    fs::copy(
+        workspace_root()
+            .join("testing")
+            .join("classic-era")
+            .join("profile.toml"),
+        tmp.path()
+            .join("profiles")
+            .join("classic-era")
+            .join("profile.toml"),
+    )
+    .unwrap();
+
+    let output = wau(&tmp, &["--config", "config.toml", "-p", "retail", "init"]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    let text = stdout(&output);
+    // Single explicit target: no `== name ==` headers, and only the one
+    // profile's "nothing to do" line — classic-era is never touched.
+    assert!(!text.contains("=="));
+    assert_eq!(text.matches("No add-ons left to reconcile.").count(), 1);
+}
+
+#[test]
+#[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
+fn no_profile_flag_auto_picks_the_sole_configured_profile() {
+    // Regression test: `-p` used to default to a literal "default", so any
+    // command without an explicit `-p` failed outright unless a profile was
+    // literally named that. There's no implicit default name anymore — with
+    // exactly one profile configured, omitting `-p` should just use it.
+    let tmp = env_copy("retail");
+    promote_to_named_profile(&tmp, "retail");
+
+    let output = wau(&tmp, &["--config", "config.toml", "list"]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(stdout(&output).trim().is_empty());
+}
+
+#[test]
+#[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
+fn no_profile_flag_with_zero_profiles_configured_errors_clearly() {
+    let tmp = env_copy("retail");
+    // No `promote_to_named_profile` call: `profiles/` never gets created, so
+    // there is nothing to auto-pick — deliberately not testing against the
+    // flat `--profile profile.toml`-override fixture layout, which `-p`-less
+    // resolution never looks at.
+
+    let output = wau(&tmp, &["--config", "config.toml", "list"]);
+
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("no profiles configured"));
+}
+
+#[test]
+#[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
+fn no_profile_flag_with_multiple_profiles_configured_errors_listing_them() {
+    let tmp = env_copy("retail");
+    promote_to_named_profile(&tmp, "retail");
+    copy_dir_recursive(
+        &workspace_root()
+            .join("testing")
+            .join("classic-era")
+            .join("_classic_era_"),
+        &tmp.path().join("_classic_era_"),
+    );
+    fs::create_dir_all(tmp.path().join("profiles").join("classic-era")).unwrap();
+    fs::copy(
+        workspace_root()
+            .join("testing")
+            .join("classic-era")
+            .join("profile.toml"),
+        tmp.path()
+            .join("profiles")
+            .join("classic-era")
+            .join("profile.toml"),
+    )
+    .unwrap();
+
+    let output = wau(&tmp, &["--config", "config.toml", "list"]);
+
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(err.contains("multiple profiles configured"));
+    assert!(err.contains("retail"));
+    assert!(err.contains("classic-era"));
+    assert!(err.contains("-p/--profile"));
+}
+
+#[test]
+#[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
 fn profile_erase_then_list_reports_the_profile_as_not_configured() {
     let tmp = env_copy("retail");
 

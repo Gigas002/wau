@@ -350,6 +350,53 @@ fn iter_profiles_lists_every_written_profile_sorted() {
 }
 
 #[test]
+fn read_sole_errors_when_no_profiles_configured() {
+    let dir = tempfile::tempdir().unwrap();
+    let global = global_config_in(dir.path());
+
+    let err = ProfileConfig::read_sole(global).unwrap_err();
+    assert!(matches!(err, ConfigError::NoProfilesConfigured));
+}
+
+#[test]
+fn read_sole_reads_the_only_profile() {
+    let dir = tempfile::tempdir().unwrap();
+    let global = global_config_in(dir.path());
+    let addon_dir = dir.path().join("addons");
+    fs::create_dir_all(&addon_dir).unwrap();
+
+    ProfileConfig::new(global.clone(), "retail", &addon_dir, Some(Flavour::Mainline))
+        .unwrap()
+        .write()
+        .unwrap();
+
+    let profile = ProfileConfig::read_sole(global).unwrap();
+    assert_eq!(profile.profile, "retail");
+}
+
+#[test]
+fn read_sole_errors_with_available_names_when_multiple_profiles_configured() {
+    let dir = tempfile::tempdir().unwrap();
+    let global = global_config_in(dir.path());
+    let addon_dir = dir.path().join("addons");
+    fs::create_dir_all(&addon_dir).unwrap();
+
+    for name in ["zeta", "alpha"] {
+        ProfileConfig::new(global.clone(), name, &addon_dir, Some(Flavour::Mainline))
+            .unwrap()
+            .write()
+            .unwrap();
+    }
+
+    let err = ProfileConfig::read_sole(global).unwrap_err();
+    assert!(matches!(
+        err,
+        ConfigError::AmbiguousProfile { available }
+        if available == vec!["alpha".to_owned(), "zeta".to_owned()]
+    ));
+}
+
+#[test]
 fn iter_profile_installations_extracts_installation_dirs() {
     let dir = tempfile::tempdir().unwrap();
     let global = global_config_in(dir.path());

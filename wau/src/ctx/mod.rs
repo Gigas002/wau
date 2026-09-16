@@ -49,6 +49,21 @@ pub fn read_profile(global: GlobalConfig, profile_arg: &str) -> Result<ProfileCo
     }
 }
 
+/// Resolves `--profile` end to end: `Some` goes through [`read_profile`]
+/// (name-or-path) as always; `None` — no implicit "default"-named profile —
+/// auto-picks the sole configured profile via
+/// [`ProfileConfig::read_sole`], erroring out (listing what's available) if
+/// zero or several are configured instead of guessing.
+pub fn resolve_profile(
+    global: GlobalConfig,
+    profile_arg: Option<&str>,
+) -> Result<ProfileConfig, ConfigError> {
+    match profile_arg {
+        Some(arg) => read_profile(global, arg),
+        None => ProfileConfig::read_sole(global),
+    }
+}
+
 fn is_profile_path(value: &str) -> bool {
     value.ends_with(".toml")
         || value.contains('/')
@@ -74,7 +89,7 @@ impl AppCtx {
     /// there is no interactive bootstrap.
     pub fn build(cli: &Cli) -> Result<Self, CtxError> {
         let global = GlobalConfig::read_from(cli.config.as_deref())?;
-        let profile = read_profile(global, &cli.profile)?;
+        let profile = resolve_profile(global, cli.profile.as_deref())?;
         Self::from_profile(profile)
     }
 
