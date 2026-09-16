@@ -1,15 +1,16 @@
 //! Catalogue fuzzy search.
 //!
-//! Uses `rapidfuzz`'s `fuzz::ratio` (a straightforward Indel-based
-//! similarity, 0.0-1.0), fed into a blend-with-download-popularity ranking
-//! formula on a 0-100 scale. Near-identical or very different strings rank
-//! as expected, but word-reordering and partial-substring matches score
-//! lower than a multi-strategy blend (token-sort/token-set/partial ratios)
-//! would give them.
+//! Uses `frizbee`'s Smith-Waterman-based fuzzy matcher: the query's
+//! characters must appear, in order, somewhere in a candidate's normalised
+//! name (with bonuses for prefix and exact matches). That score is
+//! normalised to 0.0-1.0 and fed into a blend-with-download-popularity
+//! ranking formula. Unlike a plain edit-distance ratio, this also matches
+//! abbreviation-style queries (e.g. "dbm" matching "Deadly Boss Mods").
 
 use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
+use frizbee::{Config, Matcher};
 
 use super::CatalogueEntry;
 use crate::model::Flavour;
@@ -63,8 +64,6 @@ pub fn search<'a>(
     installed_keys: &HashSet<(String, String)>,
     options: &SearchOptions<'_>,
 ) -> Vec<&'a CatalogueEntry> {
-    let threshold = if search_terms == "*" { 0.0 } else { 70.0 };
-
     let mut excluded_keys: HashSet<(String, String)> = HashSet::new();
     if options.filter_installed == FilterInstalled::ExcludeFromAllSources {
         let by_key: std::collections::HashMap<(&str, &str), &CatalogueEntry> = entries
@@ -111,20 +110,36 @@ pub fn search<'a>(
 
     let normalised_query = super::normalise_name(search_terms);
 
-    let mut scored: Vec<(f64, &CatalogueEntry)> = candidates
-        .into_iter()
-        .filter_map(|e| {
-            let score =
-                rapidfuzz::fuzz::ratio(normalised_query.chars(), e.normalised_name.chars()) * 100.0;
-            (score >= threshold).then_some((score, e))
-        })
-        .collect();
+    let mut scored: Vec<(f64, &CatalogueEntry)> = if search_terms == "*" {
+        candidates.into_iter().map(|e| (0.0, e)).collect()
+    } else {
+        let mut matcher = Matcher::new(normalised_query.as_str(), &Config::default());
+        // frizbee's score is an unbounded, bonus-laden u16 rather than a
+        // 0.0-1.0 ratio. Normalise against the query's own best-possible
+        // match against itself, which is always achievable and always the
+        // maximum for that query, regardless of scoring-constant tuning.
+        let max_score = matcher
+            .match_list(&[normalised_query.as_str()])
+            .first()
+            .map_or(1, |m| m.score.max(1));
+
+        let haystacks: Vec<&str> = candidates
+            .iter()
+            .map(|e| e.normalised_name.as_str())
+            .collect();
+        matcher
+            .match_list(&haystacks)
+            .into_iter()
+            .map(|m| {
+                let score = (f64::from(m.score) / f64::from(max_score)).min(1.0);
+                (score, candidates[m.index as usize])
+            })
+            .collect()
+    };
 
     scored.sort_by(|(score_a, entry_a), (score_b, entry_b)| {
-        let key_a =
-            (score_a / 100.0) * EDIT_WEIGHT + entry_a.derived_download_score * DOWNLOAD_WEIGHT;
-        let key_b =
-            (score_b / 100.0) * EDIT_WEIGHT + entry_b.derived_download_score * DOWNLOAD_WEIGHT;
+        let key_a = score_a * EDIT_WEIGHT + entry_a.derived_download_score * DOWNLOAD_WEIGHT;
+        let key_b = score_b * EDIT_WEIGHT + entry_b.derived_download_score * DOWNLOAD_WEIGHT;
         key_b
             .partial_cmp(&key_a)
             .unwrap_or(std::cmp::Ordering::Equal)

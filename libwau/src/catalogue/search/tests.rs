@@ -188,6 +188,25 @@ fn search_prefer_source_excludes_entries_with_that_same_as() {
 }
 
 #[test]
+fn search_matches_abbreviation_of_a_multi_word_name() {
+    let entries = vec![entry(
+        "curse",
+        "1",
+        "Deadly Boss Mods",
+        1.0,
+        vec![Flavour::Mainline],
+    )];
+    let results = search(
+        &entries,
+        "dbm",
+        Flavour::Mainline,
+        &no_installs(),
+        &SearchOptions::default(),
+    );
+    assert_eq!(results.len(), 1);
+}
+
+#[test]
 fn search_respects_limit() {
     let entries: Vec<CatalogueEntry> = (0..5)
         .map(|i| entry("curse", &i.to_string(), "Foo", 1.0, vec![Flavour::Mainline]))
