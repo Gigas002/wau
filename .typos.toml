@@ -1,1 +1,3 @@
 [default.extend-words]
+# A real Rust TUI crate name, not a misspelling of "ratatouille".
+ratatui = "ratatui"

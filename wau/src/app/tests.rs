@@ -95,7 +95,7 @@ fn parse_selection_expands_ranges_in_either_order() {
 }
 
 #[test]
-fn parse_selection_drops_out_of_range_and_unparseable_tokens() {
+fn parse_selection_drops_out_of_range_and_unparsable_tokens() {
     assert_eq!(parse_selection("0 6 2", 5), vec![1]);
     assert_eq!(parse_selection("abc 2 1-abc", 5), vec![1]);
 }

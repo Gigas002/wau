@@ -47,7 +47,7 @@ async fn run_gh_api(url: &str, headers: &[(&str, &str)]) -> AnyOutcome<HttpRespo
 
     parse_response(&output.stdout).ok_or_else(|| {
         InternalError::new(format!(
-            "unparseable `gh api` response for {url}: {}",
+            "unparsable `gh api` response for {url}: {}",
             String::from_utf8_lossy(&output.stderr)
         ))
         .into()

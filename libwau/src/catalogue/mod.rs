@@ -201,7 +201,7 @@ impl ComputedCatalogue {
 
 /// Resolves and parses the published aggregate catalogue from a local mirror
 /// of `instawow-data`'s `data` branch under `cache_dir`, cloning or updating
-/// it as needed — see [`git_cache`].
+/// it as needed — see `git_cache` (private submodule).
 pub async fn synchronise(cache_dir: &Path) -> Result<ComputedCatalogue, Failure> {
     let filename = catalogue_filename();
     let path = git_cache::resolve(DATA_REPO_URL, DATA_BRANCH, cache_dir, &filename).await?;

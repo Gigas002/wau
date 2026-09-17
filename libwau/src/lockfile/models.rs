@@ -35,7 +35,7 @@ pub struct PkgLoggedVersion {
 /// An installed package: its own fields plus `options` (1:1), `folders`
 /// (1:N), and `deps` (1:N) — one `[[package]]` entry in `lock.toml`.
 ///
-/// (De)serializes through [`super::RawPkg`] (`#[serde(into, from)]`) so the
+/// (De)serializes through `RawPkg` (private, `#[serde(into, from)]`) so the
 /// on-disk shape can store `folders`/`deps` as plain string arrays while this
 /// type keeps the richer wrapper structs its callers already expect.
 #[derive(Debug, Clone, Serialize, Deserialize)]

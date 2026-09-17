@@ -650,7 +650,7 @@ fn cmd_cache(cli: &Cli, args: &CacheArgs) -> Result<i32, AppError> {
 /// `max` results, returning 0-indexed positions into the original results
 /// slice, deduplicated, in first-seen order. Tokens are split on whitespace
 /// and commas; each is either a bare number or an inclusive `a-b` range
-/// (either order). Out-of-range or unparseable tokens are silently dropped
+/// (either order). Out-of-range or unparsable tokens are silently dropped
 /// rather than erroring the whole line out — matching how paru itself
 /// tolerates a stray typo in an otherwise-valid selection.
 fn parse_selection(input: &str, max: usize) -> Vec<usize> {
