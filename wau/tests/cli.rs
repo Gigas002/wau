@@ -103,6 +103,10 @@ fn sync_with_no_installed_addons_succeeds_without_network() {
     let output = wau_configured(&tmp, &["sync"]);
 
     assert!(output.status.success(), "{}", stderr(&output));
+    // Reported as looking like a hang/silent failure: nothing pending used
+    // to render as a blank line (`format_results` on an empty map is an
+    // empty string) with no indication anything happened at all.
+    assert_eq!(stdout(&output).trim(), "Nothing to do.");
 }
 
 #[test]

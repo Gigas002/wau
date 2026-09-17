@@ -180,7 +180,7 @@ async fn cmd_sync(cli: &Cli, args: &SyncArgs) -> Result<i32, AppError> {
     if sync_all {
         drop_up_to_date(&mut preview);
     }
-    println!("{}", format_results(&preview, style::color_enabled()));
+    print_sync_results(&preview);
 
     if args.dry_run || plan.is_empty() {
         return Ok(i32::from(any_errors(&preview)));
@@ -200,8 +200,21 @@ async fn cmd_sync(cli: &Cli, args: &SyncArgs) -> Result<i32, AppError> {
     if sync_all {
         drop_up_to_date(&mut results);
     }
-    println!("{}", format_results(&results, style::color_enabled()));
+    print_sync_results(&results);
     Ok(i32::from(any_errors(&results)))
+}
+
+/// `format_results` on an empty map renders as an empty string — printed
+/// as-is, that's just a blank line, indistinguishable from a hang or a
+/// silently-swallowed error. Reported against `wau sync` when everything
+/// was already up to date (the common case, since `sync_all` hides
+/// unpinned up-to-date entries entirely): say so explicitly instead.
+fn print_sync_results(results: &HashMap<Defn, AnyOutcome<Outcome>>) {
+    if results.is_empty() {
+        println!("Nothing to do.");
+    } else {
+        println!("{}", format_results(results, style::color_enabled()));
+    }
 }
 
 /// Syncing "all": don't clutter output with already-up-to-date, unpinned
@@ -409,16 +422,17 @@ async fn reconcile_profile(
                     names.join(", "),
                     version.as_deref().unwrap_or("?")
                 );
-                let choices: Vec<Choice<Defn>> = shortlist
+                let mut choices: Vec<Choice<Option<Defn>>> = shortlist
                     .iter()
                     .map(|(d, c)| {
                         Choice::new(
                             format!("{} ({})", d.as_uri(false, false), c.version),
-                            (*d).clone(),
+                            Some((*d).clone()),
                         )
                     })
                     .collect();
-                prompts::select_one(&prompt, choices).ok()
+                choices.push(Choice::new("Skip (leave unreconciled)", None));
+                prompts::select_one(&prompt, choices).ok().flatten()
             };
             if let Some(d) = selection {
                 selections.push(d);
