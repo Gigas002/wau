@@ -1,0 +1,88 @@
+# The installed-package lock file for one profile, sibling to that profile's
+# `profile.toml` (e.g. `~/.config/wau/profiles/retail/lock.toml`). Rewritten
+# in full, atomically, by `wau` after every install/update/remove/pin; not
+# meant to be hand-edited, though it's plain TOML if you need to.
+#
+# Modeled on `Cargo.lock`: one `[[package]]` table per installed addon plus a
+# top-level `version_log` history, rather than the SQLite tables
+# (`pkg`/`pkg_options`/`pkg_folder`/`pkg_dep`/`pkg_version_log`) wau used
+# before. See libwau/src/lockfile/ for the (de)serialization code this
+# example is meant to match byte-for-byte in shape (field order/names), and
+# `docs/WAU_RS_PLAN.md` for the migration rationale.
+#
+# Format notes / open questions for discussion:
+# - `version` (top-level, u32) is the *lock file format* version — bumped
+#   only if the on-disk shape changes incompatibly, independent of `wau`'s
+#   own version. There's only ever been version 1 so far.
+# - Dates (`date_published`, `install_time`) are quoted RFC 3339 strings
+#   (chrono's serde `Serialize`), not TOML's native unquoted datetime
+#   literal — simplest to produce correctly, and just as readable.
+# - `folders`/`deps` are plain string arrays, not arrays of one-field tables
+#   (`{ name = "..." }`) — there's no separate row-with-a-foreign-key concept
+#   anymore, so the extra nesting the old SQL schema needed would just be
+#   noise here.
+# - `version_log` stays at the file root rather than nested under its
+#   package, because it deliberately survives that package being removed
+#   (kept for a future `rollback`-style command, mirroring instawow) — an
+#   addon's install history outlives any one install of it. Entries are
+#   looked up by `(pkg_source, pkg_id)` since there's no FK to a `[[package]]`
+#   entry that might no longer exist.
+# - No checksums, no lock/mutex file alongside this one: two `wau` processes
+#   writing the same profile concurrently can race (last write to disk
+#   wins). SQLite's own file locking is the thing this format doesn't
+#   replace — considered an acceptable trade-off for a single-user CLI tool,
+#   not an oversight.
+
+version = 1
+
+[[package]]
+source = "curse"
+id = "319698"
+slug = "big-wigs"
+name = "BigWigs"
+description = "Raid warning addon."
+url = "https://www.curseforge.com/wow/addons/big-wigs"
+download_url = "https://edge.forgecdn.net/files/1234/5678/BigWigs.zip"
+date_published = "2026-03-04T18:30:00Z"
+version = "1200.5"
+changelog_url = "https://www.curseforge.com/wow/addons/big-wigs/files/1234567"
+folders = ["BigWigs", "BigWigs_Plugins"]
+deps = ["323002"]
+
+[package.options]
+any_flavour = false
+any_release_type = false
+version_eq = false
+
+[[package]]
+source = "github"
+id = "WeakAuras/WeakAuras2"
+slug = "weakauras"
+name = "WeakAuras"
+description = "A powerful, flexible trigger driven display addon."
+url = "https://github.com/WeakAuras/WeakAuras2"
+download_url = "https://github.com/WeakAuras/WeakAuras2/releases/download/v5.20.1/WeakAuras.zip"
+date_published = "2026-02-20T09:15:00Z"
+version = "5.20.1"
+changelog_url = "https://github.com/WeakAuras/WeakAuras2/releases/tag/v5.20.1"
+folders = ["WeakAuras"]
+deps = []
+
+# Pinned via `version_eq`: `wau sync` will not move this addon off "5.20.1"
+# until it's explicitly unpinned.
+[package.options]
+any_flavour = false
+any_release_type = false
+version_eq = true
+
+[[version_log]]
+pkg_source = "curse"
+pkg_id = "319698"
+version = "1200.5"
+install_time = "2026-03-04T18:30:05Z"
+
+[[version_log]]
+pkg_source = "github"
+pkg_id = "WeakAuras/WeakAuras2"
+version = "5.20.1"
+install_time = "2026-02-20T09:15:03Z"

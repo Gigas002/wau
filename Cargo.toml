@@ -3,7 +3,10 @@ members = ["libwau", "wau"]
 resolver = "3"
 
 [workspace.dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
 
 [workspace.package]
 edition = "2024"

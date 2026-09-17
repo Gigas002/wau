@@ -65,3 +65,10 @@ build/
 
 # Rust (workspace)
 /target
+
+instawow
+
+# Integration test environments (testing/): fixtures are tracked, artifacts
+# a direct (non-tempdir-copied) run would generate underneath them aren't.
+testing/**/cache/
+testing/**/*.sqlite

@@ -1,0 +1,31 @@
+# To install the `git` type addon, you must run
+# wau install -p profile_name git:addon_name
+# the `addon_name` must match the directory name, and all addbuilds must
+# be located into ~/.config/wau/addbuilds, where the search occurs.
+# Versioning check is performed into repository's cache and compared to
+# lockfile's version.
+
+# addon name (must equal this directory's name, and the in-game addon
+# folder/`.toc` prefix wau will install it under — case-sensitive)
+addname = "ZSBT"
+# addon git url
+url = "https://github.com/Zorellion/ZSBT"
+# dependencies needed to build the addon, checked for on PATH only —
+# never installed automatically
+makedepends = [ "git", "tar" ]
+# other addons this one needs installed alongside it — full `source:alias`
+# addon URIs, same format `wau install`/`wau remove` take on the command
+# line (checked and resolved before this package is installed)
+# depends = [ "wowi:1234" ]
+# supported flavors
+flavors = [ "mainline" ]
+
+# addon version is always determined the way below, no need for script:
+# pkgver() {
+	# cd "$srcdir/$_pkgname"
+	# printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+# }
+
+# path to a build script
+# cache is always into ~/.cache/wau
+build = "build.sh"

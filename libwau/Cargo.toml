@@ -8,26 +8,34 @@ license.workspace = true
 repository.workspace = true
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [features]
-default = ["local", "curseforge", "wowinterface", "github"]
-local = []
-curseforge = ["dep:reqwest"]
-wowinterface = ["dep:reqwest"]
-github = ["dep:reqwest", "dep:regex"]
+default = ["curseforge", "github", "tukui", "wowinterface", "wago", "git"]
+curseforge = []
+github = []
+tukui = []
+wowinterface = []
+wago = []
+git = []
 
 [dependencies]
 thiserror = "2"
 tracing = "0.1"
 serde = { version = "1.0", features = ["derive"] }
-toml = "1.1"
+serde_json = "1"
+url = "2"
 chrono = { version = "0.4", features = ["serde"] }
+tokio = { workspace = true, features = ["fs", "time", "process"] }
+reqwest = { version = "0.13", default-features = false, features = ["gzip", "rustls", "stream"] }
 zip = { version = "8", default-features = false, features = ["deflate"] }
 async-trait = "0.1"
-reqwest = { version = "0.13", features = ["json", "query"], optional = true }
-regex = { version = "1", optional = true }
+futures-util = "0.3"
+frizbee = "0.13"
+toml = "1"
+dirs = "7"
 
 [dev-dependencies]
 tempfile = "3"
-zip = { version = "8", default-features = false, features = ["deflate"] }
-tokio = { version = "1", features = ["full"] }
 mockito = "1"

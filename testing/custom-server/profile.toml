@@ -1,0 +1,5 @@
+profile = "custom-server"
+path = "MyPrivateServer/Interface/AddOns"
+# Install-directory name doesn't match a known Blizzard subfolder, so the
+# flavour can't be auto-detected and must be forced.
+flavour = "mainline"

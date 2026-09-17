@@ -1,19 +1,46 @@
 mod app;
 mod cli;
-mod config;
+mod ctx;
 mod output;
-mod settings;
+mod progress;
+mod prompts;
+mod style;
 
 use clap::Parser;
+use libwau::config::LogLevel;
+
+/// Maps [`LogLevel`] (`config.toml`'s `[logging].level` — the only source of
+/// verbosity; no `-v` flag, no `$RUST_LOG`) onto `tracing`'s level type.
+fn to_tracing_level(level: LogLevel) -> tracing::Level {
+    match level {
+        LogLevel::Error => tracing::Level::ERROR,
+        LogLevel::Warn => tracing::Level::WARN,
+        LogLevel::Info => tracing::Level::INFO,
+        LogLevel::Debug => tracing::Level::DEBUG,
+        LogLevel::Trace => tracing::Level::TRACE,
+    }
+}
+
+fn init_logging(level: LogLevel) {
+    tracing_subscriber::fmt()
+        .with_max_level(to_tracing_level(level))
+        .with_writer(std::io::stderr)
+        .init();
+}
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
-
     let cli = cli::Cli::parse();
+    let log_level = libwau::config::GlobalConfig::read_from(cli.config.as_deref())
+        .map(|g| g.log_level)
+        .unwrap_or_default();
+    init_logging(log_level);
 
-    if let Err(e) = app::run(&cli).await {
-        eprintln!("error: {e}");
-        std::process::exit(1);
+    match app::run(&cli).await {
+        Ok(exit_code) => std::process::exit(exit_code),
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
     }
 }

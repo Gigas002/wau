@@ -1,11 +1,17 @@
+pub mod cache;
+pub mod catalogue;
+pub mod config;
 pub mod error;
 pub mod fs;
-pub mod lock;
-pub mod manifest;
+pub mod http;
+pub mod lockfile;
+pub mod matchers;
 pub mod model;
-pub mod ops;
-pub mod providers;
-pub mod resolve;
+pub mod pkg_archives;
+pub mod pkg_management;
+pub mod progress;
+pub mod results;
+pub mod sources;
 pub mod toc;
 
 pub use error::Error;
