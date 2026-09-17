@@ -2,26 +2,26 @@
 
 Wow Addon Updater
 
-## (planned) features
+A lightweight, native World of Warcraft addon manager: a CLI (`wau`) and a reusable library
+(`libwau`) that resolve, install, update, and track addons from several sources, backed by a
+local TOML lock file per profile.
 
-- lightweight, pretty, native and fast cli, alike `yay`/`paru`
-- search, install, remove or update your addons from multiple providers (`curse`, `wowinterface`, `github`, etc), for multiple flavors (`retail`, `classic`, custom servers, etc), and multiple release channels (`release`, `beta`, `git`, etc)
-- easily tweak and share your addons installation configuration with `manifest.toml`
+## runtime dependencies
+
+- [`git`](https://git-scm.com) — required. `wau search` and `wau init` resolve the addon
+  catalogue through a local git mirror of `instawow-data` (see `docs/caching.md`); every other
+  command works without it.
+- [`gh`](https://cli.github.com) — optional. Set `[providers.github].handler = "gh"` to route
+  GitHub API requests through the `gh` CLI (authenticated via `gh auth login`) instead of a
+  client-side `[providers.github].api_key`. Not needed with the default `handler`.
 
 ## usage
 
-TODO
+See `docs/`:
 
-## roadmap
-
-- [ ] [basic features] properly recognize installed addons (`toc` parser)
-- [ ] [basic features] `manifest.toml` specs and generation
-- [ ] [basic features] cli `config.toml` specs
-- [ ] [basic features] cli commands and arguments
-- [ ] [repo organization] implement ci/cd through github actions
-- [ ] [provider support] `curse` -- `retail` flavor, `release` channel
-- [ ] [provider support] `curse` -- all official flavors, all release channels
-- [ ] other providers support
+- `docs/cli.md` — full command/flag surface.
+- `docs/caching.md` — what's cached, where, and its caveats.
+- `docs/search.md` — the search/ranking algorithm and the interactive select-to-install flow.
 
 ## thanks to
 
