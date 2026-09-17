@@ -13,8 +13,8 @@ use libwau::{
     lockfile::Pkg,
     matchers,
     model::Defn,
-    pkg_management,
-    results::{Failure, ManagerError},
+    pkg_management::{self, Outcome},
+    results::{AnyOutcome, Failure, ManagerError},
     sources::{PkgCandidate, Resolver},
 };
 
@@ -167,27 +167,52 @@ async fn cmd_sync(cli: &Cli, args: &SyncArgs) -> Result<i32, AppError> {
     } else {
         pkg_management::UpdateTarget::Specific(parse_defns(&args.addons, &sources)?)
     };
+    let sync_all = args.addons.is_empty();
+
+    let plan = pkg_management::plan_update(&lock, &pkg_ctx, target).await;
+
+    let mut preview = plan.results.clone();
+    for (d, outcome) in plan.preview() {
+        preview.insert(d, Ok(outcome));
+    }
+    if sync_all {
+        drop_up_to_date(&mut preview);
+    }
+    println!("{}", format_results(&preview, style::color_enabled()));
+
+    if args.dry_run || plan.is_empty() {
+        return Ok(i32::from(any_errors(&preview)));
+    }
+
+    if !prompts::confirm("Proceed with sync?", true)? {
+        println!("Aborted — no changes made.");
+        return Ok(0);
+    }
 
     let mut results = crate::progress::with_download_bars(
         &progress,
         style::color_enabled(),
-        pkg_management::update(&mut lock, &pkg_ctx, target, args.dry_run),
+        pkg_management::apply_update(&mut lock, &pkg_ctx, plan),
     )
     .await;
-    if args.addons.is_empty() {
-        // Syncing "all": don't clutter output with already-up-to-date,
-        // unpinned packages.
-        results.retain(|_, r| {
-            !matches!(
-                r,
-                Err(Failure::Manager(ManagerError::PkgUpToDate {
-                    is_pinned: false
-                }))
-            )
-        });
+    if sync_all {
+        drop_up_to_date(&mut results);
     }
     println!("{}", format_results(&results, style::color_enabled()));
     Ok(i32::from(any_errors(&results)))
+}
+
+/// Syncing "all": don't clutter output with already-up-to-date, unpinned
+/// packages.
+fn drop_up_to_date(results: &mut HashMap<Defn, AnyOutcome<Outcome>>) {
+    results.retain(|_, r| {
+        !matches!(
+            r,
+            Err(Failure::Manager(ManagerError::PkgUpToDate {
+                is_pinned: false
+            }))
+        )
+    });
 }
 
 async fn cmd_remove(cli: &Cli, args: &RemoveArgs) -> Result<i32, AppError> {

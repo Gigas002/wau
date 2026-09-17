@@ -576,15 +576,52 @@ pub enum UpdateTarget {
     Specific(Vec<Defn>),
 }
 
-/// Updates installed packages to the latest version per their stored
-/// strategies. Requesting a `Defn` that isn't installed reports
-/// `PkgNotInstalled`; one that's already current reports `PkgUpToDate`.
-pub async fn update(
-    lock: &mut LockFile,
-    ctx: &Ctx<'_>,
-    target: UpdateTarget,
-    dry_run: bool,
-) -> HashMap<Defn, AnyOutcome<Outcome>> {
+/// What resolving an [`UpdateTarget`] found: packages actually needing a
+/// download+install/update (`updatables`), plus every other `Defn` already
+/// fully decided (not installed, a resolve error, or already up to date).
+///
+/// Splitting this out from [`apply_update`] lets a caller show the
+/// old-version-to-new-version diff and get user confirmation before any
+/// network download or disk mutation happens.
+pub struct UpdatePlan {
+    pub results: HashMap<Defn, AnyOutcome<Outcome>>,
+    updatables: HashMap<Defn, (Option<Pkg>, PkgCandidate)>,
+}
+
+impl UpdatePlan {
+    /// Whether there's anything to install/update at all.
+    pub fn is_empty(&self) -> bool {
+        self.updatables.is_empty()
+    }
+
+    /// A preview of what [`apply_update`] would do, as the same `Outcome`
+    /// variants a real run produces (just with `dry_run: true`) — ready to
+    /// hand to the same formatting/display code used for a completed run.
+    pub fn preview(&self) -> HashMap<Defn, Outcome> {
+        self.updatables
+            .iter()
+            .map(|(d, (old, candidate))| {
+                let new_pkg = build_pkg(d, candidate, Vec::new());
+                let outcome = match old {
+                    Some(o) => Outcome::PkgUpdated {
+                        old: o.clone(),
+                        new: Box::new(new_pkg),
+                        dry_run: true,
+                    },
+                    None => Outcome::PkgInstalled {
+                        pkg: new_pkg,
+                        dry_run: true,
+                    },
+                };
+                (d.clone(), outcome)
+            })
+            .collect()
+    }
+}
+
+/// Resolves an [`UpdateTarget`] against its sources and diffs the result
+/// against what's installed, without downloading or mutating anything.
+pub async fn plan_update(lock: &LockFile, ctx: &Ctx<'_>, target: UpdateTarget) -> UpdatePlan {
     let (defns, defns_to_pkgs, resolve_defns) = match target {
         UpdateTarget::All => {
             let all_pkgs = lock.get_all_pkgs();
@@ -676,24 +713,26 @@ pub async fn update(
         }
     }
 
-    if dry_run {
-        for (d, (old, candidate)) in &updatables {
-            let new_pkg = build_pkg(d, candidate, Vec::new());
-            let outcome = match old {
-                Some(o) => Outcome::PkgUpdated {
-                    old: o.clone(),
-                    new: Box::new(new_pkg),
-                    dry_run: true,
-                },
-                None => Outcome::PkgInstalled {
-                    pkg: new_pkg,
-                    dry_run: true,
-                },
-            };
-            results.insert(d.clone(), Ok(outcome));
-        }
-        return results;
+    UpdatePlan {
+        results,
+        updatables,
     }
+}
+
+/// Downloads and installs/updates everything in `plan.updatables`, mutating
+/// `lock` and the addon directory. `plan.results` already carries every
+/// `Defn` that was decided during planning (not installed, a resolve error,
+/// or already up to date) and is extended in place with the outcome of each
+/// download/mutation.
+pub async fn apply_update(
+    lock: &mut LockFile,
+    ctx: &Ctx<'_>,
+    plan: UpdatePlan,
+) -> HashMap<Defn, AnyOutcome<Outcome>> {
+    let UpdatePlan {
+        mut results,
+        updatables,
+    } = plan;
 
     let candidates_only: HashMap<Defn, PkgCandidate> = updatables
         .iter()
@@ -714,6 +753,31 @@ pub async fn update(
     }
 
     results
+}
+
+/// Updates installed packages to the latest version per their stored
+/// strategies. Requesting a `Defn` that isn't installed reports
+/// `PkgNotInstalled`; one that's already current reports `PkgUpToDate`.
+///
+/// Thin wrapper over [`plan_update`]/[`apply_update`] for callers that don't
+/// need to inspect or confirm the plan in between (tests, non-interactive
+/// callers). `wau sync`'s interactive confirm flow calls the two halves
+/// directly instead.
+pub async fn update(
+    lock: &mut LockFile,
+    ctx: &Ctx<'_>,
+    target: UpdateTarget,
+    dry_run: bool,
+) -> HashMap<Defn, AnyOutcome<Outcome>> {
+    let plan = plan_update(lock, ctx, target).await;
+    if dry_run {
+        let mut results = plan.results.clone();
+        for (d, outcome) in plan.preview() {
+            results.insert(d, Ok(outcome));
+        }
+        return results;
+    }
+    apply_update(lock, ctx, plan).await
 }
 
 /// Removes installed packages by `Defn`.

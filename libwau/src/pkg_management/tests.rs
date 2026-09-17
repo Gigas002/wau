@@ -375,6 +375,92 @@ async fn update_specific_defn_not_installed_reports_not_installed() {
 }
 
 // ---------------------------------------------------------------------------
+// plan_update / apply_update
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn plan_update_previews_without_mutating_disk_or_lock() {
+    let url_dir = tempfile::tempdir().unwrap();
+    let url_v1 = make_zip_file(url_dir.path(), "v1.zip", "Foo", b"## Interface: 110000");
+    let mut h = Harness::new(vec![Box::new(
+        TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url_v1)),
+    )]);
+    install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
+
+    let url_v2 = make_zip_file(
+        url_dir.path(),
+        "v2.zip",
+        "Foo",
+        b"## Interface: 110000\n## Version: 2",
+    );
+    h.sources = vec![Box::new(
+        TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "2.0.0", url_v2)),
+    )];
+
+    let plan = plan_update(&h.lock, &ctx!(h), UpdateTarget::All).await;
+    assert!(!plan.is_empty());
+    let preview = plan.preview();
+    assert!(matches!(
+        preview.values().next().unwrap(),
+        Outcome::PkgUpdated { old, new, dry_run: true } if old.version == "1.0.0" && new.version == "2.0.0"
+    ));
+
+    // Nothing on disk or in the lock file has changed yet.
+    assert_eq!(h.lock.get_all_pkgs()[0].version, "1.0.0");
+    assert_eq!(
+        std::fs::read_to_string(h.addon_dir.join("Foo").join("Foo.toc")).unwrap(),
+        "## Interface: 110000"
+    );
+}
+
+#[tokio::test]
+async fn apply_update_installs_the_version_a_plan_previewed() {
+    let url_dir = tempfile::tempdir().unwrap();
+    let url_v1 = make_zip_file(url_dir.path(), "v1.zip", "Foo", b"## Interface: 110000");
+    let mut h = Harness::new(vec![Box::new(
+        TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url_v1)),
+    )]);
+    install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
+
+    let url_v2 = make_zip_file(
+        url_dir.path(),
+        "v2.zip",
+        "Foo",
+        b"## Interface: 110000\n## Version: 2",
+    );
+    h.sources = vec![Box::new(
+        TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "2.0.0", url_v2)),
+    )];
+
+    let plan = plan_update(&h.lock, &ctx!(h), UpdateTarget::All).await;
+    let results = apply_update(&mut h.lock, &ctx!(h), plan).await;
+
+    let outcome = results.values().next().unwrap();
+    assert!(matches!(outcome, Ok(Outcome::PkgUpdated { .. })));
+    assert_eq!(h.lock.get_all_pkgs()[0].version, "2.0.0");
+}
+
+#[tokio::test]
+async fn update_plan_is_empty_when_nothing_needs_updating() {
+    let url_dir = tempfile::tempdir().unwrap();
+    let url = make_zip_file(url_dir.path(), "foo.zip", "Foo", b"## Interface: 110000");
+    let mut h = Harness::new(vec![Box::new(
+        TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url)),
+    )]);
+    install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
+
+    let plan = plan_update(&h.lock, &ctx!(h), UpdateTarget::All).await;
+    assert!(plan.is_empty());
+    assert!(plan.preview().is_empty());
+    assert!(matches!(
+        plan.results.values().next().unwrap(),
+        Err(Failure::Manager(ManagerError::PkgUpToDate {
+            is_pinned: false
+        }))
+    ));
+}
+
+// ---------------------------------------------------------------------------
 // remove
 // ---------------------------------------------------------------------------
 
