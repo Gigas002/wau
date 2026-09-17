@@ -2,9 +2,7 @@
 
 Wow Addon Updater
 
-A lightweight, native World of Warcraft addon manager: a CLI (`wau`) and a reusable library
-(`libwau`) that resolve, install, update, and track addons from several sources, backed by a
-local TOML lock file per profile.
+A lightweight, native World of Warcraft addon manager: that resolve, install, update, and track addons from several sources, backed by a local TOML lock file per profile.
 
 ## runtime dependencies
 
@@ -22,6 +20,7 @@ See `docs/`:
 - `docs/cli.md` — full command/flag surface.
 - `docs/caching.md` — what's cached, where, and its caveats.
 - `docs/search.md` — the search/ranking algorithm and the interactive select-to-install flow.
+- `docs/git-source.md` — the `git` source provider, `addbuild.toml` specification and usage.
 
 ## thanks to
 
