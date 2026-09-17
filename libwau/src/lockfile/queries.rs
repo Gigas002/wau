@@ -28,7 +28,10 @@ impl LockFile {
     /// Looks up one package per `defn`, in the same order, `None` where no
     /// package is installed for that definition.
     pub fn get_pkgs(&self, defns: &[Defn]) -> Vec<Option<Pkg>> {
-        defns.iter().map(|d| self.find_by_defn(d).cloned()).collect()
+        defns
+            .iter()
+            .map(|d| self.find_by_defn(d).cloned())
+            .collect()
     }
 
     /// Every installed package.
@@ -38,7 +41,10 @@ impl LockFile {
 
     /// For each `defn`, `true` if no package is currently installed for it.
     pub fn check_pkgs_not_exist(&self, defns: &[Defn]) -> Vec<bool> {
-        defns.iter().map(|d| self.find_by_defn(d).is_none()).collect()
+        defns
+            .iter()
+            .map(|d| self.find_by_defn(d).is_none())
+            .collect()
     }
 
     /// Last 10 logged versions for a package, most recent first.
@@ -62,9 +68,10 @@ impl LockFile {
     /// version doesn't duplicate/refresh the log entry). Callers persist via
     /// [`Self::save`] once they're done batching mutations.
     pub fn insert_pkg(&mut self, pkg: Pkg) {
-        let already_logged = self.version_log.iter().any(|v| {
-            v.pkg_source == pkg.source && v.pkg_id == pkg.id && v.version == pkg.version
-        });
+        let already_logged = self
+            .version_log
+            .iter()
+            .any(|v| v.pkg_source == pkg.source && v.pkg_id == pkg.id && v.version == pkg.version);
         if !already_logged {
             self.version_log.push(LoggedVersion {
                 pkg_source: pkg.source.clone(),

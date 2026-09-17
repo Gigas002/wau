@@ -203,3 +203,36 @@ fn pkg_to_json_includes_options() {
     assert_eq!(json["options"]["any_flavour"], false);
     assert_eq!(json["options"]["version_eq"], false);
 }
+
+#[test]
+fn format_bytes_picks_the_right_unit() {
+    assert_eq!(format_bytes(0), "0 B");
+    assert_eq!(format_bytes(999), "999 B");
+    assert_eq!(format_bytes(1536), "1.5 KB");
+    assert_eq!(format_bytes(5 * 1024 * 1024), "5.0 MB");
+    assert_eq!(format_bytes(2 * 1024 * 1024 * 1024), "2.0 GB");
+}
+
+fn cache_category(name: &'static str, bytes: u64) -> CacheCategory {
+    CacheCategory {
+        name,
+        description: "a cache category",
+        path: std::path::PathBuf::from(name),
+        bytes,
+    }
+}
+
+#[test]
+fn format_cache_usage_lists_each_category_and_a_total() {
+    let categories = vec![cache_category("http", 1024), cache_category("staging", 0)];
+    let rendered = format_cache_usage(&categories, false);
+    assert!(rendered.contains("http 1.0 KB"));
+    assert!(rendered.contains("staging 0 B"));
+    assert!(rendered.contains("total 1.0 KB"));
+}
+
+#[test]
+fn format_cache_cleaned_reports_the_freed_amount() {
+    let rendered = format_cache_cleaned(2 * 1024 * 1024, false);
+    assert!(rendered.contains("cleaned 2.0 MB"));
+}

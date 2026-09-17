@@ -62,6 +62,8 @@ pub enum Command {
     /// Show detailed info for one installed addon (alias for `list -f detailed`).
     #[command(hide = true)]
     Info(InfoArgs),
+    /// Show cache usage, or remove it all with `--clean`.
+    Cache(CacheArgs),
 }
 
 #[derive(Debug, Args)]
@@ -151,4 +153,14 @@ pub struct ListArgs {
 #[derive(Debug, Args)]
 pub struct InfoArgs {
     pub addon: String,
+}
+
+#[derive(Debug, Args)]
+pub struct CacheArgs {
+    /// Remove all cached data (HTTP responses, catalogue mirror, download
+    /// staging, `git` source checkouts/builds). Always safe: everything
+    /// under the cache dir is re-derived (a fresh fetch, clone, or build)
+    /// the next time it's needed.
+    #[arg(long)]
+    pub clean: bool,
 }

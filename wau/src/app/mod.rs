@@ -5,6 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use libwau::{
+    cache,
     catalogue::{
         self,
         search::{self, FilterInstalled, SearchOptions},
@@ -20,11 +21,11 @@ use libwau::{
 
 use crate::{
     cli::{
-        Cli, Command, InitArgs, InstallArgs, ListFormat, RemoveArgs, ReplaceArgs, SearchArgs,
-        SyncArgs,
+        CacheArgs, Cli, Command, InitArgs, InstallArgs, ListFormat, RemoveArgs, ReplaceArgs,
+        SearchArgs, SyncArgs,
     },
     ctx::{self, AppCtx, CtxError},
-    output::{any_errors, format_results},
+    output::{any_errors, format_cache_cleaned, format_cache_usage, format_results},
     prompts::{self, Choice},
     style,
 };
@@ -64,6 +65,7 @@ pub async fn run(cli: &Cli) -> Result<i32, AppError> {
         Command::Info(args) => {
             cmd_list(cli, std::slice::from_ref(&args.addon), ListFormat::Detailed).await
         }
+        Command::Cache(args) => cmd_cache(cli, args),
     }
 }
 
@@ -599,6 +601,30 @@ async fn cmd_list(cli: &Cli, addons: &[String], format: ListFormat) -> Result<i3
     if !rendered.is_empty() {
         println!("{rendered}");
     }
+    Ok(0)
+}
+
+// ============================================================================
+// cache
+// ============================================================================
+
+/// The cache dir is per-`GlobalConfig`, not per-profile (every profile
+/// sharing one `config.toml` shares one cache dir), so this needs no
+/// profile at all — unlike every other command, `-p`/`--profile` is simply
+/// unused here.
+fn cmd_cache(cli: &Cli, args: &CacheArgs) -> Result<i32, AppError> {
+    let global = GlobalConfig::read_from(cli.config.as_deref())?;
+    let cache_dir = &global.dirs.cache;
+    let color = style::color_enabled();
+
+    if args.clean {
+        let freed: u64 = cache::usage(cache_dir).iter().map(|c| c.bytes).sum();
+        cache::clean(cache_dir)?;
+        println!("{}", format_cache_cleaned(freed, color));
+        return Ok(0);
+    }
+
+    println!("{}", format_cache_usage(&cache::usage(cache_dir), color));
     Ok(0)
 }
 

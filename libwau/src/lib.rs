@@ -1,3 +1,4 @@
+pub mod cache;
 pub mod catalogue;
 pub mod config;
 pub mod error;

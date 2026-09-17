@@ -308,8 +308,13 @@ fn profile_config_uses_a_name_subdirectory_with_a_fixed_file_name() {
     let addon_dir = dir.path().join("addons");
     fs::create_dir_all(&addon_dir).unwrap();
 
-    let profile =
-        ProfileConfig::new(global.clone(), "retail", &addon_dir, Some(Flavour::Mainline)).unwrap();
+    let profile = ProfileConfig::new(
+        global.clone(),
+        "retail",
+        &addon_dir,
+        Some(Flavour::Mainline),
+    )
+    .unwrap();
     profile.write().unwrap();
 
     assert_eq!(
@@ -337,7 +342,10 @@ fn iter_profiles_ignores_directories_without_a_profile_file() {
         .unwrap();
     fs::create_dir_all(profiles_dir_path(&global).join("junk")).unwrap();
 
-    assert_eq!(ProfileConfig::iter_profiles(&global), vec!["real".to_owned()]);
+    assert_eq!(
+        ProfileConfig::iter_profiles(&global),
+        vec!["real".to_owned()]
+    );
 }
 
 #[test]
@@ -403,10 +411,15 @@ fn read_sole_reads_the_only_profile() {
     let addon_dir = dir.path().join("addons");
     fs::create_dir_all(&addon_dir).unwrap();
 
-    ProfileConfig::new(global.clone(), "retail", &addon_dir, Some(Flavour::Mainline))
-        .unwrap()
-        .write()
-        .unwrap();
+    ProfileConfig::new(
+        global.clone(),
+        "retail",
+        &addon_dir,
+        Some(Flavour::Mainline),
+    )
+    .unwrap()
+    .write()
+    .unwrap();
 
     let profile = ProfileConfig::read_sole(global).unwrap();
     assert_eq!(profile.profile, "retail");
@@ -514,10 +527,7 @@ fn profile_config_with_path_override_writes_to_that_exact_path() {
 
     assert!(target.exists());
     assert_eq!(profile.config_file_path(), target);
-    assert_eq!(
-        profile.lock_file_path(),
-        target.with_file_name("lock.toml")
-    );
+    assert_eq!(profile.lock_file_path(), target.with_file_name("lock.toml"));
 }
 
 #[test]

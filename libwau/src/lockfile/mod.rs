@@ -102,7 +102,11 @@ impl From<RawPkg> for Pkg {
             version: r.version,
             changelog_url: r.changelog_url,
             options: r.options,
-            folders: r.folders.into_iter().map(|name| PkgFolder { name }).collect(),
+            folders: r
+                .folders
+                .into_iter()
+                .map(|name| PkgFolder { name })
+                .collect(),
             deps: r.deps.into_iter().map(|id| PkgDep { id }).collect(),
         }
     }

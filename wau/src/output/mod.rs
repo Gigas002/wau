@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 
 use libwau::{
+    cache::CacheCategory,
     catalogue::CatalogueEntry,
     lockfile::Pkg,
     model::Defn,
@@ -226,4 +227,53 @@ pub fn pkg_to_json(pkg: &Pkg) -> serde_json::Value {
 pub fn format_list_json(pkgs: &[&Pkg]) -> String {
     let values: Vec<_> = pkgs.iter().map(|p| pkg_to_json(p)).collect();
     serde_json::to_string_pretty(&values).unwrap_or_default()
+}
+
+/// Human-readable byte count (`1.5 MB`, `850 KB`, `42 B`) — binary (1024)
+/// units, one decimal place beyond bytes; cache sizes never need a unit
+/// past GB.
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["B", "KB", "MB", "GB"];
+    let mut size = bytes as f64;
+    let mut unit = 0;
+    while size >= 1024.0 && unit < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        format!("{size:.1} {}", UNITS[unit])
+    }
+}
+
+/// One line per category (name, size, description) plus a trailing total.
+pub fn format_cache_usage(categories: &[CacheCategory], color: bool) -> String {
+    let total: u64 = categories.iter().map(|c| c.bytes).sum();
+    let mut lines: Vec<String> = categories
+        .iter()
+        .map(|c| {
+            format!(
+                "{} {}\n  {}",
+                style::name(color, c.name),
+                style::version(color, &format_bytes(c.bytes)),
+                style::dim(color, c.description)
+            )
+        })
+        .collect();
+    lines.push(format!(
+        "{} {}",
+        style::name(color, "total"),
+        style::version(color, &format_bytes(total))
+    ));
+    lines.join("\n")
+}
+
+/// The one-line summary `--clean` prints once it's freed `freed_bytes`.
+pub fn format_cache_cleaned(freed_bytes: u64, color: bool) -> String {
+    format!(
+        "{} cleaned {}",
+        style::marker(color),
+        style::version(color, &format_bytes(freed_bytes))
+    )
 }

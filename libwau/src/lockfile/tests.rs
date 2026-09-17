@@ -253,7 +253,10 @@ fn pin_pkg_flips_version_eq_without_touching_version() {
     let pinned = lock.pin_pkg("curse", "1", true).unwrap();
     assert!(pinned);
 
-    let pkg = lock.get_pkgs(&[Defn::new("curse", "foo")]).remove(0).unwrap();
+    let pkg = lock
+        .get_pkgs(&[Defn::new("curse", "foo")])
+        .remove(0)
+        .unwrap();
     assert!(pkg.options.version_eq);
     assert_eq!(pkg.version, "1.0.0");
 

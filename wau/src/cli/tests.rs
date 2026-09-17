@@ -146,3 +146,21 @@ fn help_subcommand_is_disabled() {
     assert!(Cli::try_parse_from(["wau", "help"]).is_err());
     assert!(Cli::try_parse_from(["wau", "help", "install"]).is_err());
 }
+
+#[test]
+fn cache_defaults_to_not_cleaning() {
+    let cli = parse(&["cache"]);
+    match cli.command {
+        Command::Cache(args) => assert!(!args.clean),
+        _ => panic!("wrong command"),
+    }
+}
+
+#[test]
+fn cache_clean_flag_parses() {
+    let cli = parse(&["cache", "--clean"]);
+    match cli.command {
+        Command::Cache(args) => assert!(args.clean),
+        _ => panic!("wrong command"),
+    }
+}
