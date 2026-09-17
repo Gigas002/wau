@@ -227,6 +227,36 @@ fn match_toc_source_ids_ignores_folders_without_provider_ids() {
 }
 
 #[test]
+fn match_toc_source_ids_uses_tukui_slug_instead_of_id() {
+    // Tukui's API has no id-based lookup at all (confirmed live against the
+    // real API: `GET /addon/-2` and `GET /addon?id=-2` both 404 for its
+    // flagship addons' sentinel ids) — unlike every other source, a
+    // Tukui-sourced catalogue match must resolve to the catalogue's `slug`,
+    // not its `id`, or `install`/`sync` on the reconciled package would
+    // 404 forever.
+    let dir = tempfile::tempdir().unwrap();
+    let addon_dir = write_toc(dir.path(), "ElvUI", "ElvUI.toc", "## X-Tukui-ProjectID: -2");
+    let leftovers = vec![AddonFolder::from_path(Flavour::Mainline, &addon_dir).unwrap()];
+
+    let cat = catalogue(vec![entry("tukui", "-2", "ElvUI", vec![], vec![])]);
+    let mut src = sources();
+    src.push(Box::new(TestResolver {
+        id: "tukui",
+        toc_key: Some("X-Tukui-ProjectID"),
+    }));
+
+    let groups = match_toc_source_ids(&leftovers, &cat, &src);
+    assert_eq!(groups.len(), 1);
+    let defn = groups[0]
+        .defns
+        .iter()
+        .find(|d| d.source == "tukui")
+        .unwrap();
+    assert_eq!(defn.alias, "ElvUI-slug");
+    assert_eq!(defn.id.as_deref(), Some("-2"));
+}
+
+#[test]
 fn match_toc_source_ids_merges_folders_sharing_a_cross_referenced_defn() {
     let dir = tempfile::tempdir().unwrap();
     let dir_a = write_toc(dir.path(), "A", "A.toc", "## X-Curse-Project-ID: 100");

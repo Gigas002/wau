@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    catalogue::ComputedCatalogue,
+    catalogue::{CatalogueEntry, ComputedCatalogue},
     lockfile::{LockFile, Pkg},
     model::{Defn, Flavour},
     sources::Resolver,
@@ -93,6 +93,40 @@ fn source_ids(sources: &[Box<dyn Resolver>]) -> HashSet<String> {
     sources.iter().map(|r| r.metadata().id.to_owned()).collect()
 }
 
+/// Builds a `Defn` for a catalogue entry. Every source uses its numeric
+/// catalogue `id` directly as the alias — this is what each resolver's own
+/// `resolve_one_impl`/`resolve()` already expects (CurseForge/GitHub accept
+/// either an id or a slug as an alias; WoWInterface's own uid *is* this id,
+/// and its catalogue `slug` field is always empty, so id is the only option
+/// there too) — except Tukui, whose API has no id-based lookup at all
+/// (confirmed live: `GET /addon/<id>` and `GET /addon?id=<id>` both 404 for
+/// its two flagship addons' sentinel ids `-1`/`-2`) and needs its `slug`
+/// instead. `id` is still recorded (`Defn.id`), matching that field's
+/// documented purpose of keeping re-resolution stable even if the alias
+/// changes — every other source's branch here is unchanged from before this
+/// existed.
+fn catalogue_defn(entry: &CatalogueEntry) -> Defn {
+    if entry.source == "tukui" {
+        let mut defn = Defn::new(entry.source.clone(), entry.slug.clone());
+        defn.id = Some(entry.id.clone());
+        defn
+    } else {
+        Defn::new(entry.source.clone(), entry.id.clone())
+    }
+}
+
+/// Same as [`catalogue_defn`], for callers that only have a bare `(source,
+/// id)` pair (not a full catalogue entry in hand) — e.g. a `.toc`
+/// provider-id field. Falls back to the raw id-based `Defn` if `(source,
+/// id)` isn't in the catalogue at all; there's no slug to substitute in
+/// that case regardless of source.
+fn defn_for_id(source: &str, id: &str, keyed: &HashMap<(&str, &str), &CatalogueEntry>) -> Defn {
+    match keyed.get(&(source, id)) {
+        Some(entry) => catalogue_defn(entry),
+        None => Defn::new(source.to_owned(), id.to_owned()),
+    }
+}
+
 /// Merges any sets that share at least one element into disjoint unions
 /// (union-find via repeated scanning — fine for the small counts of addon
 /// folders/catalogue matches involved; not a hot path).
@@ -175,12 +209,13 @@ pub fn match_toc_source_ids(
         if base_defns.is_empty() {
             continue;
         }
-        let mut expanded = base_defns.clone();
+        let mut expanded: HashSet<Defn> = HashSet::new();
         for defn in &base_defns {
+            expanded.insert(defn_for_id(&defn.source, &defn.alias, &keyed));
             if let Some(entry) = keyed.get(&(defn.source.as_str(), defn.alias.as_str())) {
                 for key in &entry.same_as {
                     if known_sources.contains(&key.source) {
-                        expanded.insert(Defn::new(key.source.clone(), key.id.clone()));
+                        expanded.insert(defn_for_id(&key.source, &key.id, &keyed));
                     }
                 }
             }
@@ -244,7 +279,7 @@ pub fn match_folder_name_subsets(
                 .cloned()
                 .collect();
             if !intersect.is_empty() {
-                matches.push((intersect, Defn::new(entry.source.clone(), entry.id.clone())));
+                matches.push((intersect, catalogue_defn(entry)));
             }
         }
     }
@@ -320,7 +355,7 @@ pub fn match_addon_names_with_folder_names(
             let mut seen = HashSet::new();
             let mut defns = Vec::new();
             for e in entries {
-                let d = Defn::new(e.source.clone(), e.id.clone());
+                let d = catalogue_defn(e);
                 if seen.insert(d.clone()) {
                     defns.push(d);
                 }
