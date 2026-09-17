@@ -1,0 +1,8 @@
+# The upstream repo is named "Details-Damage-Meter", but the in-game addon
+# folder (and every .toc in it: Details.toc, Details_Wrath.toc, ...) is
+# "Details" — addname must match the *addon* folder name wau will install,
+# not the repo's own directory name.
+addname = "Details"
+url = "https://github.com/Tercioo/Details-Damage-Meter"
+makedepends = [ "git", "tar" ]
+build = "build.sh"

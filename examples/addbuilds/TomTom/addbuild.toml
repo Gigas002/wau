@@ -1,0 +1,7 @@
+# repos.curseforge.com is CurseForge's own git hosting for addon source
+# repos — this is TomTom's actual upstream (verified against the CurseForge
+# API's `sourceUrl` field for mod id 18808), not a GitHub mirror.
+addname = "TomTom"
+url = "https://repos.curseforge.com/wow/tomtom"
+makedepends = [ "git", "tar" ]
+build = "build.sh"
