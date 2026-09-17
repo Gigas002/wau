@@ -376,6 +376,44 @@ fn profile_config_read_missing_profile_errors_not_found() {
 }
 
 #[test]
+fn profile_config_read_errors_when_directory_and_profile_field_disagree() {
+    // Reported: hand-copying a `profile.toml` into a new directory as a
+    // template and forgetting to update its `profile = "..."` field used to
+    // silently redirect every path derived from it (lock file included) to
+    // the *other* profile's storage instead of the directory it was
+    // actually found in — installs into "fake_retail" landed in
+    // "retail"'s lock.toml. This must fail loudly instead.
+    let dir = tempfile::tempdir().unwrap();
+    let global = global_config_in(dir.path());
+    let addon_dir = dir.path().join("addons");
+    fs::create_dir_all(&addon_dir).unwrap();
+
+    let profile_dir = profiles_dir_path(&global).join("fake_retail");
+    fs::create_dir_all(&profile_dir).unwrap();
+    fs::write(
+        profile_dir.join(PROFILE_FILE_NAME),
+        format!(
+            "profile = \"retail\"\npath = {:?}\nflavour = \"mainline\"\n",
+            addon_dir.display()
+        ),
+    )
+    .unwrap();
+
+    let err = ProfileConfig::read(global, "fake_retail").unwrap_err();
+    match err {
+        ConfigError::ProfileNameMismatch {
+            directory,
+            declared,
+            ..
+        } => {
+            assert_eq!(directory, "fake_retail");
+            assert_eq!(declared, "retail");
+        }
+        other => panic!("expected ProfileNameMismatch, got {other:?}"),
+    }
+}
+
+#[test]
 fn iter_profiles_lists_every_written_profile_sorted() {
     let dir = tempfile::tempdir().unwrap();
     let global = global_config_in(dir.path());

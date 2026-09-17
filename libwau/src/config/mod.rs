@@ -61,6 +61,19 @@ pub enum ConfigError {
 
     #[error("multiple profiles configured: {}", .available.join(", "))]
     AmbiguousProfile { available: Vec<String> },
+
+    #[error(
+        "{} declares profile = {declared:?}, but its directory is named {directory:?} — every \
+         path (lock file included) is derived from the `profile` field, not the directory name, \
+         so a mismatch silently redirects reads/writes to a *different* profile's storage; fix \
+         `profile` in the file (or rename the directory) so they match",
+        path.display()
+    )]
+    ProfileNameMismatch {
+        directory: String,
+        declared: String,
+        path: PathBuf,
+    },
 }
 
 // ============================================================================
@@ -547,7 +560,20 @@ impl ProfileConfig {
     /// `global_config`'s config dir.
     pub fn read(global_config: GlobalConfig, profile: &str) -> Result<Self, ConfigError> {
         let path = profile_config_file_path(&global_config, profile);
-        Self::read_toml_at(global_config, &path, None)
+        let loaded = Self::read_toml_at(global_config, &path, None)?;
+        // `read_toml_at` trusts the file's own `profile` field for every
+        // path it derives (lock file included) — verify it actually
+        // matches the directory this file was looked up by, so a
+        // hand-edited (e.g. copy-pasted) mismatch fails loudly here instead
+        // of silently reading/writing a *different* profile's lock file.
+        if loaded.profile != profile {
+            return Err(ConfigError::ProfileNameMismatch {
+                directory: profile.to_owned(),
+                declared: loaded.profile,
+                path,
+            });
+        }
+        Ok(loaded)
     }
 
     /// Reads the one configured profile — for callers with no explicit name
