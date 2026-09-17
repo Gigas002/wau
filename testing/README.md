@@ -37,3 +37,12 @@ them locally with:
 ```sh
 cargo test -p wau --test cli -- --ignored
 ```
+
+## `toc/`
+
+Unrelated to the environments above: raw `.toc` files (`libwau/src/toc/tests.rs`'s
+`include_str!` fixtures) exercising the `.toc`-format parser itself, not a fake install tree —
+each one is a single manifest covering a different parsing case (simple, multi-client interface
+lines, flavor-specific keys, CurseForge-style provider fields, color-code stripping,
+dependencies). Lives here rather than under `examples/` since these aren't user-facing example
+content, just test input.

@@ -1,12 +1,12 @@
 use super::*;
 
 // Fixture files embedded at compile time so tests run without filesystem I/O.
-const FIXTURE_SIMPLE: &str = include_str!("../../../examples/toc/simple.toc");
-const FIXTURE_MULTI_CLIENT: &str = include_str!("../../../examples/toc/multi-client.toc");
-const FIXTURE_FLAVOR_SPECIFIC: &str = include_str!("../../../examples/toc/flavor-specific.toc");
-const FIXTURE_CURSEFORGE: &str = include_str!("../../../examples/toc/curseforge.toc");
-const FIXTURE_COLORFUL: &str = include_str!("../../../examples/toc/colorful.toc");
-const FIXTURE_DEPS: &str = include_str!("../../../examples/toc/dependencies.toc");
+const FIXTURE_SIMPLE: &str = include_str!("../../../testing/toc/simple.toc");
+const FIXTURE_MULTI_CLIENT: &str = include_str!("../../../testing/toc/multi-client.toc");
+const FIXTURE_FLAVOR_SPECIFIC: &str = include_str!("../../../testing/toc/flavor-specific.toc");
+const FIXTURE_CURSEFORGE: &str = include_str!("../../../testing/toc/curseforge.toc");
+const FIXTURE_COLORFUL: &str = include_str!("../../../testing/toc/colorful.toc");
+const FIXTURE_DEPS: &str = include_str!("../../../testing/toc/dependencies.toc");
 
 // ---------------------------------------------------------------------------
 // strip_color_codes
