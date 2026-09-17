@@ -410,6 +410,45 @@ async fn remove_keep_folders_leaves_files_on_disk() {
 }
 
 #[tokio::test]
+async fn remove_refuses_to_trash_a_folder_name_that_escapes_addon_dir() {
+    // Simulates a lock file row corrupted (or crafted, pre-fix) with a
+    // folder name of ".." — `addon_dir.join("..")` resolves to addon_dir's
+    // *parent*. `remove` must refuse to trash that instead of deleting
+    // everything alongside the addon directory.
+    let mut h = Harness::new(vec![]);
+    h.lock.insert_pkg(Pkg {
+        source: "test".into(),
+        id: "1".into(),
+        slug: "foo".into(),
+        name: "Foo".into(),
+        description: "".into(),
+        url: "".into(),
+        download_url: "".into(),
+        date_published: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        version: "1.0.0".into(),
+        changelog_url: "".into(),
+        options: PkgOptions {
+            any_flavour: false,
+            any_release_type: false,
+            version_eq: false,
+        },
+        folders: vec![PkgFolder { name: "..".into() }],
+        deps: vec![],
+    });
+
+    let results = remove(&mut h.lock, &h.addon_dir, &[defn("test", "foo")], false);
+    assert!(matches!(
+        results.get(&defn("test", "foo")).unwrap(),
+        Err(Failure::Internal(_))
+    ));
+    // The lock row must survive the refusal — losing track of the package
+    // while leaving its (unremoved) folder behind would be worse.
+    assert_eq!(h.lock.get_all_pkgs().len(), 1);
+    // The sibling `cache` dir, one level up from `addon_dir`, must be intact.
+    assert!(h.cache_dir.exists());
+}
+
+#[tokio::test]
 async fn remove_not_installed_is_reported() {
     let mut h = Harness::new(vec![]);
     let results = remove(&mut h.lock, &h.addon_dir, &[defn("test", "foo")], false);

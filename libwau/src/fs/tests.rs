@@ -42,3 +42,48 @@ fn trash_destinations_are_unique_per_call() {
 
     assert_ne!(dest_a.parent(), dest_b.parent());
 }
+
+#[test]
+fn copy_dir_recursive_preserves_nested_structure() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("src");
+    fs::create_dir_all(src.join("nested")).unwrap();
+    fs::write(src.join("top.txt"), b"top").unwrap();
+    fs::write(src.join("nested").join("inner.txt"), b"inner").unwrap();
+
+    let dest = dir.path().join("dest");
+    copy_dir_recursive(&src, &dest).unwrap();
+
+    assert_eq!(fs::read(dest.join("top.txt")).unwrap(), b"top");
+    assert_eq!(
+        fs::read(dest.join("nested").join("inner.txt")).unwrap(),
+        b"inner"
+    );
+    // Source is untouched: copy, not move.
+    assert!(src.join("top.txt").exists());
+}
+
+#[test]
+fn is_within_true_for_a_descendant() {
+    let dir = tempfile::tempdir().unwrap();
+    let child = dir.path().join("child");
+    fs::create_dir(&child).unwrap();
+
+    assert!(is_within(dir.path(), &child));
+}
+
+#[test]
+fn is_within_false_for_the_root_itself() {
+    let dir = tempfile::tempdir().unwrap();
+    assert!(!is_within(dir.path(), dir.path()));
+}
+
+#[test]
+fn is_within_false_for_the_parent_of_root() {
+    let dir = tempfile::tempdir().unwrap();
+    let child = dir.path().join("child");
+    fs::create_dir(&child).unwrap();
+
+    // `dir` is the parent of `child` — must not be "within" `child`.
+    assert!(!is_within(&child, dir.path()));
+}

@@ -41,6 +41,9 @@ pub fn find_archive_addon_tocs<'a>(
                 return None;
             }
             let (head, tail) = name.split_once('/')?;
+            if !is_safe_folder_name(head) {
+                return None;
+            }
             let is_toc = tail.len() >= 4 && tail[tail.len() - 4..].eq_ignore_ascii_case(".toc");
             if is_toc && tail.starts_with(head) {
                 Some((name.to_owned(), head.to_owned()))
@@ -49,6 +52,17 @@ pub fn find_archive_addon_tocs<'a>(
             }
         })
         .collect()
+}
+
+/// Whether `name` is safe to use as a single path component for an addon
+/// folder — i.e. joining it onto `addon_dir` can't land outside `addon_dir`
+/// or resolve to `addon_dir` itself. Archive member names are otherwise
+/// untrusted input: a crafted entry like `/x.toc` or `../y.toc` would
+/// produce a `head` of `""` or `".."`, which later gets stored as a folder
+/// name and joined onto `addon_dir` when installing, updating, or removing
+/// the package — silently targeting `addon_dir` or one of its ancestors.
+pub fn is_safe_folder_name(name: &str) -> bool {
+    !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\'])
 }
 
 /// Opens `archive_path` and determines its top-level addon folders, without

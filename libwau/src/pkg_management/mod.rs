@@ -290,6 +290,23 @@ fn resolve_deps<'a>(
 // Mutations (run sequentially, one item at a time)
 // ============================================================================
 
+/// Moves an addon folder into the trash, refusing to touch anything that
+/// doesn't resolve strictly inside `addon_dir`. Folder names ultimately come
+/// from lock file rows built off archive contents — a corrupted or
+/// maliciously-crafted entry (e.g. a folder name of `""` or `".."`) must
+/// never let this delete `addon_dir` itself or something outside it.
+fn trash_addon_folder(addon_dir: &Path, path: &Path) -> AnyOutcome<()> {
+    if !trash_fs::is_within(addon_dir, path) {
+        return Err(InternalError::new(format!(
+            "refusing to remove {}: not inside the addon directory",
+            path.display()
+        ))
+        .into());
+    }
+    trash_fs::trash(path).map_err(InternalError::new)?;
+    Ok(())
+}
+
 fn mutate_install(
     lock: &mut LockFile,
     addon_dir: &Path,
@@ -313,7 +330,7 @@ fn mutate_install(
         for name in &folder_names {
             let path = addon_dir.join(name);
             if path.exists() {
-                let _ = trash_fs::trash(&path);
+                trash_addon_folder(addon_dir, &path)?;
             }
         }
     } else {
@@ -382,7 +399,7 @@ fn mutate_update(
     for folder in &old_pkg.folders {
         let path = addon_dir.join(&folder.name);
         if path.exists() {
-            let _ = trash_fs::trash(&path);
+            trash_addon_folder(addon_dir, &path)?;
         }
     }
     archive.extract(addon_dir).map_err(InternalError::new)?;
@@ -409,7 +426,7 @@ fn mutate_remove(
         for folder in &pkg.folders {
             let path = addon_dir.join(&folder.name);
             if path.exists() {
-                let _ = trash_fs::trash(&path);
+                trash_addon_folder(addon_dir, &path)?;
             }
         }
     }

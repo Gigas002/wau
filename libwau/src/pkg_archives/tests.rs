@@ -66,6 +66,25 @@ fn find_archive_addon_tocs_finds_multiple_addon_folders() {
     assert_eq!(heads, vec!["Bar".to_owned(), "Foo".to_owned()]);
 }
 
+#[test]
+fn find_archive_addon_tocs_rejects_parent_dir_escape() {
+    // A leading slash makes the "head" empty (`addon_dir.join("")` is
+    // `addon_dir` itself); a leading `../` makes it `".."` (the parent of
+    // `addon_dir`). Both must never be treated as an addon folder name.
+    let names = ["/..toc", "../..toc"];
+    assert!(find_archive_addon_tocs(names).is_empty());
+}
+
+#[test]
+fn is_safe_folder_name_rejects_traversal_and_separators() {
+    assert!(!is_safe_folder_name(""));
+    assert!(!is_safe_folder_name("."));
+    assert!(!is_safe_folder_name(".."));
+    assert!(!is_safe_folder_name("a/b"));
+    assert!(!is_safe_folder_name("a\\b"));
+    assert!(is_safe_folder_name("Foo"));
+}
+
 // ---------------------------------------------------------------------------
 // open_zip_archive / extract
 // ---------------------------------------------------------------------------
