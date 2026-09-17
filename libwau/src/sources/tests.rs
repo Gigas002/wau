@@ -6,12 +6,13 @@ use super::*;
     feature = "curseforge",
     feature = "wowinterface",
     feature = "tukui",
-    feature = "wago"
+    feature = "wago",
+    feature = "git"
 ))]
 fn default_sources_are_registered_in_priority_order() {
     let sources = default_sources(&SourceConfig::default());
     let ids: Vec<&str> = sources.iter().map(|s| s.metadata().id).collect();
-    assert_eq!(ids, vec!["github", "curse", "wowi", "tukui", "wago"]);
+    assert_eq!(ids, vec!["github", "curse", "wowi", "tukui", "wago", "git"]);
 }
 
 #[test]

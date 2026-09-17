@@ -20,7 +20,11 @@ const DEFAULT_API_URL: &str = "https://api.tukui.org/v1";
 
 #[derive(Debug, Deserialize)]
 struct TukuiAddon {
-    id: u64,
+    /// Signed, not `u64`: Tukui's two flagship first-party addons — Tukui
+    /// itself and ElvUI — are sentinel-valued `-1`/`-2` rather than a normal
+    /// positive community-addon id (confirmed against the live API: `GET
+    /// /addon/elvui` really does return `"id": -2`).
+    id: i64,
     slug: String,
     name: String,
     url: String,

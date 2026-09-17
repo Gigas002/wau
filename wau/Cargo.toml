@@ -13,12 +13,13 @@ repository.workspace = true
 workspace = true
 
 [features]
-default = ["curseforge", "github", "tukui", "wowinterface", "wago"]
+default = ["curseforge", "github", "tukui", "wowinterface", "wago", "git"]
 curseforge = ["libwau/curseforge"]
 github = ["libwau/github"]
 tukui = ["libwau/tukui"]
 wowinterface = ["libwau/wowinterface"]
 wago = ["libwau/wago"]
+git = ["libwau/git"]
 
 [dependencies]
 libwau = { path = "../libwau", default-features = false }

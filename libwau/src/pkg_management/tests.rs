@@ -629,6 +629,29 @@ async fn resolve_follows_one_level_of_dependencies() {
 }
 
 #[tokio::test]
+async fn resolve_follows_a_cross_source_dependency_string() {
+    // `git`'s `addbuild.toml` `depends` are cross-source `source:alias`
+    // strings (unlike every other source's same-source numeric dep ids) —
+    // `parse_dep_defn` tells the two apart by whether the id contains a `:`.
+    let mut cand = candidate("1", "foo", "1.0.0", String::new());
+    cand.deps = vec!["other:bar".to_owned()];
+    let h = Harness::new(vec![
+        Box::new(TestResolver::new("test").with_candidate("foo", cand)),
+        Box::new(
+            TestResolver::new("other")
+                .with_candidate("bar", candidate("2", "bar", "1.0.0", String::new())),
+        ),
+    ]);
+
+    let results = resolve(&ctx!(h), &[defn("test", "foo")], true).await;
+    assert_eq!(results.len(), 2);
+    let dep_entry = results
+        .iter()
+        .find(|(d, _)| d.source == "other" && d.alias == "bar");
+    assert!(dep_entry.is_some(), "{results:?}");
+}
+
+#[tokio::test]
 async fn replace_switches_installed_package_to_new_source() {
     let url_dir = tempfile::tempdir().unwrap();
     let url_old = make_zip_file(url_dir.path(), "old.zip", "Foo", b"## Interface: 110000");

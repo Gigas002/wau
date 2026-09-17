@@ -232,6 +232,26 @@ pub async fn resolve(
     results
 }
 
+/// A dependency id in `PkgCandidate::deps` is, for every source but `git`, a
+/// bare id within the same source as its parent (e.g. CurseForge's own
+/// numeric mod ids). `git`'s `addbuild.toml` `depends` are inherently
+/// cross-source instead, so they're carried as full `source:alias` addon
+/// URIs (validated eagerly by `sources::git::check_depends`) — a colon
+/// unambiguously distinguishes the two, since no source's own same-source
+/// dependency ids ever contain one.
+fn parse_dep_defn(parent_source: &str, dep_id: &str) -> Defn {
+    if dep_id.contains(':')
+        && let Ok(mut d) = Defn::from_uri(dep_id, &[], true)
+    {
+        d.id = Some(d.alias.clone());
+        d
+    } else {
+        let mut d = Defn::new(parent_source.to_owned(), dep_id.to_owned());
+        d.id = Some(dep_id.to_owned());
+        d
+    }
+}
+
 fn resolve_deps<'a>(
     ctx: &'a Ctx<'a>,
     results: &'a HashMap<Defn, AnyOutcome<PkgCandidate>>,
@@ -242,30 +262,26 @@ fn resolve_deps<'a>(
             .filter_map(|(d, r)| r.as_ref().ok().map(|c| (d.source.clone(), c.id.clone())))
             .collect();
 
-        let mut dep_pairs: Vec<(String, String)> = Vec::new();
+        let mut dep_defns: Vec<Defn> = Vec::new();
+        let mut seen: HashSet<(String, String)> = HashSet::new();
         for (defn, outcome) in results {
             if let Ok(candidate) = outcome {
                 for dep_id in &candidate.deps {
-                    let pair = (defn.source.clone(), dep_id.clone());
-                    if !existing.contains(&pair) && !dep_pairs.contains(&pair) {
-                        dep_pairs.push(pair);
+                    let dep_defn = parse_dep_defn(&defn.source, dep_id);
+                    let pair = (
+                        dep_defn.source.clone(),
+                        dep_defn.id.clone().expect("parse_dep_defn always sets id"),
+                    );
+                    if !existing.contains(&pair) && seen.insert(pair) {
+                        dep_defns.push(dep_defn);
                     }
                 }
             }
         }
 
-        if dep_pairs.is_empty() {
+        if dep_defns.is_empty() {
             return HashMap::new();
         }
-
-        let dep_defns: Vec<Defn> = dep_pairs
-            .iter()
-            .map(|(source, id)| {
-                let mut d = Defn::new(source.clone(), id.clone());
-                d.id = Some(id.clone());
-                d
-            })
-            .collect();
 
         let resolved = resolve(ctx, &dep_defns, false).await;
 

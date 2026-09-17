@@ -73,6 +73,29 @@ async fn resolve_errors_when_flavour_not_in_patch_list() {
 }
 
 #[tokio::test]
+async fn resolve_accepts_a_negative_id() {
+    // Tukui's two flagship first-party addons (Tukui itself, ElvUI) really
+    // are sentinel-valued `-1`/`-2` on the live API, not a normal positive
+    // community-addon id.
+    let mut server = mockito::Server::new_async().await;
+    let mut json = addon_json();
+    json["id"] = serde_json::json!(-2);
+    server
+        .mock("GET", "/addon/elvui")
+        .with_status(200)
+        .with_body(json.to_string())
+        .create_async()
+        .await;
+
+    let http = HttpClient::new().unwrap();
+    let candidate =
+        crate::sources::resolve_one(&resolver(&server), &http, Flavour::Mainline, &defn("elvui"))
+            .await
+            .unwrap();
+    assert_eq!(candidate.id, "-2");
+}
+
+#[tokio::test]
 async fn resolve_404_is_nonexistent() {
     let mut server = mockito::Server::new_async().await;
     server

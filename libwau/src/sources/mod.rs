@@ -5,6 +5,8 @@
 //! submodule; this module only holds the shared trait, candidate types, and
 //! the registry.
 
+use std::path::PathBuf;
+
 use chrono::{DateTime, Utc};
 
 use crate::{
@@ -20,6 +22,8 @@ mod tests;
 
 #[cfg(feature = "curseforge")]
 pub mod curseforge;
+#[cfg(feature = "git")]
+pub mod git;
 #[cfg(feature = "github")]
 pub mod github;
 #[cfg(feature = "tukui")]
@@ -240,6 +244,11 @@ pub struct SourceConfig {
     pub github_token: Option<SecretString>,
     pub github_handler: GitHubHandler,
     pub wago_addons_token: Option<SecretString>,
+    /// `<config-dir>/addbuilds` — where the `git` source looks up
+    /// `<addname>/addbuild.toml` recipes.
+    pub git_addbuilds_dir: PathBuf,
+    /// `<cache-dir>/git` — git checkouts and built, version-named zips.
+    pub git_cache_dir: PathBuf,
 }
 
 /// Every compiled-in source, in priority order (GitHub, CurseForge,
@@ -269,6 +278,11 @@ pub fn default_sources(config: &SourceConfig) -> Vec<Box<dyn Resolver>> {
     #[cfg(feature = "wago")]
     sources.push(Box::new(wago::WagoAddonsResolver::new(
         config.wago_addons_token.clone(),
+    )));
+    #[cfg(feature = "git")]
+    sources.push(Box::new(git::GitResolver::new(
+        config.git_addbuilds_dir.clone(),
+        config.git_cache_dir.clone(),
     )));
 
     sources

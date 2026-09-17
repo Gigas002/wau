@@ -80,6 +80,8 @@ pub fn source_config(global: &GlobalConfig) -> SourceConfig {
         github_token: global.access_tokens.github.clone(),
         github_handler: global.github_handler,
         wago_addons_token: global.access_tokens.wago_addons.clone(),
+        git_addbuilds_dir: global.dirs.config.join("addbuilds"),
+        git_cache_dir: global.dirs.cache.join("git"),
     }
 }
 

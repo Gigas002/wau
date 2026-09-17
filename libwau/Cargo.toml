@@ -12,12 +12,13 @@ edition.workspace = true
 workspace = true
 
 [features]
-default = ["curseforge", "github", "tukui", "wowinterface", "wago"]
+default = ["curseforge", "github", "tukui", "wowinterface", "wago", "git"]
 curseforge = []
 github = []
 tukui = []
 wowinterface = []
 wago = []
+git = []
 
 [dependencies]
 thiserror = "2"
