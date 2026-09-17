@@ -8,6 +8,7 @@ use libwau::{
     http::{HttpClient, HttpError},
     lockfile::{LockError, LockFile},
     pkg_archives::DownloadLocks,
+    progress::ProgressBus,
     sources::{self, Resolver, SourceConfig},
 };
 
@@ -33,6 +34,7 @@ pub struct AppCtx {
     pub http: HttpClient,
     pub sources: Vec<Box<dyn Resolver>>,
     pub download_locks: DownloadLocks,
+    pub progress: ProgressBus,
 }
 
 /// Resolves `--profile`'s value: a bare name looked up by
@@ -108,6 +110,7 @@ impl AppCtx {
             http,
             sources,
             download_locks: DownloadLocks::new(),
+            progress: ProgressBus::new(),
         })
     }
 }

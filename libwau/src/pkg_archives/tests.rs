@@ -1,7 +1,7 @@
 use std::{fs, io::Write as _};
 
 use super::*;
-use crate::http::HttpClient;
+use crate::{http::HttpClient, progress::ProgressBus};
 
 fn make_test_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
     use std::io::Cursor;
@@ -176,6 +176,7 @@ async fn download_pkg_archive_short_circuits_file_uri() {
     let client = HttpClient::new().unwrap();
     let locks = DownloadLocks::new();
     let dir = tempfile::tempdir().unwrap();
+    let progress = ProgressBus::new();
 
     let path = download_pkg_archive(
         &client,
@@ -183,6 +184,8 @@ async fn download_pkg_archive_short_circuits_file_uri() {
         "file:///tmp/some-addon.zip",
         &[],
         dir.path(),
+        &progress,
+        "some-addon",
     )
     .await
     .unwrap();
@@ -202,6 +205,7 @@ async fn download_pkg_archive_fetches_and_writes_body() {
     let client = HttpClient::new().unwrap();
     let locks = DownloadLocks::new();
     let dir = tempfile::tempdir().unwrap();
+    let progress = ProgressBus::new();
 
     let path = download_pkg_archive(
         &client,
@@ -209,6 +213,8 @@ async fn download_pkg_archive_fetches_and_writes_body() {
         &format!("{}/addon.zip", server.url()),
         &[],
         dir.path(),
+        &progress,
+        "addon",
     )
     .await
     .unwrap();
@@ -229,6 +235,7 @@ async fn download_pkg_archive_errors_on_failure_status() {
     let client = HttpClient::new().unwrap();
     let locks = DownloadLocks::new();
     let dir = tempfile::tempdir().unwrap();
+    let progress = ProgressBus::new();
 
     let err = download_pkg_archive(
         &client,
@@ -236,6 +243,8 @@ async fn download_pkg_archive_errors_on_failure_status() {
         &format!("{}/missing.zip", server.url()),
         &[],
         dir.path(),
+        &progress,
+        "missing",
     )
     .await
     .unwrap_err();
@@ -260,14 +269,73 @@ async fn concurrent_downloads_of_same_url_both_succeed_without_corrupting_each_o
     let client = HttpClient::new().unwrap();
     let locks = DownloadLocks::new();
     let dir = tempfile::tempdir().unwrap();
+    let progress = ProgressBus::new();
     let url = format!("{}/addon.zip", server.url());
 
     let (a, b) = tokio::join!(
-        download_pkg_archive(&client, &locks, &url, &[], dir.path()),
-        download_pkg_archive(&client, &locks, &url, &[], dir.path()),
+        download_pkg_archive(&client, &locks, &url, &[], dir.path(), &progress, "addon"),
+        download_pkg_archive(&client, &locks, &url, &[], dir.path(), &progress, "addon"),
     );
     let a = a.unwrap();
     let b = b.unwrap();
     assert_eq!(fs::read(&a).unwrap(), b"zip-bytes");
     assert_eq!(fs::read(&b).unwrap(), b"zip-bytes");
+}
+
+#[tokio::test]
+async fn download_pkg_archive_clears_its_progress_entry_on_success() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("GET", "/addon.zip")
+        .with_status(200)
+        .with_body(b"zip-bytes" as &[u8])
+        .create_async()
+        .await;
+
+    let client = HttpClient::new().unwrap();
+    let locks = DownloadLocks::new();
+    let dir = tempfile::tempdir().unwrap();
+    let progress = ProgressBus::new();
+
+    download_pkg_archive(
+        &client,
+        &locks,
+        &format!("{}/addon.zip", server.url()),
+        &[],
+        dir.path(),
+        &progress,
+        "addon",
+    )
+    .await
+    .unwrap();
+
+    assert!(progress.snapshot().is_empty());
+}
+
+#[tokio::test]
+async fn download_pkg_archive_clears_its_progress_entry_on_failure() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("GET", "/missing.zip")
+        .with_status(404)
+        .create_async()
+        .await;
+
+    let client = HttpClient::new().unwrap();
+    let locks = DownloadLocks::new();
+    let dir = tempfile::tempdir().unwrap();
+    let progress = ProgressBus::new();
+
+    let _ = download_pkg_archive(
+        &client,
+        &locks,
+        &format!("{}/missing.zip", server.url()),
+        &[],
+        dir.path(),
+        &progress,
+        "missing",
+    )
+    .await;
+
+    assert!(progress.snapshot().is_empty());
 }

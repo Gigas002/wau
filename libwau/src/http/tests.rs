@@ -44,6 +44,59 @@ async fn get_without_a_cache_dir_hits_server_every_time_even_with_indefinite_ttl
 }
 
 #[tokio::test]
+async fn get_with_progress_reports_final_size_and_total() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("GET", "/progress")
+        .with_status(200)
+        .with_body(b"hello world" as &[u8])
+        .create_async()
+        .await;
+
+    let client = HttpClient::new().unwrap();
+    let url = format!("{}/progress", server.url());
+
+    let mut last = None;
+    let response = client
+        .get_with_progress(&url, &[], CacheTtl::Never, |current, total| {
+            last = Some((current, total));
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(response.body, b"hello world");
+    assert_eq!(last, Some((11, Some(11))));
+    mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn get_with_progress_does_not_call_progress_on_cache_hit() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("GET", "/cached")
+        .with_status(200)
+        .with_body("x")
+        .expect(1)
+        .create_async()
+        .await;
+
+    let dir = tempfile::tempdir().unwrap();
+    let client = HttpClient::with_cache_dir(dir.path()).unwrap();
+    let url = format!("{}/cached", server.url());
+
+    client.get(&url, &[], CacheTtl::Indefinite).await.unwrap();
+
+    let mut calls = 0;
+    client
+        .get_with_progress(&url, &[], CacheTtl::Indefinite, |_, _| calls += 1)
+        .await
+        .unwrap();
+
+    assert_eq!(calls, 0);
+    mock.assert_async().await;
+}
+
+#[tokio::test]
 async fn post_sends_body_and_reports_status() {
     let mut server = mockito::Server::new_async().await;
     let mock = server

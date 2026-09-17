@@ -119,6 +119,7 @@ async fn cmd_install(cli: &Cli, args: &InstallArgs) -> Result<i32, AppError> {
         http,
         sources,
         download_locks,
+        progress,
     } = app_ctx;
     let defns = parse_defns(&args.addons, &sources)?;
     let pkg_ctx = pkg_management::Ctx {
@@ -127,11 +128,16 @@ async fn cmd_install(cli: &Cli, args: &InstallArgs) -> Result<i32, AppError> {
         download_locks: &download_locks,
         addon_dir: &profile.addon_dir,
         cache_dir: &profile.global_config.dirs.cache,
+        progress: &progress,
         flavour: profile.product.flavour(),
     };
 
-    let results =
-        pkg_management::install(&mut lock, &pkg_ctx, &defns, args.replace, args.dry_run).await;
+    let results = crate::progress::with_download_bars(
+        &progress,
+        style::color_enabled(),
+        pkg_management::install(&mut lock, &pkg_ctx, &defns, args.replace, args.dry_run),
+    )
+    .await;
     println!("{}", format_results(&results, style::color_enabled()));
     Ok(i32::from(any_errors(&results)))
 }
@@ -144,6 +150,7 @@ async fn cmd_sync(cli: &Cli, args: &SyncArgs) -> Result<i32, AppError> {
         http,
         sources,
         download_locks,
+        progress,
     } = app_ctx;
     let pkg_ctx = pkg_management::Ctx {
         http: &http,
@@ -151,6 +158,7 @@ async fn cmd_sync(cli: &Cli, args: &SyncArgs) -> Result<i32, AppError> {
         download_locks: &download_locks,
         addon_dir: &profile.addon_dir,
         cache_dir: &profile.global_config.dirs.cache,
+        progress: &progress,
         flavour: profile.product.flavour(),
     };
 
@@ -160,7 +168,12 @@ async fn cmd_sync(cli: &Cli, args: &SyncArgs) -> Result<i32, AppError> {
         pkg_management::UpdateTarget::Specific(parse_defns(&args.addons, &sources)?)
     };
 
-    let mut results = pkg_management::update(&mut lock, &pkg_ctx, target, args.dry_run).await;
+    let mut results = crate::progress::with_download_bars(
+        &progress,
+        style::color_enabled(),
+        pkg_management::update(&mut lock, &pkg_ctx, target, args.dry_run),
+    )
+    .await;
     if args.addons.is_empty() {
         // Syncing "all": don't clutter output with already-up-to-date,
         // unpinned packages.
@@ -204,6 +217,7 @@ async fn cmd_replace(cli: &Cli, args: &ReplaceArgs) -> Result<i32, AppError> {
         http,
         sources,
         download_locks,
+        progress,
     } = app_ctx;
     let old = parse_defn(&args.old, &sources, true)?;
     let new = parse_defn(&args.new, &sources, false)?;
@@ -213,10 +227,16 @@ async fn cmd_replace(cli: &Cli, args: &ReplaceArgs) -> Result<i32, AppError> {
         download_locks: &download_locks,
         addon_dir: &profile.addon_dir,
         cache_dir: &profile.global_config.dirs.cache,
+        progress: &progress,
         flavour: profile.product.flavour(),
     };
 
-    let results = pkg_management::replace(&mut lock, &pkg_ctx, &[(old, new)]).await?;
+    let results = crate::progress::with_download_bars(
+        &progress,
+        style::color_enabled(),
+        pkg_management::replace(&mut lock, &pkg_ctx, &[(old, new)]),
+    )
+    .await?;
     println!("{}", format_results(&results, style::color_enabled()));
     Ok(i32::from(any_errors(&results)))
 }
@@ -285,6 +305,7 @@ async fn reconcile_profile(
         http,
         sources,
         download_locks,
+        progress,
     } = AppCtx::from_profile(profile)?;
     let flavour = profile.product.flavour();
 
@@ -311,6 +332,7 @@ async fn reconcile_profile(
         download_locks: &download_locks,
         addon_dir: &profile.addon_dir,
         cache_dir: &profile.global_config.dirs.cache,
+        progress: &progress,
         flavour,
     };
 
@@ -379,8 +401,12 @@ async fn reconcile_profile(
         if !selections.is_empty() {
             let proceed = args.auto || prompts::confirm("Install selected add-ons?", true)?;
             if proceed {
-                let results =
-                    pkg_management::install(&mut lock, &pkg_ctx, &selections, true, false).await;
+                let results = crate::progress::with_download_bars(
+                    &progress,
+                    style::color_enabled(),
+                    pkg_management::install(&mut lock, &pkg_ctx, &selections, true, false),
+                )
+                .await;
                 println!("{}", format_results(&results, style::color_enabled()));
             }
         }
@@ -424,6 +450,7 @@ async fn cmd_search(cli: &Cli, args: &SearchArgs) -> Result<i32, AppError> {
         http,
         sources,
         download_locks,
+        progress,
     } = app_ctx;
     let flavour = profile.product.flavour();
 
@@ -512,9 +539,15 @@ async fn cmd_search(cli: &Cli, args: &SearchArgs) -> Result<i32, AppError> {
         download_locks: &download_locks,
         addon_dir: &profile.addon_dir,
         cache_dir: &profile.global_config.dirs.cache,
+        progress: &progress,
         flavour,
     };
-    let results = pkg_management::install(&mut lock, &pkg_ctx, &selections, false, false).await;
+    let results = crate::progress::with_download_bars(
+        &progress,
+        style::color_enabled(),
+        pkg_management::install(&mut lock, &pkg_ctx, &selections, false, false),
+    )
+    .await;
     println!("{}", format_results(&results, style::color_enabled()));
     Ok(i32::from(any_errors(&results)))
 }

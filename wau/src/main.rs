@@ -2,6 +2,7 @@ mod app;
 mod cli;
 mod ctx;
 mod output;
+mod progress;
 mod prompts;
 mod style;
 

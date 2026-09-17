@@ -1,8 +1,9 @@
 //! Install/update/remove/replace/pin orchestration.
 //!
-//! No progress reporting, and no locking beyond per-URL download
-//! deduplication (`DownloadLocks`) — operations aren't otherwise serialized
-//! against each other.
+//! Download progress is reported through `Ctx::progress` (see
+//! [`crate::progress`]); nothing else here reports progress, and there's no
+//! locking beyond per-URL download deduplication (`DownloadLocks`) —
+//! operations aren't otherwise serialized against each other.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -16,6 +17,7 @@ use crate::{
     lockfile::{LockFile, Pkg, PkgDep, PkgFolder, PkgOptions},
     model::{Defn, Flavour, HeadersIntent, Strategy},
     pkg_archives::{self, DownloadLocks},
+    progress::ProgressBus,
     results::{AnyOutcome, Failure, InternalError, ManagerError, PkgRef},
     sources::{PkgCandidate, Resolver, find_source},
 };
@@ -31,6 +33,7 @@ pub struct Ctx<'a> {
     pub download_locks: &'a DownloadLocks,
     pub addon_dir: &'a Path,
     pub cache_dir: &'a Path,
+    pub progress: &'a ProgressBus,
     pub flavour: Flavour,
 }
 
@@ -453,6 +456,8 @@ async fn download_all(
                 &c.download_url,
                 &headers,
                 &staging_dir,
+                ctx.progress,
+                &c.name,
             )
             .await;
             (d.clone(), result)

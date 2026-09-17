@@ -128,6 +128,7 @@ struct Harness {
     lock: LockFile,
     http: HttpClient,
     locks: DownloadLocks,
+    progress: ProgressBus,
     sources: Vec<Box<dyn Resolver>>,
 }
 
@@ -146,6 +147,7 @@ impl Harness {
             lock: LockFile::in_memory(),
             http: HttpClient::new().unwrap(),
             locks: DownloadLocks::new(),
+            progress: ProgressBus::new(),
             sources,
         }
     }
@@ -163,6 +165,7 @@ macro_rules! ctx {
             download_locks: &$h.locks,
             addon_dir: &$h.addon_dir,
             cache_dir: &$h.cache_dir,
+            progress: &$h.progress,
             flavour: Flavour::Mainline,
         }
     };

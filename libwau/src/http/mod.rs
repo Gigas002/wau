@@ -88,6 +88,35 @@ impl HttpClient {
             .await
     }
 
+    /// Like [`Self::get`], but calls `on_progress(bytes_so_far, total_bytes)`
+    /// as the body streams in instead of buffering it silently — `total`
+    /// is `None` when the server doesn't send `Content-Length`. Only takes
+    /// effect on a cache miss; a cache hit returns immediately without ever
+    /// calling `on_progress`.
+    pub async fn get_with_progress(
+        &self,
+        url: &str,
+        headers: &[(&str, &str)],
+        ttl: CacheTtl,
+        on_progress: impl FnMut(u64, Option<u64>),
+    ) -> Result<HttpResponse, HttpError> {
+        let key = cache_key("GET", url, headers);
+
+        if let Some(cached) = self.cache_get(&ttl, &key).await {
+            return Ok(cached);
+        }
+
+        let response = self
+            .send_with_progress(&reqwest::Method::GET, url, headers, on_progress)
+            .await?;
+
+        if ALLOWED_CACHE_STATUSES.contains(&response.status) {
+            self.cache_put(&key, &response, ttl).await;
+        }
+
+        Ok(response)
+    }
+
     pub async fn post(
         &self,
         url: &str,
@@ -166,22 +195,52 @@ impl HttpClient {
         headers: &[(&str, &str)],
         body: Option<&[u8]>,
     ) -> Result<HttpResponse, HttpError> {
-        let mut builder = client.request(method.clone(), url);
-        for (k, v) in headers {
-            builder = builder.header(*k, *v);
-        }
-        if let Some(body) = body {
-            builder = builder.body(body.to_vec());
-        }
+        let response = self.send_raw(client, method, url, headers, body).await?;
+        collect_response(response).await
+    }
 
-        let response = builder.send().await?;
+    /// Same request dispatch and CloudFlare retry as [`Self::send`], but
+    /// streams the body through `on_progress` instead of buffering it via
+    /// `reqwest`'s own `bytes()` — the retry decision only needs the
+    /// initial response's status/headers, so it's made before any of the
+    /// (possibly large) body is read.
+    async fn send_with_progress(
+        &self,
+        method: &reqwest::Method,
+        url: &str,
+        headers: &[(&str, &str)],
+        mut on_progress: impl FnMut(u64, Option<u64>),
+    ) -> Result<HttpResponse, HttpError> {
+        let response = self
+            .send_raw(&self.default, method, url, headers, None)
+            .await?;
+
+        let response = if response.status().as_u16() == 403
+            && response
+                .headers()
+                .iter()
+                .any(|(k, _)| k.as_str().eq_ignore_ascii_case("cf-ray"))
+        {
+            self.send_raw(&self.cloudflare_compat, method, url, headers, None)
+                .await?
+        } else {
+            response
+        };
+
         let status = response.status().as_u16();
         let headers = response
             .headers()
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or_default().to_owned()))
             .collect();
-        let body = response.bytes().await?.to_vec();
+        let total = response.content_length();
+
+        let mut body = Vec::new();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = futures_util::StreamExt::next(&mut stream).await {
+            body.extend_from_slice(&chunk?);
+            on_progress(body.len() as u64, total);
+        }
 
         Ok(HttpResponse {
             status,
@@ -189,6 +248,40 @@ impl HttpClient {
             body,
         })
     }
+
+    async fn send_raw(
+        &self,
+        client: &reqwest::Client,
+        method: &reqwest::Method,
+        url: &str,
+        headers: &[(&str, &str)],
+        body: Option<&[u8]>,
+    ) -> Result<reqwest::Response, HttpError> {
+        let mut builder = client.request(method.clone(), url);
+        for (k, v) in headers {
+            builder = builder.header(*k, *v);
+        }
+        if let Some(body) = body {
+            builder = builder.body(body.to_vec());
+        }
+        Ok(builder.send().await?)
+    }
+}
+
+async fn collect_response(response: reqwest::Response) -> Result<HttpResponse, HttpError> {
+    let status = response.status().as_u16();
+    let headers = response
+        .headers()
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or_default().to_owned()))
+        .collect();
+    let body = response.bytes().await?.to_vec();
+
+    Ok(HttpResponse {
+        status,
+        headers,
+        body,
+    })
 }
 
 fn cache_key(method: &str, url: &str, headers: &[(&str, &str)]) -> String {

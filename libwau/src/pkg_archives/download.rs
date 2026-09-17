@@ -14,7 +14,10 @@ use std::{
 use tokio::sync::Mutex as AsyncMutex;
 use url::Url;
 
-use crate::http::{CacheTtl, HttpClient, HttpError};
+use crate::{
+    http::{CacheTtl, HttpClient, HttpError},
+    progress::{Progress, ProgressBus, ProgressKind},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DownloadError {
@@ -70,13 +73,18 @@ impl DownloadLocks {
 /// Downloads are cached indefinitely (when `client` was built with a cache
 /// dir), which relies on resolvers returning version-specific/immutable
 /// URLs — a version already downloaded once is served from disk instead of
-/// re-fetched over the network.
+/// re-fetched over the network. Reports byte progress under `label` through
+/// `progress` for the duration of the call (cleared again before returning,
+/// success or not) — a cache hit resolves near-instantly and reports no
+/// meaningful progress, which is fine, there's nothing to wait on.
 pub async fn download_pkg_archive(
     client: &HttpClient,
     locks: &DownloadLocks,
     download_url: &str,
     headers: &[(&str, &str)],
     temp_dir: &Path,
+    progress: &ProgressBus,
+    label: &str,
 ) -> Result<PathBuf, DownloadError> {
     if is_file_uri(download_url) {
         return file_uri_to_path(download_url)
@@ -85,9 +93,27 @@ pub async fn download_pkg_archive(
 
     let _guard = locks.acquire(download_url).await;
 
-    let response = client
-        .get(download_url, headers, CacheTtl::Indefinite)
-        .await?;
+    let progress_id = progress.next_id();
+    let result = client
+        .get_with_progress(
+            download_url,
+            headers,
+            CacheTtl::Indefinite,
+            |current, total| {
+                progress.update(
+                    progress_id,
+                    Some(Progress {
+                        kind: ProgressKind::Download,
+                        label: label.to_owned(),
+                        current,
+                        total,
+                    }),
+                );
+            },
+        )
+        .await;
+    progress.update(progress_id, None);
+    let response = result?;
     if !(200..300).contains(&response.status) {
         return Err(DownloadError::Status {
             status: response.status,
