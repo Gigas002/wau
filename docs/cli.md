@@ -21,10 +21,14 @@ environment variables.
   variable) is the one place that decides whether to colorize. `list -f json` is never
   colorized — it's machine-readable output.
 - `wau/src/app/mod.rs` — command dispatch; `main` stays thin.
+- `wau/src/progress/mod.rs` — `indicatif`-based multi-bar renderer subscribed to
+  `libwau::progress`, wrapping every `install`/`update`/`replace` call (including `search`'s
+  post-selection install) while `style::color_enabled()`; a plain passthrough otherwise.
 
 All addon/DB/provider logic lives in `libwau`; `wau` only parses args, prompts, and prints.
-Colorized output styled after `paru`'s (see `wau search`, below) — a progress-bar renderer for
-long-running operations is still future polish.
+Colorized output styled after `paru`'s (see `wau search`, below), with live per-download
+progress bars during install/update — see `docs/caching.md` for what's actually cached
+underneath and `docs/search.md` for the `search` flow.
 
 ---
 
