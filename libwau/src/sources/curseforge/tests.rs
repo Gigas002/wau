@@ -409,6 +409,7 @@ async fn resolve_batches_numeric_ids_into_one_post() {
     let mut server = mockito::Server::new_async().await;
     let mock = server
         .mock("POST", "/")
+        .match_header("content-type", "application/json")
         .with_status(200)
         .with_body(
             serde_json::json!({ "data": [

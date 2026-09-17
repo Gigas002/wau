@@ -246,10 +246,12 @@ impl CurseForgeResolver {
         numeric_ids: &[String],
     ) -> AnyOutcome<HashMap<String, CfMod>> {
         let headers = self.headers_vec(HeadersIntent::Fetch);
-        let headers: Vec<(&str, &str)> = headers
+        let mut headers: Vec<(&str, &str)> = headers
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
+        // CurseForge rejects a JSON POST body with 415 if this is missing.
+        headers.push(("Content-Type", "application/json"));
         let ids: Vec<u64> = numeric_ids.iter().filter_map(|s| s.parse().ok()).collect();
         let body = serde_json::to_vec(&ModIdsRequest { mod_ids: &ids }).unwrap_or_default();
 
