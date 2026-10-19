@@ -29,7 +29,7 @@ url = "2"
 chrono = { version = "0.4", features = ["serde"] }
 tokio = { workspace = true, features = ["fs", "time", "process"] }
 reqwest = { version = "0.13", default-features = false, features = ["gzip", "rustls", "stream"] }
-zip = { version = "8", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 async-trait = "0.1"
 futures-util = "0.3"
 frizbee = "0.13"

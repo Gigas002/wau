@@ -14,7 +14,7 @@ mod gh_cli;
 #[cfg(test)]
 mod tests;
 
-use std::{io::Cursor, time::Duration};
+use std::{borrow::Cow, io::Cursor, time::Duration};
 
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -292,7 +292,13 @@ impl GitHubResolver {
             let Ok(mut archive) = zip::ZipArchive::new(Cursor::new(bytes)) else {
                 continue;
             };
-            let names: Vec<String> = archive.file_names().map(str::to_owned).collect();
+            let Ok(names) = archive
+                .file_names()
+                .map(|name| name.map(Cow::into_owned))
+                .collect::<Result<Vec<String>, _>>()
+            else {
+                continue;
+            };
 
             let toc_filenames: Vec<String> =
                 crate::pkg_archives::find_archive_addon_tocs(names.iter().map(String::as_str))

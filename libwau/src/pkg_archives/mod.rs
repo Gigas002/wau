@@ -70,7 +70,8 @@ pub fn is_safe_folder_name(name: &str) -> bool {
 pub fn open_zip_archive(archive_path: &Path) -> Result<OpenArchive, ArchiveError> {
     let file = fs::File::open(archive_path)?;
     let zip = zip::ZipArchive::new(file)?;
-    let top_level_folders = find_archive_addon_tocs(zip.file_names())
+    let names = zip.file_names().collect::<Result<Vec<_>, _>>()?;
+    let top_level_folders = find_archive_addon_tocs(names.iter().map(AsRef::as_ref))
         .into_iter()
         .map(|(_, head)| head)
         .collect();
