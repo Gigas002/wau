@@ -164,6 +164,35 @@ async fn resolve_picks_highest_id_among_matching_flavour_files() {
 }
 
 #[tokio::test]
+async fn resolve_forever_matches_forever_type_id_only() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("GET", "/1")
+        .with_status(200)
+        .with_body(
+            mod_json(
+                1,
+                serde_json::json!([
+                    stable_file(10, 88568),
+                    stable_file(20, 517),
+                    stable_file(30, 67408)
+                ]),
+            )
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let http = HttpClient::new().unwrap();
+    let candidate =
+        crate::sources::resolve_one(&resolver(&server), &http, Flavour::Forever, &defn("1"))
+            .await
+            .unwrap();
+    // Mainline (517) and VanillaClassic (67408) files are excluded for Forever.
+    assert_eq!(candidate.version, "v10_10");
+}
+
+#[tokio::test]
 async fn resolve_falls_back_to_any_flavour_when_strategy_set() {
     let mut server = mockito::Server::new_async().await;
     server

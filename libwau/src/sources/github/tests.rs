@@ -471,6 +471,111 @@ async fn resolve_matches_via_release_json() {
 }
 
 #[tokio::test]
+async fn resolve_forever_picks_forever_entry_from_release_json() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("GET", "/repos/Owner/Repo")
+        .with_status(200)
+        .with_body(repo_json().to_string())
+        .create_async()
+        .await;
+
+    let release_json_url = format!("{}/release.json", server.url());
+    let mainline_url = format!("{}/Foo.zip", server.url());
+    let forever_url = format!("{}/Foo-forever.zip", server.url());
+    server
+        .mock("GET", "/repos/Owner/Repo/releases")
+        .match_query(mockito::Matcher::Any)
+        .with_status(200)
+        .with_body(
+            serde_json::json!([release_json(
+                "v1.0.0",
+                serde_json::json!([
+                    { "url": release_json_url, "name": "release.json", "content_type": "application/octet-stream", "state": "uploaded" },
+                    zip_asset(&mainline_url, "Foo.zip"),
+                    zip_asset(&forever_url, "Foo-forever.zip"),
+                ])
+            )])
+            .to_string(),
+        )
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/release.json")
+        .with_status(200)
+        .with_body(
+            serde_json::json!({
+                "releases": [
+                    {
+                        "filename": "Foo.zip",
+                        "nolib": false,
+                        "metadata": [ { "flavor": "mainline", "interface": 120001 } ],
+                    },
+                    {
+                        "filename": "Foo-forever.zip",
+                        "nolib": false,
+                        "metadata": [ { "flavor": "forever", "interface": 16001 } ],
+                    }
+                ]
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let http = HttpClient::new().unwrap();
+    let r = resolver(&server);
+
+    let candidate = crate::sources::resolve_one(&r, &http, Flavour::Forever, &defn("Owner/Repo"))
+        .await
+        .unwrap();
+    assert_eq!(candidate.download_url, forever_url);
+}
+
+#[tokio::test]
+async fn resolve_forever_matches_zip_with_forever_interface() {
+    let mut server = mockito::Server::new_async().await;
+    let asset_url = format!("{}/download/Foo.zip", server.url());
+
+    server
+        .mock("GET", "/repos/Owner/Repo")
+        .with_status(200)
+        .with_body(repo_json().to_string())
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/repos/Owner/Repo/releases")
+        .match_query(mockito::Matcher::Any)
+        .with_status(200)
+        .with_body(
+            serde_json::json!([release_json(
+                "v1.0.0",
+                serde_json::json!([zip_asset(&asset_url, "Foo.zip")])
+            )])
+            .to_string(),
+        )
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/download/Foo.zip")
+        .with_status(200)
+        .with_body(make_test_zip(&[(
+            "Foo/Foo_Forever.toc",
+            b"## Interface: 16001",
+        )]))
+        .create_async()
+        .await;
+
+    let http = HttpClient::new().unwrap();
+    let r = resolver(&server);
+
+    let candidate = crate::sources::resolve_one(&r, &http, Flavour::Forever, &defn("Owner/Repo"))
+        .await
+        .unwrap();
+    assert_eq!(candidate.download_url, asset_url);
+}
+
+#[tokio::test]
 async fn resolve_release_json_skips_nolib_subrelease() {
     let mut server = mockito::Server::new_async().await;
     server

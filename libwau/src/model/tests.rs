@@ -26,6 +26,13 @@ fn flavour_retail_back_compat_alias_maps_to_mainline() {
 }
 
 #[test]
+fn flavour_forever_parses_with_camelot_alias() {
+    assert_eq!(Flavour::parse("forever"), Some(Flavour::Forever));
+    assert_eq!(Flavour::parse("camelot"), Some(Flavour::Forever));
+    assert_eq!(Flavour::Forever.as_str(), "forever");
+}
+
+#[test]
 fn flavour_parse_rejects_unknown() {
     assert_eq!(Flavour::parse("bogus"), None);
     assert!("bogus".parse::<Flavour>().is_err());
@@ -37,6 +44,16 @@ fn flavour_serde_round_trip() {
     assert_eq!(json, "\"tbc_classic\"");
     let back: Flavour = serde_json::from_str(&json).unwrap();
     assert_eq!(back, Flavour::TbcClassic);
+}
+
+#[test]
+fn flavour_serde_forever_round_trip_and_camelot_alias() {
+    let json = serde_json::to_string(&Flavour::Forever).unwrap();
+    assert_eq!(json, "\"forever\"");
+    let back: Flavour = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, Flavour::Forever);
+    let alias: Flavour = serde_json::from_str("\"camelot\"").unwrap();
+    assert_eq!(alias, Flavour::Forever);
 }
 
 #[test]
@@ -80,6 +97,47 @@ fn flavour_from_build_number_matches_known_ranges() {
 }
 
 #[test]
+fn flavour_from_build_number_maps_forever_range_out_of_vanilla() {
+    assert_eq!(Flavour::from_build_number(1_60_01), Some(Flavour::Forever));
+    assert_eq!(Flavour::from_build_number(1_60_00), Some(Flavour::Forever));
+    assert_eq!(Flavour::from_build_number(1_69_99), Some(Flavour::Forever));
+    assert_eq!(
+        Flavour::from_build_number(1_15_07),
+        Some(Flavour::VanillaClassic)
+    );
+    assert_eq!(
+        Flavour::from_build_number(1_59_99),
+        Some(Flavour::VanillaClassic)
+    );
+    assert_eq!(
+        Flavour::from_build_number(1_70_00),
+        Some(Flavour::VanillaClassic)
+    );
+    assert_eq!(
+        Flavour::from_version_string("1.60.1"),
+        Some(Flavour::Forever)
+    );
+}
+
+#[test]
+fn flavour_version_ranges_do_not_overlap() {
+    // `from_build_number` returns the first match, so an overlap would make
+    // the result depend on `Flavour::ALL` order.
+    let ranges: Vec<_> = Flavour::ALL
+        .iter()
+        .flat_map(|f| f.version_ranges().iter().map(move |r| (*f, r.clone())))
+        .collect();
+    for (i, (fa, a)) in ranges.iter().enumerate() {
+        for (fb, b) in &ranges[i + 1..] {
+            assert!(
+                a.end <= b.start || b.end <= a.start,
+                "{fa} {a:?} overlaps {fb} {b:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn flavour_from_version_string_pads_missing_components() {
     assert_eq!(
         Flavour::from_version_string("1.13"),
@@ -96,6 +154,10 @@ fn flavour_toc_suffixes_wrath_and_titan_share_table() {
         Flavour::TitanClassic.toc_suffixes()
     );
     assert_eq!(Flavour::Mainline.toc_suffixes(), &["Mainline"]);
+    assert_eq!(
+        Flavour::Forever.toc_suffixes(),
+        &["Forever", "Camelot", "Mainline"]
+    );
     assert_eq!(
         Flavour::VanillaClassic.toc_suffixes(),
         &["Vanilla", "Classic"]
@@ -140,6 +202,14 @@ fn infer_product_from_addon_dir_recognises_known_subfolder() {
     let product = infer_product_from_addon_dir(addon_dir).unwrap();
     assert_eq!(product.code, "wow_classic_era");
     assert_eq!(product.flavour, Flavour::VanillaClassic);
+}
+
+#[test]
+fn infer_product_from_addon_dir_recognises_forever_subfolder() {
+    let addon_dir = Path::new("/games/wow/_forever_/Interface/AddOns");
+    let product = infer_product_from_addon_dir(addon_dir).unwrap();
+    assert_eq!(product.code, "wowf");
+    assert_eq!(product.flavour, Flavour::Forever);
 }
 
 #[test]

@@ -61,6 +61,37 @@ async fn resolve_prefers_stable_unless_any_release_type() {
 }
 
 #[tokio::test]
+async fn resolve_forever_queries_forever_game_version() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("GET", "/addons/some-addon")
+        .match_query(mockito::Matcher::UrlEncoded(
+            "game_version".into(),
+            "forever".into(),
+        ))
+        .with_status(200)
+        .with_body(
+            addon_json(serde_json::json!({
+                "stable": release("1.0.0", "2026-01-01T00:00:00Z"),
+            }))
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let http = HttpClient::new().unwrap();
+    let candidate = crate::sources::resolve_one(
+        &resolver(&server),
+        &http,
+        Flavour::Forever,
+        &defn("some-addon"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(candidate.version, "1.0.0");
+}
+
+#[tokio::test]
 async fn resolve_any_release_type_picks_most_recent_channel() {
     let mut server = mockito::Server::new_async().await;
     server

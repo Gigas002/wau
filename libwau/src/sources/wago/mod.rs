@@ -50,6 +50,7 @@ fn parse_iso_datetime(s: &str) -> Result<DateTime<Utc>, Failure> {
 fn game_version_param(flavour: Flavour) -> Option<&'static str> {
     match flavour {
         Flavour::Mainline => Some("retail"),
+        Flavour::Forever => Some("forever"),
         Flavour::VanillaClassic => Some("classic"),
         Flavour::WrathClassic => Some("wotlk"),
         Flavour::CataClassic => Some("cata"),
