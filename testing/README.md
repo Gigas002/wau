@@ -11,6 +11,7 @@ environment's own directory.
 - `classic-era/` — `_classic_era_` install dir, flavour auto-detected as `vanilla_classic`.
 - `classic-mists/` — `_classic_` install dir, flavour auto-detected as `mists_classic` (the
   current `Flavour::CLASSIC` alias).
+- `forever/` — `_forever_` install dir, flavour auto-detected as `forever` (WoW: Forever).
 - `custom-server/` — non-Blizzard install dir name (`MyPrivateServer`), flavour can't be
   auto-detected so `profile.toml` forces it — exercises the private-server /
   `InstalledProduct::Overridden` path.

@@ -117,6 +117,51 @@ fn addon_folder_from_path_finds_flavour_specific_toc_first() {
 }
 
 #[test]
+fn addon_folder_from_path_forever_prefers_forever_toc_over_mainline() {
+    let dir = tempfile::tempdir().unwrap();
+    write_toc(
+        dir.path(),
+        "Foo",
+        "Foo_Mainline.toc",
+        "## Interface: 120001\n## Version: mainline",
+    );
+    let addon_dir = write_toc(
+        dir.path(),
+        "Foo",
+        "Foo_Forever.toc",
+        "## Interface: 16001\n## Version: forever",
+    );
+    let addon = AddonFolder::from_path(Flavour::Forever, &addon_dir).unwrap();
+    assert_eq!(addon.toc.version.as_deref(), Some("forever"));
+}
+
+#[test]
+fn addon_folder_from_path_forever_accepts_camelot_toc() {
+    let dir = tempfile::tempdir().unwrap();
+    let addon_dir = write_toc(
+        dir.path(),
+        "Foo",
+        "Foo_Camelot.toc",
+        "## Interface: 16001\n## Version: camelot",
+    );
+    let addon = AddonFolder::from_path(Flavour::Forever, &addon_dir).unwrap();
+    assert_eq!(addon.toc.version.as_deref(), Some("camelot"));
+}
+
+#[test]
+fn addon_folder_from_path_forever_falls_back_to_mainline_toc() {
+    let dir = tempfile::tempdir().unwrap();
+    let addon_dir = write_toc(
+        dir.path(),
+        "Foo",
+        "Foo_Mainline.toc",
+        "## Interface: 120001\n## Version: mainline",
+    );
+    let addon = AddonFolder::from_path(Flavour::Forever, &addon_dir).unwrap();
+    assert_eq!(addon.toc.version.as_deref(), Some("mainline"));
+}
+
+#[test]
 fn addon_folder_from_path_falls_back_to_plain_toc() {
     let dir = tempfile::tempdir().unwrap();
     let addon_dir = write_toc(dir.path(), "Foo", "Foo.toc", "## Version: 2.0");

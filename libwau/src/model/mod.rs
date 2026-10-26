@@ -27,6 +27,8 @@ mod tests;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Flavour {
     Mainline,
+    /// WoW: Forever (`1.60.x`). Internally named "Camelot" by Blizzard.
+    Forever,
     VanillaClassic,
     TbcClassic,
     WrathClassic,
@@ -39,8 +41,9 @@ impl Flavour {
     /// Alias for the current classic-progression flavour.
     pub const CLASSIC: Flavour = Flavour::MistsClassic;
 
-    pub const ALL: [Flavour; 7] = [
+    pub const ALL: [Flavour; 8] = [
         Flavour::Mainline,
+        Flavour::Forever,
         Flavour::VanillaClassic,
         Flavour::TbcClassic,
         Flavour::WrathClassic,
@@ -52,6 +55,7 @@ impl Flavour {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Mainline => "mainline",
+            Self::Forever => "forever",
             Self::VanillaClassic => "vanilla_classic",
             Self::TbcClassic => "tbc_classic",
             Self::WrathClassic => "wrath_classic",
@@ -62,10 +66,11 @@ impl Flavour {
     }
 
     /// Parses a flavour id, accepting the `classic` and `retail` back-compat
-    /// aliases.
+    /// aliases and Blizzard's internal `camelot` name for Forever.
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "mainline" => Some(Self::Mainline),
+            "forever" | "camelot" => Some(Self::Forever),
             "vanilla_classic" => Some(Self::VanillaClassic),
             "tbc_classic" => Some(Self::TbcClassic),
             "wrath_classic" => Some(Self::WrathClassic),
@@ -82,6 +87,8 @@ impl Flavour {
     pub fn toc_suffixes(self) -> &'static [&'static str] {
         match self {
             Self::Mainline => &["Mainline"],
+            // Forever is part of the mainline family, so `_Mainline.toc` loads there too.
+            Self::Forever => &["Forever", "Camelot", "Mainline"],
             Self::VanillaClassic => &["Vanilla", "Classic"],
             Self::TbcClassic => &["TBC", "BCC", "Classic"],
             Self::WrathClassic | Self::TitanClassic => &["Wrath", "WOTLKC", "Classic"],
@@ -95,7 +102,8 @@ impl Flavour {
     fn version_ranges(self) -> &'static [VersionRange] {
         match self {
             Self::Mainline => &MAINLINE_RANGES,
-            Self::VanillaClassic => std::slice::from_ref(&VANILLA_CLASSIC_RANGE),
+            Self::Forever => std::slice::from_ref(&FOREVER_RANGE),
+            Self::VanillaClassic => &VANILLA_CLASSIC_RANGES,
             Self::TbcClassic => std::slice::from_ref(&TBC_CLASSIC_RANGE),
             Self::WrathClassic => std::slice::from_ref(&WRATH_CLASSIC_RANGE),
             Self::TitanClassic => std::slice::from_ref(&TITAN_CLASSIC_RANGE),
@@ -163,7 +171,12 @@ const MAINLINE_RANGES: [VersionRange; 6] = [
     norm(5, 0, 0)..norm(5, 5, 0),
     norm(6, 0, 0)..norm(13, 0, 0),
 ];
-const VANILLA_CLASSIC_RANGE: VersionRange = norm(1, 13, 0)..norm(2, 0, 0);
+const FOREVER_RANGE: VersionRange = norm(1, 60, 0)..norm(1, 70, 0);
+/// Classic Era with [`FOREVER_RANGE`] carved out.
+const VANILLA_CLASSIC_RANGES: [VersionRange; 2] = [
+    norm(1, 13, 0)..FOREVER_RANGE.start,
+    FOREVER_RANGE.end..norm(2, 0, 0),
+];
 const TBC_CLASSIC_RANGE: VersionRange = norm(2, 5, 0)..norm(3, 0, 0);
 const WRATH_CLASSIC_RANGE: VersionRange = norm(3, 4, 0)..norm(3, 8, 0);
 const TITAN_CLASSIC_RANGE: VersionRange = norm(3, 8, 0)..norm(4, 0, 0);
@@ -261,6 +274,11 @@ pub const PRODUCTS: &[ProductInfo] = &[
         code: "wowe1",
         flavour: Flavour::Mainline,
         subfolder: "_event1_",
+    },
+    ProductInfo {
+        code: "wowf",
+        flavour: Flavour::Forever,
+        subfolder: "_forever_",
     },
     ProductInfo {
         code: "wowlivetest",

@@ -95,6 +95,7 @@ struct CfFileDependency {
 fn flavour_type_id(flavour: Flavour) -> u32 {
     match flavour {
         Flavour::Mainline => 517,
+        Flavour::Forever => 88568,
         Flavour::VanillaClassic => 67408,
         Flavour::TbcClassic => 73246,
         Flavour::WrathClassic => 73713,

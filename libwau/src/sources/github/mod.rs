@@ -95,6 +95,7 @@ struct PackagerMetadata {
 fn packager_flavor(flavour: Flavour) -> &'static str {
     match flavour {
         Flavour::Mainline => "mainline",
+        Flavour::Forever => "forever",
         Flavour::VanillaClassic => "classic",
         Flavour::TbcClassic => "bcc",
         Flavour::WrathClassic => "wrath",
