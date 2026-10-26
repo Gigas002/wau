@@ -189,6 +189,36 @@ fn init_list_unreconciled_reports_untracked_folders_without_network() {
 
 #[test]
 #[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
+fn init_list_unreconciled_detects_forever_flavour_from_install_dir() {
+    // The folder only has a `_Forever.toc`, which is invisible to any other
+    // flavour — so it's only reported if `_forever_` was detected as Forever.
+    let tmp = env_copy("forever");
+    promote_to_named_profile(&tmp, "forever");
+    let addon_dir = tmp
+        .path()
+        .join("_forever_")
+        .join("Interface")
+        .join("AddOns")
+        .join("SomeForeverAddon");
+    fs::create_dir_all(&addon_dir).unwrap();
+    fs::write(
+        addon_dir.join("SomeForeverAddon_Forever.toc"),
+        "## Interface: 16001\n## Version: 1",
+    )
+    .unwrap();
+
+    let output = wau(
+        &tmp,
+        &["--config", "config.toml", "init", "--list-unreconciled"],
+    );
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(stdout(&output).contains("unreconciled:"));
+    assert!(stdout(&output).contains("SomeForeverAddon"));
+}
+
+#[test]
+#[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
 fn init_processes_every_configured_profile_in_one_run() {
     let tmp = env_copy("retail");
     promote_to_named_profile(&tmp, "retail");
