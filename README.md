@@ -21,6 +21,8 @@ See `docs/`:
 - `docs/caching.md` — what's cached, where, and its caveats.
 - `docs/search.md` — the search/ranking algorithm and the interactive select-to-install flow.
 - `docs/git-source.md` — the `git` source provider, `addbuild.toml` specification and usage.
+- `docs/sources.md` — supported addon sources, their aliases, credentials and strategies.
+- `docs/flavors.md` — supported game flavors, auto-detection and per-source support.
 
 ## thanks to
 
