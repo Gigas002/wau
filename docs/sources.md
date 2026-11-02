@@ -16,7 +16,7 @@ during reconciliation (`wau init`).
 
 | Source        | Id       | Feature        | Alias                                     | URL forms recognised                                                                                       | Credentials                                       |
 | ------------- | -------- | -------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| GitHub        | `github` | `github`       | `owner/repo`                              | `https://github.com/<owner>/<repo>[/...]`                                                                  | optional: `[providers.github].api_key` or `handler = "gh"` |
+| GitHub        | `github` | `github`       | `owner/repo[@<tag-prefix>]`               | `https://github.com/<owner>/<repo>[/...]`                                                                  | optional: `[providers.github].api_key` or `handler = "gh"` |
 | CurseForge    | `curse`  | `curseforge`   | project slug (or numeric id)              | `https://www.curseforge.com/wow/addons/<slug>`                                                             | required: `[providers.curseforge].api_key`        |
 | WoWInterface  | `wowi`   | `wowinterface` | numeric file id                           | `https://www.wowinterface.com/downloads/{info,download}<id>...`, `.../downloads/{landing,fileinfo}.php?...` | none                                              |
 | Tukui         | `tukui`  | `tukui`        | addon slug (e.g. `elvui`)                 | —                                                                                                          | none                                              |
@@ -53,6 +53,21 @@ hard error (`PkgStrategiesUnsupported`), not a silent ignore.
 - **GitHub** — picks a release asset via the packager's `release.json` when present; otherwise by
   `.toc` filename suffix, falling back to the `## Interface:` line inside the archive. Changelogs
   are the release body (Markdown).
+
+  Monorepos that publish several addons as separately tagged release streams in one repo (e.g.
+  tags `addon/v3.7.0`, `voice-pack-ruRU/v2.0.0`) are addressed as `owner/repo@<tag-prefix>`:
+
+  ```
+  wau install "github:rusty-key/spoken-wow@spoken/" "github:rusty-key/spoken-wow@zones-audio-ruRU/"
+  ```
+
+  Only releases whose tag starts with the prefix (a literal, case-sensitive string — include the
+  separator, so `quests-audio/` doesn't also match `quests-audio-ruRU/`) are considered, newest
+  first, paging through up to 1000 releases. The prefix is part of the package's identity: the lock
+  file stores the id as `<repo id>@<prefix>` and the slug as `owner/repo@<prefix>`, so each stream
+  is its own package that installs, syncs and removes independently. `version_eq` pins must name a
+  tag inside the stream (`#version_eq=spoken/v3.7.0`). Without `@`, resolution is unchanged (the
+  ten latest releases, regardless of tag).
 - **CurseForge** — files are matched by CurseForge's per-flavour game version type id. Changelogs
   are HTML.
 - **WoWInterface** — upstream limitation, preserved as-is: the details API can't express

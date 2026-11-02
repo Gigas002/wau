@@ -34,10 +34,27 @@ const ALLOWED_CACHE_STATUSES: [u16; 3] = [200, 206, 501];
 
 #[derive(Debug, thiserror::Error)]
 pub enum HttpError {
-    #[error("request: {0}")]
+    #[error("request: {}", with_causes(.0))]
     Reqwest(#[from] reqwest::Error),
     #[error("HTTP status {status} for {url}")]
     Status { status: u16, url: String },
+}
+
+/// `err` followed by its `source()` chain (`a: b: c`). `reqwest`'s own
+/// `Display` stops at the top level, which hides the actual cause behind
+/// generic text like "error decoding response body" (e.g. a timeout).
+fn with_causes(err: &dyn std::error::Error) -> String {
+    let mut out = err.to_string();
+    let mut source = err.source();
+    while let Some(cause) = source {
+        let cause_text = cause.to_string();
+        if !out.contains(&cause_text) {
+            out.push_str(": ");
+            out.push_str(&cause_text);
+        }
+        source = cause.source();
+    }
+    out
 }
 
 fn user_agent() -> String {
@@ -299,7 +316,10 @@ fn build_client(cloudflare_compat: bool) -> Result<reqwest::Client, HttpError> {
     let mut builder = reqwest::Client::builder()
         .user_agent(user_agent())
         .connect_timeout(Duration::from_secs(60))
-        .timeout(Duration::from_secs(80))
+        // An idle timeout, not a total one: `timeout` would also bound the
+        // body read, failing any download that takes longer than this
+        // (e.g. a large voice-pack archive) even while bytes keep arriving.
+        .read_timeout(Duration::from_secs(80))
         .gzip(true);
     if cloudflare_compat {
         builder = builder.min_tls_version(reqwest::tls::Version::TLS_1_3);

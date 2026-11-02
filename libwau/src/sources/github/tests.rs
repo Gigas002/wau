@@ -858,3 +858,346 @@ mod gh_cli {
         assert!(parse_response(b"garbage, no CRLFCRLF here").is_none());
     }
 }
+
+// ---------------------------------------------------------------------------
+// Tag-prefixed aliases (`owner/repo@<prefix>`) — monorepo release streams
+// ---------------------------------------------------------------------------
+
+fn page_query(page: usize) -> mockito::Matcher {
+    mockito::Matcher::AllOf(vec![
+        mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        mockito::Matcher::UrlEncoded("page".into(), page.to_string()),
+    ])
+}
+
+#[test]
+fn split_tag_prefix_separates_repo_and_prefix() {
+    assert_eq!(split_tag_prefix("Owner/Repo"), ("Owner/Repo", None));
+    assert_eq!(split_tag_prefix("Owner/Repo@"), ("Owner/Repo", None));
+    assert_eq!(
+        split_tag_prefix("Owner/Repo@pack-b/"),
+        ("Owner/Repo", Some("pack-b/"))
+    );
+    assert_eq!(split_tag_prefix("42@pack-b/"), ("42", Some("pack-b/")));
+    // Only the first `@` separates; the rest belongs to the prefix.
+    assert_eq!(
+        split_tag_prefix("Owner/Repo@pkg@"),
+        ("Owner/Repo", Some("pkg@"))
+    );
+}
+
+#[tokio::test]
+async fn resolve_without_prefix_still_fetches_ten_latest_releases() {
+    let mut server = mockito::Server::new_async().await;
+    let asset_url = format!("{}/download/Foo.zip", server.url());
+    server
+        .mock("GET", "/repos/Owner/Repo")
+        .with_status(200)
+        .with_body(repo_json().to_string())
+        .create_async()
+        .await;
+    let releases = server
+        .mock("GET", "/repos/Owner/Repo/releases")
+        .match_query(mockito::Matcher::Exact("per_page=10".into()))
+        .with_status(200)
+        .with_body(
+            serde_json::json!([release_json(
+                "v1.0.0",
+                serde_json::json!([zip_asset(&asset_url, "Foo.zip")])
+            )])
+            .to_string(),
+        )
+        .expect(1)
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/download/Foo.zip")
+        .with_status(200)
+        .with_body(make_test_zip(&[("Foo/Foo.toc", b"## Interface: 110000")]))
+        .create_async()
+        .await;
+
+    let http = HttpClient::new().unwrap();
+    let r = resolver(&server);
+    let candidate = crate::sources::resolve_one(&r, &http, Flavour::Mainline, &defn("Owner/Repo"))
+        .await
+        .unwrap();
+    releases.assert_async().await;
+    assert_eq!(candidate.id, "42");
+    assert_eq!(candidate.slug, "owner/repo");
+    assert_eq!(candidate.name, "Repo");
+}
+
+#[tokio::test]
+async fn resolve_prefix_picks_newest_release_in_that_stream() {
+    let mut server = mockito::Server::new_async().await;
+    let a_url = format!("{}/download/PackA.zip", server.url());
+    let b_url = format!("{}/download/PackB.zip", server.url());
+    let b_old_url = format!("{}/download/PackB-old.zip", server.url());
+
+    server
+        .mock("GET", "/repos/Owner/Repo")
+        .with_status(200)
+        .with_body(repo_json().to_string())
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/repos/Owner/Repo/releases")
+        .match_query(page_query(1))
+        .with_status(200)
+        .with_body(
+            serde_json::json!([
+                // Newer release from another stream — must be skipped.
+                release_json(
+                    "pack-a/v3.0.0",
+                    serde_json::json!([zip_asset(&a_url, "PackA.zip")])
+                ),
+                // Shares a leading substring with `pack-b/` but isn't that stream.
+                release_json(
+                    "pack-bb/v9.0.0",
+                    serde_json::json!([zip_asset(&a_url, "PackA.zip")])
+                ),
+                release_json(
+                    "pack-b/v2.0.0",
+                    serde_json::json!([zip_asset(&b_url, "PackB.zip")])
+                ),
+                release_json(
+                    "pack-b/v1.0.0",
+                    serde_json::json!([zip_asset(&b_old_url, "PackB.zip")])
+                ),
+            ])
+            .to_string(),
+        )
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/download/PackB.zip")
+        .with_status(200)
+        .with_body(make_test_zip(&[(
+            "PackB/PackB.toc",
+            b"## Interface: 110000",
+        )]))
+        .create_async()
+        .await;
+
+    let http = HttpClient::new().unwrap();
+    let r = resolver(&server);
+    let candidate =
+        crate::sources::resolve_one(&r, &http, Flavour::Mainline, &defn("Owner/Repo@pack-b/"))
+            .await
+            .unwrap();
+    assert_eq!(candidate.id, "42@pack-b/");
+    assert_eq!(candidate.slug, "owner/repo@pack-b/");
+    assert_eq!(candidate.name, "Repo (pack-b)");
+    assert_eq!(candidate.version, "pack-b/v2.0.0");
+    assert_eq!(candidate.download_url, b_url);
+}
+
+#[tokio::test]
+async fn resolve_prefix_pages_past_other_streams() {
+    let mut server = mockito::Server::new_async().await;
+    let a_url = format!("{}/download/PackA.zip", server.url());
+    let b_url = format!("{}/download/PackB.zip", server.url());
+
+    server
+        .mock("GET", "/repos/Owner/Repo")
+        .with_status(200)
+        .with_body(repo_json().to_string())
+        .create_async()
+        .await;
+    let full_page: Vec<_> = (0..100)
+        .map(|i| {
+            release_json(
+                &format!("pack-a/v1.0.{i}"),
+                serde_json::json!([zip_asset(&a_url, "PackA.zip")]),
+            )
+        })
+        .collect();
+    server
+        .mock("GET", "/repos/Owner/Repo/releases")
+        .match_query(page_query(1))
+        .with_status(200)
+        .with_body(serde_json::Value::Array(full_page).to_string())
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/repos/Owner/Repo/releases")
+        .match_query(page_query(2))
+        .with_status(200)
+        .with_body(
+            serde_json::json!([release_json(
+                "pack-b/v1.0.0",
+                serde_json::json!([zip_asset(&b_url, "PackB.zip")])
+            )])
+            .to_string(),
+        )
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/download/PackB.zip")
+        .with_status(200)
+        .with_body(make_test_zip(&[(
+            "PackB/PackB.toc",
+            b"## Interface: 110000",
+        )]))
+        .create_async()
+        .await;
+
+    let http = HttpClient::new().unwrap();
+    let r = resolver(&server);
+    let candidate =
+        crate::sources::resolve_one(&r, &http, Flavour::Mainline, &defn("Owner/Repo@pack-b/"))
+            .await
+            .unwrap();
+    assert_eq!(candidate.version, "pack-b/v1.0.0");
+}
+
+#[tokio::test]
+async fn resolve_prefixed_lock_id_uses_repositories_endpoint() {
+    // `Pkg::to_defn` hands back the stored id, `<repo id>@<prefix>`.
+    let mut server = mockito::Server::new_async().await;
+    let b_url = format!("{}/download/PackB.zip", server.url());
+    server
+        .mock("GET", "/repositories/42")
+        .with_status(200)
+        .with_body(repo_json().to_string())
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/repositories/42/releases")
+        .match_query(page_query(1))
+        .with_status(200)
+        .with_body(
+            serde_json::json!([release_json(
+                "pack-b/v1.0.0",
+                serde_json::json!([zip_asset(&b_url, "PackB.zip")])
+            )])
+            .to_string(),
+        )
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/download/PackB.zip")
+        .with_status(200)
+        .with_body(make_test_zip(&[(
+            "PackB/PackB.toc",
+            b"## Interface: 110000",
+        )]))
+        .create_async()
+        .await;
+
+    let http = HttpClient::new().unwrap();
+    let r = resolver(&server);
+    let mut d = defn("owner/repo@pack-b/");
+    d.id = Some("42@pack-b/".to_owned());
+    let candidate = crate::sources::resolve_one(&r, &http, Flavour::Mainline, &d)
+        .await
+        .unwrap();
+    assert_eq!(candidate.id, "42@pack-b/");
+}
+
+#[tokio::test]
+async fn resolve_prefix_with_pin_fetches_that_tag() {
+    let mut server = mockito::Server::new_async().await;
+    let b_url = format!("{}/download/PackB.zip", server.url());
+    server
+        .mock("GET", "/repos/Owner/Repo")
+        .with_status(200)
+        .with_body(repo_json().to_string())
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/repos/Owner/Repo/releases/tags/pack-b/v1.0.0")
+        .with_status(200)
+        .with_body(
+            release_json(
+                "pack-b/v1.0.0",
+                serde_json::json!([zip_asset(&b_url, "PackB.zip")]),
+            )
+            .to_string(),
+        )
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/download/PackB.zip")
+        .with_status(200)
+        .with_body(make_test_zip(&[(
+            "PackB/PackB.toc",
+            b"## Interface: 110000",
+        )]))
+        .create_async()
+        .await;
+
+    let http = HttpClient::new().unwrap();
+    let r = resolver(&server);
+    let d = defn("Owner/Repo@pack-b/").with_version("pack-b/v1.0.0");
+    let candidate = crate::sources::resolve_one(&r, &http, Flavour::Mainline, &d)
+        .await
+        .unwrap();
+    assert_eq!(candidate.id, "42@pack-b/");
+    assert_eq!(candidate.version, "pack-b/v1.0.0");
+}
+
+#[tokio::test]
+async fn resolve_prefix_with_pin_outside_stream_does_not_match() {
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("GET", "/repos/Owner/Repo")
+        .with_status(200)
+        .with_body(repo_json().to_string())
+        .create_async()
+        .await;
+    let any_release = server
+        .mock("GET", mockito::Matcher::Regex("/releases".into()))
+        .expect(0)
+        .create_async()
+        .await;
+
+    let http = HttpClient::new().unwrap();
+    let r = resolver(&server);
+    let d = defn("Owner/Repo@pack-b/").with_version("pack-a/v1.0.0");
+    let err = crate::sources::resolve_one(&r, &http, Flavour::Mainline, &d)
+        .await
+        .unwrap_err();
+    any_release.assert_async().await;
+    assert!(matches!(
+        err,
+        Failure::Manager(ManagerError::PkgFilesNotMatching { .. })
+    ));
+}
+
+#[tokio::test]
+async fn resolve_prefix_with_no_matching_releases_does_not_match() {
+    let mut server = mockito::Server::new_async().await;
+    let a_url = format!("{}/download/PackA.zip", server.url());
+    server
+        .mock("GET", "/repos/Owner/Repo")
+        .with_status(200)
+        .with_body(repo_json().to_string())
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/repos/Owner/Repo/releases")
+        .match_query(page_query(1))
+        .with_status(200)
+        .with_body(
+            serde_json::json!([release_json(
+                "pack-a/v1.0.0",
+                serde_json::json!([zip_asset(&a_url, "PackA.zip")])
+            )])
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let http = HttpClient::new().unwrap();
+    let r = resolver(&server);
+    let err =
+        crate::sources::resolve_one(&r, &http, Flavour::Mainline, &defn("Owner/Repo@pack-b/"))
+            .await
+            .unwrap_err();
+    assert!(matches!(
+        err,
+        Failure::Manager(ManagerError::PkgFilesNotMatching { .. })
+    ));
+}

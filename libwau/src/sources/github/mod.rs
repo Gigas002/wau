@@ -109,6 +109,29 @@ fn is_numeric(s: &str) -> bool {
     !s.is_empty() && s.chars().all(|c| c.is_ascii_digit())
 }
 
+/// Separates a repo from a release-tag prefix in an alias or id:
+/// `owner/repo@<prefix>` (alias) or `<repo id>@<prefix>` (lock id). GitHub
+/// owner and repository names can't contain `@`, so an alias without one
+/// is unaffected.
+const TAG_PREFIX_SEP: char = '@';
+
+/// Releases fetched per page when searching for a tag prefix.
+const PREFIX_PAGE_SIZE: usize = 100;
+
+/// Upper bound on pages fetched when searching for a tag prefix, so a repo
+/// whose prefixed stream has gone quiet can't page through its whole history.
+const PREFIX_MAX_PAGES: usize = 10;
+
+/// Splits `s` into its repo part and an optional (non-empty) release-tag
+/// prefix. See [`TAG_PREFIX_SEP`].
+fn split_tag_prefix(s: &str) -> (&str, Option<&str>) {
+    match s.split_once(TAG_PREFIX_SEP) {
+        Some((repo, prefix)) if !prefix.is_empty() => (repo, Some(prefix)),
+        Some((repo, _)) => (repo, None),
+        None => (s, None),
+    }
+}
+
 fn parse_iso_datetime(s: &str) -> Result<DateTime<Utc>, Failure> {
     DateTime::parse_from_rfc3339(s)
         .map(|dt| dt.with_timezone(&Utc))
@@ -204,6 +227,88 @@ impl GitHubResolver {
             GitHubHandler::Gh => gh_cli::get(http, url, headers, ttl).await,
             GitHubHandler::Token => Ok(http.get(url, headers, ttl).await?),
         }
+    }
+
+    /// Fetches one `/releases` page or a `/releases/tags/{tag}` object.
+    async fn fetch_releases(
+        &self,
+        http: &HttpClient,
+        headers: &[(&str, &str)],
+        release_url: &str,
+    ) -> AnyOutcome<Vec<GhRelease>> {
+        let releases_response = self
+            .fetch(
+                http,
+                release_url,
+                headers,
+                CacheTtl::For(Duration::from_secs(5 * 60)),
+            )
+            .await?;
+        if releases_response.status == 404 {
+            return Err(ManagerError::PkgFilesMissing {
+                reason: "no releases found".to_owned(),
+            }
+            .into());
+        }
+        if !(200..300).contains(&releases_response.status) {
+            return Err(InternalError::new(format!(
+                "HTTP {} for {release_url}",
+                releases_response.status
+            ))
+            .into());
+        }
+
+        Ok(match serde_json::from_slice(&releases_response.body)? {
+            GhReleasesResponse::Many(releases) => releases,
+            GhReleasesResponse::One(release) => vec![release],
+        })
+    }
+
+    /// Releases whose tag starts with `prefix`, for a repo that publishes
+    /// several addons as separately tagged release streams.
+    ///
+    /// A pinned `version_eq` must itself carry the prefix and is fetched
+    /// directly. Otherwise pages through `/releases` (newest first) until it
+    /// has a release the caller's pre-release filter will keep, the history
+    /// runs out, or [`PREFIX_MAX_PAGES`] is reached.
+    async fn fetch_prefixed_releases(
+        &self,
+        http: &HttpClient,
+        headers: &[(&str, &str)],
+        repo_url: &str,
+        prefix: &str,
+        defn: &Defn,
+    ) -> AnyOutcome<Vec<GhRelease>> {
+        if let Some(v) = defn.strategies.version_eq.as_deref() {
+            if !v.starts_with(prefix) {
+                return Err(ManagerError::PkgFilesNotMatching {
+                    strategies: defn.strategies.clone(),
+                }
+                .into());
+            }
+            let release_url = format!("{repo_url}/releases/tags/{v}");
+            return self.fetch_releases(http, headers, &release_url).await;
+        }
+
+        let mut matching = Vec::new();
+        for page in 1..=PREFIX_MAX_PAGES {
+            let release_url =
+                format!("{repo_url}/releases?per_page={PREFIX_PAGE_SIZE}&page={page}");
+            let releases = self.fetch_releases(http, headers, &release_url).await?;
+            let is_last_page = releases.len() < PREFIX_PAGE_SIZE;
+            matching.extend(
+                releases
+                    .into_iter()
+                    .filter(|r| !r.draft && r.tag_name.starts_with(prefix)),
+            );
+            let has_usable = matching
+                .iter()
+                .any(|r| defn.strategies.any_release_type || !r.prerelease);
+            if has_usable || is_last_page {
+                break;
+            }
+        }
+        Ok(matching)
     }
 
     /// Ranged tail fetch (`bytes=-25000`) for the archive's central
@@ -573,10 +678,15 @@ impl Resolver for GitHubResolver {
             .collect();
 
         let id_or_alias = defn.id.clone().unwrap_or_else(|| defn.alias.clone());
-        let repo_url = if is_numeric(&id_or_alias) {
-            format!("{}/repositories/{id_or_alias}", self.api_base())
+        let (repo_ident, tag_prefix) = split_tag_prefix(&id_or_alias);
+        let repo_url = if is_numeric(repo_ident) {
+            format!("{}/repositories/{repo_ident}", self.api_base())
         } else {
-            format!("{}/repos/{}", self.api_base(), defn.alias)
+            format!(
+                "{}/repos/{}",
+                self.api_base(),
+                split_tag_prefix(&defn.alias).0
+            )
         };
 
         let project_response = self
@@ -600,36 +710,18 @@ impl Resolver for GitHubResolver {
         let project: GhRepo = serde_json::from_slice(&project_response.body)?;
 
         let version_eq = defn.strategies.version_eq.as_deref();
-        let release_url = match version_eq {
-            Some(v) => format!("{repo_url}/releases/tags/{v}"),
-            None => format!("{repo_url}/releases?per_page=10"),
-        };
-
-        let releases_response = self
-            .fetch(
-                http,
-                &release_url,
-                &headers,
-                CacheTtl::For(Duration::from_secs(5 * 60)),
-            )
-            .await?;
-        if releases_response.status == 404 {
-            return Err(ManagerError::PkgFilesMissing {
-                reason: "no releases found".to_owned(),
+        let mut releases = match tag_prefix {
+            None => {
+                let release_url = match version_eq {
+                    Some(v) => format!("{repo_url}/releases/tags/{v}"),
+                    None => format!("{repo_url}/releases?per_page=10"),
+                };
+                self.fetch_releases(http, &headers, &release_url).await?
             }
-            .into());
-        }
-        if !(200..300).contains(&releases_response.status) {
-            return Err(InternalError::new(format!(
-                "HTTP {} for {release_url}",
-                releases_response.status
-            ))
-            .into());
-        }
-
-        let mut releases: Vec<GhRelease> = match serde_json::from_slice(&releases_response.body)? {
-            GhReleasesResponse::Many(releases) => releases,
-            GhReleasesResponse::One(release) => vec![release],
+            Some(prefix) => {
+                self.fetch_prefixed_releases(http, &headers, &repo_url, prefix, defn)
+                    .await?
+            }
         };
 
         // Only users with push access get draft releases, but filter just in case.
@@ -669,10 +761,33 @@ impl Resolver for GitHubResolver {
 
         let date_published = parse_iso_datetime(&release.published_at)?;
 
+        // A tag prefix is part of the package's identity, so several release
+        // streams of one monorepo get distinct lock entries (keyed by
+        // `(source, id)`) and `Pkg::to_defn` round-trips the prefix back here.
+        let (id, slug, name) = match tag_prefix {
+            None => (
+                project.id.to_string(),
+                project.full_name.to_lowercase(),
+                project.name,
+            ),
+            Some(prefix) => (
+                format!("{}{TAG_PREFIX_SEP}{prefix}", project.id),
+                format!(
+                    "{}{TAG_PREFIX_SEP}{prefix}",
+                    project.full_name.to_lowercase()
+                ),
+                format!(
+                    "{} ({})",
+                    project.name,
+                    prefix.trim_end_matches(['/', '-', '_', '@'])
+                ),
+            ),
+        };
+
         Ok(PkgCandidate {
-            id: project.id.to_string(),
-            slug: project.full_name.to_lowercase(),
-            name: project.name,
+            id,
+            slug,
+            name,
             description: project.description.unwrap_or_default(),
             url: project.html_url,
             download_url: asset.url,

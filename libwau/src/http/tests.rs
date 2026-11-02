@@ -309,3 +309,32 @@ mod cache {
         assert!(cache.get("key").await.is_none());
     }
 }
+
+#[test]
+fn with_causes_appends_the_source_chain_without_repeats() {
+    #[derive(Debug)]
+    struct Layer(&'static str, Option<Box<Layer>>);
+    impl std::fmt::Display for Layer {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(self.0)
+        }
+    }
+    impl std::error::Error for Layer {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            self.1.as_deref().map(|e| e as _)
+        }
+    }
+
+    let err = Layer(
+        "error decoding response body",
+        Some(Box::new(Layer(
+            "operation timed out",
+            // Already part of the text above — not repeated.
+            Some(Box::new(Layer("timed out", None))),
+        ))),
+    );
+    assert_eq!(
+        super::with_causes(&err),
+        "error decoding response body: operation timed out"
+    );
+}
