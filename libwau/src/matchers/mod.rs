@@ -38,14 +38,23 @@ impl AddonFolder {
             .collect();
         suffixes.push(".toc".to_owned());
 
-        let entries = std::fs::read_dir(parent_path).ok()?;
-        let match_path = entries.flatten().map(|e| e.path()).find(|p| {
-            let name = p
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or_default()
-                .to_lowercase();
-            suffixes.iter().any(|s| name.ends_with(s.as_str()))
+        // Collect and sort entries so the choice is deterministic regardless of
+        // filesystem `read_dir` order, then pick by suffix priority.
+        let mut entries: Vec<(String, PathBuf)> = std::fs::read_dir(parent_path)
+            .ok()?
+            .flatten()
+            .filter_map(|e| {
+                let path = e.path();
+                let name = path.file_name()?.to_str()?.to_lowercase();
+                Some((name, path))
+            })
+            .collect();
+        entries.sort();
+        let match_path = suffixes.iter().find_map(|s| {
+            entries
+                .iter()
+                .find(|(name, _)| name.ends_with(s.as_str()))
+                .map(|(_, p)| p.clone())
         })?;
 
         let toc = toc::parse(&match_path)?;
