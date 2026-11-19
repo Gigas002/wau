@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- Every install and update left a copy of the downloaded archive in `<cache>/staging`, which
+  grew forever. They're now deleted after extraction; `wau cache --clean` removes old ones.
 - `wau search`: a huge range in the install prompt (`1-99999999999`) hung, counting through every
   number. Ranges are now clamped to the listed results.
 - An archive with no top-level `<Folder>/<Folder>.toc` (a source-code zip, a misnamed git

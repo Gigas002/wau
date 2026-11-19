@@ -37,7 +37,7 @@ const CATEGORIES: &[(&str, &str, &[&str])] = &[
     ),
     (
         "staging",
-        "Download staging (already extracted; never re-read)",
+        "Download staging (left by an interrupted install)",
         &["staging"],
     ),
     ("git-src", "`git` source checkouts", &["git", "git-src"]),

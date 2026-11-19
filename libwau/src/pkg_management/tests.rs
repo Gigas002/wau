@@ -313,6 +313,77 @@ async fn install_refuses_an_archive_with_no_addon_folder() {
 }
 
 #[tokio::test]
+async fn downloads_are_removed_from_staging_after_install_and_update() {
+    // Every download was written to <cache>/staging/download-<pid>-<nanos> and never deleted,
+    // on top of the HTTP cache's own copy, so staging grew by one archive per install/update.
+    let zip_dir = tempfile::tempdir().unwrap();
+    let read_zip = |name: &str, version: &[u8]| {
+        let url = make_zip_file(zip_dir.path(), name, "Foo", version);
+        std::fs::read(pkg_archives::file_uri_to_path(&url).unwrap()).unwrap()
+    };
+    let mut server = mockito::Server::new_async().await;
+    let _v1 = server
+        .mock("GET", "/foo-1.zip")
+        .with_body(read_zip("1.zip", b"## Version: 1"))
+        .create_async()
+        .await;
+    let _v2 = server
+        .mock("GET", "/foo-2.zip")
+        .with_body(read_zip("2.zip", b"## Version: 2"))
+        .create_async()
+        .await;
+    let local = make_zip_file(zip_dir.path(), "bar.zip", "Bar", b"## Interface: 110000");
+    let mut h = Harness::new(vec![Box::new(
+        TestResolver::new("test")
+            .with_candidate(
+                "foo",
+                candidate("1", "foo", "1.0.0", format!("{}/foo-1.zip", server.url())),
+            )
+            .with_candidate("bar", candidate("2", "bar", "1.0.0", local.clone())),
+    )]);
+    let staged = |h: &Harness| -> usize {
+        std::fs::read_dir(h.cache_dir.join("staging")).map_or(0, |d| d.count())
+    };
+
+    install(
+        &mut h.lock,
+        &ctx!(h),
+        &[defn("test", "foo"), defn("test", "bar")],
+        false,
+        false,
+    )
+    .await;
+    assert_eq!(h.lock.get_all_pkgs().len(), 2);
+    assert_eq!(staged(&h), 0);
+    // The user's own file:// archive is never deleted.
+    assert!(pkg_archives::file_uri_to_path(&local).unwrap().is_file());
+
+    h.sources = vec![Box::new(TestResolver::new("test").with_candidate(
+        "foo",
+        candidate("1", "foo", "2.0.0", format!("{}/foo-2.zip", server.url())),
+    ))];
+    let results = update(
+        &mut h.lock,
+        &ctx!(h),
+        UpdateTarget::Specific(vec![defn("test", "foo")]),
+        false,
+    )
+    .await;
+    assert!(
+        matches!(
+            results.get(&defn("test", "foo")).unwrap(),
+            Ok(Outcome::PkgUpdated { .. })
+        ),
+        "{results:?}"
+    );
+    assert_eq!(
+        std::fs::read(h.addon_dir.join("Foo/Foo.toc")).unwrap(),
+        b"## Version: 2"
+    );
+    assert_eq!(staged(&h), 0);
+}
+
+#[tokio::test]
 async fn install_unknown_source_is_source_invalid() {
     let mut h = Harness::new(vec![]);
     let results = install(&mut h.lock, &ctx!(h), &[defn("bogus", "foo")], false, false).await;
