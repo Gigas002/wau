@@ -9,6 +9,35 @@ const FIXTURE_COLORFUL: &str = include_str!("../../../testing/toc/colorful.toc")
 const FIXTURE_DEPS: &str = include_str!("../../../testing/toc/dependencies.toc");
 
 // ---------------------------------------------------------------------------
+// encodings
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_skips_a_utf8_byte_order_mark() {
+    // The BOM made the first line `\u{feff}## Interface: ...`, which isn't a directive.
+    let toc = parse_str("\u{feff}## Interface: 110000\n## Title: Foo\n");
+    assert_eq!(toc.interface, vec![110000]);
+    assert_eq!(toc.title.as_deref(), Some("Foo"));
+}
+
+#[test]
+fn parse_reads_a_toc_that_is_not_utf8() {
+    // `read_to_string` failed on Latin-1, and the folder vanished from `wau init`.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("Foo.toc");
+    std::fs::write(
+        &path,
+        b"## Interface: 110000\n## Author: M\xfcller\n## X-WoWI-ID: 7\n",
+    )
+    .unwrap();
+
+    let toc = parse(&path).unwrap();
+    assert_eq!(toc.interface, vec![110000]);
+    assert_eq!(toc.author.as_deref(), Some("M\u{FFFD}ller"));
+    assert_eq!(toc.x_fields.get("X-WoWI-ID").map(String::as_str), Some("7"));
+}
+
+// ---------------------------------------------------------------------------
 // strip_color_codes
 // ---------------------------------------------------------------------------
 
