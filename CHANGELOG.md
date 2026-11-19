@@ -16,6 +16,8 @@
 
 ### Fixed
 
+- A `.toc` file starting with a UTF-8 byte order mark lost its first line (usually
+  `## Interface`), and one that isn't UTF-8 (Latin-1 author names) hid its folder from `wau init`.
 - Unknown sections and keys in `config.toml`, `profile.toml` and `addbuild.toml` were ignored, so
   `[providers.curse]` silently left CurseForge without its key and `flavours = [...]` in an
   addbuild restricted nothing. They're now errors that name the key.

@@ -157,8 +157,10 @@ pub struct TocFile {
 /// Returns `None` if the file cannot be read (logged at `DEBUG` level).
 /// Individual malformed directives are silently skipped.
 pub fn parse(path: &Path) -> Option<TocFile> {
-    let content = match fs::read_to_string(path) {
-        Ok(s) => s,
+    // Not `read_to_string`: a `.toc` saved in Latin-1 (`## Author: M\xfcller`) isn't UTF-8,
+    // and failing here dropped the whole folder from matching. WoW reads such files anyway.
+    let content = match fs::read(path) {
+        Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
         Err(e) => {
             tracing::debug!(path = %path.display(), error = %e, "cannot read .toc file");
             return None;
@@ -175,6 +177,8 @@ pub fn parse(path: &Path) -> Option<TocFile> {
 /// skipped, and the returned [`TocFile::path`] is an empty [`PathBuf`].
 pub fn parse_str(content: &str) -> TocFile {
     let mut toc = TocFile::default();
+    // A UTF-8 byte order mark would otherwise hide the first line, usually `## Interface`.
+    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
 
     for raw_line in content.lines() {
         // WoW client silently ignores characters beyond position 1024.
