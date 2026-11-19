@@ -18,8 +18,8 @@ directory/`addname` matches the addon's real in-game folder name exactly, **not*
 upstream repo's own directory name (see `Details/addbuild.toml`, whose repo is named
 `Details-Damage-Meter` but whose addon folder — and every `.toc` in it — is `Details`): the match
 against `<Folder>/<Folder>.toc` inside the built zip (same rule every other source's zip goes
-through, see below) is case-sensitive, so getting this wrong silently installs zero folders
-instead of failing loudly.
+through, see below) is case-sensitive, so getting this wrong makes the install fail with "the archive has no addon
+folder".
 
 ---
 

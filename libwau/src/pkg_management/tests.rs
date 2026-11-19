@@ -284,6 +284,35 @@ async fn install_conflicts_with_unreconciled_folder_unless_replace() {
 }
 
 #[tokio::test]
+async fn install_refuses_an_archive_with_no_addon_folder() {
+    // A source-code zip nests the addon one level down (`repo-main/Foo/Foo.toc`). It used to be
+    // reported as installed with nothing extracted and no folders recorded.
+    use zip::{ZipWriter, write::FileOptions};
+    let url_dir = tempfile::tempdir().unwrap();
+    let path = url_dir.path().join("nested.zip");
+    let mut zip = ZipWriter::new(std::fs::File::create(&path).unwrap());
+    zip.start_file("repo-main/Foo/Foo.toc", FileOptions::<()>::default())
+        .unwrap();
+    zip.write_all(b"## Interface: 110000").unwrap();
+    zip.finish().unwrap();
+    let url = format!("file://{}", path.display());
+    let mut h = Harness::new(vec![Box::new(
+        TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url)),
+    )]);
+
+    let results = install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
+
+    assert!(
+        matches!(
+            results.get(&defn("test", "foo")).unwrap(),
+            Err(Failure::Manager(ManagerError::PkgFilesMissing { .. }))
+        ),
+        "{results:?}"
+    );
+    assert!(h.lock.get_all_pkgs().is_empty());
+}
+
+#[tokio::test]
 async fn install_unknown_source_is_source_invalid() {
     let mut h = Harness::new(vec![]);
     let results = install(&mut h.lock, &ctx!(h), &[defn("bogus", "foo")], false, false).await;
