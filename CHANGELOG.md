@@ -10,6 +10,9 @@
 
 ### Fixed
 
+- GitHub: checking a release zip's contents with a ranged read allocated the asset's full size
+  (213 MB peak memory for a 200 MB asset), and a server claiming a huge size crashed `wau`. It now
+  reads the 25 KB tail in place: 11 MB peak, 20× faster.
 - Every install and update left a copy of the downloaded archive in `<cache>/staging`, which
   grew forever. They're now deleted after extraction; `wau cache --clean` removes old ones.
 - `wau search`: a huge range in the install prompt (`1-99999999999`) hung, counting through every

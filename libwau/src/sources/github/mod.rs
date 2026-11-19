@@ -157,6 +157,72 @@ fn all_toc_extensions() -> Vec<String> {
         .collect()
 }
 
+/// The end of a remote file: `data` holds its bytes from `start` to the end, and reads before
+/// `start` see zeros. Lets `zip` read a 25 KB ranged tail as though it had the whole file,
+/// without allocating the file's full size (which the server's `Content-Range` dictates).
+#[derive(Clone)]
+struct ZipTail {
+    start: u64,
+    data: Vec<u8>,
+    pos: u64,
+}
+
+impl ZipTail {
+    fn complete(data: Vec<u8>) -> Self {
+        Self {
+            start: 0,
+            data,
+            pos: 0,
+        }
+    }
+
+    /// Whether `data` is the whole file, so every entry's content can be read.
+    fn is_complete(&self) -> bool {
+        self.start == 0
+    }
+
+    fn len(&self) -> u64 {
+        self.start + self.data.len() as u64
+    }
+}
+
+impl std::io::Read for ZipTail {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = if self.pos < self.start {
+            let n = buf
+                .len()
+                .min(usize::try_from(self.start - self.pos).unwrap_or(usize::MAX));
+            buf[..n].fill(0);
+            n
+        } else {
+            let offset = usize::try_from(self.pos - self.start).unwrap_or(usize::MAX);
+            let rest = self.data.get(offset..).unwrap_or_default();
+            let n = buf.len().min(rest.len());
+            buf[..n].copy_from_slice(&rest[..n]);
+            n
+        };
+        self.pos += n as u64;
+        Ok(n)
+    }
+}
+
+impl std::io::Seek for ZipTail {
+    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        let target = match pos {
+            std::io::SeekFrom::Start(n) => Some(n),
+            std::io::SeekFrom::End(n) => self.len().checked_add_signed(n),
+            std::io::SeekFrom::Current(n) => self.pos.checked_add_signed(n),
+        };
+        self.pos = target.ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "seek before the start of the file",
+            )
+        })?;
+        Ok(self.pos)
+    }
+}
+
 fn content_range_total(headers: &[(String, String)]) -> Option<u64> {
     let (_, value) = headers
         .iter()
@@ -314,13 +380,12 @@ impl GitHubResolver {
     /// Ranged tail fetch (`bytes=-25000`) for the archive's central
     /// directory, falling back to a full download when the server doesn't
     /// honour the range or the tail alone doesn't parse as a valid zip.
-    /// Returns `(bytes, is_complete)`.
     async fn fetch_tail_or_full(
         &self,
         http: &HttpClient,
         headers: &[(&str, &str)],
         url: &str,
-    ) -> AnyOutcome<Option<(Vec<u8>, bool)>> {
+    ) -> AnyOutcome<Option<ZipTail>> {
         let mut range_headers = headers.to_vec();
         range_headers.push(("Range", "bytes=-25000"));
 
@@ -329,18 +394,21 @@ impl GitHubResolver {
             .await?;
 
         if response.status == 200 {
-            return Ok(Some((response.body, true)));
+            return Ok(Some(ZipTail::complete(response.body)));
         }
 
         if response.status == 206
             && let Some(total) = content_range_total(&response.headers)
         {
-            let start = (total as usize).saturating_sub(response.body.len());
-            let mut buffer = vec![0u8; total as usize];
-            let end = (start + response.body.len()).min(buffer.len());
-            buffer[start..end].copy_from_slice(&response.body[..end - start]);
-            if zip::ZipArchive::new(Cursor::new(buffer.clone())).is_ok() {
-                return Ok(Some((buffer, false)));
+            let mut data = response.body;
+            data.truncate(usize::try_from(total).unwrap_or(usize::MAX));
+            let tail = ZipTail {
+                start: total - data.len() as u64,
+                data,
+                pos: 0,
+            };
+            if zip::ZipArchive::new(tail.clone()).is_ok() {
+                return Ok(Some(tail));
             }
         }
 
@@ -350,7 +418,7 @@ impl GitHubResolver {
         if !(200..300).contains(&full.status) {
             return Ok(None);
         }
-        Ok(Some((full.body, true)))
+        Ok(Some(ZipTail::complete(full.body)))
     }
 
     async fn find_match_from_zip_contents(
@@ -388,14 +456,15 @@ impl GitHubResolver {
         };
 
         for candidate in candidates {
-            let Some((bytes, is_complete)) = self
+            let Some(tail) = self
                 .fetch_tail_or_full(http, &download_headers, &candidate.url)
                 .await?
             else {
                 continue;
             };
+            let is_complete = tail.is_complete();
 
-            let Ok(mut archive) = zip::ZipArchive::new(Cursor::new(bytes)) else {
+            let Ok(mut archive) = zip::ZipArchive::new(tail) else {
                 continue;
             };
             let Ok(names) = archive
