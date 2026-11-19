@@ -131,7 +131,7 @@ impl LockFile {
     ) -> Vec<Pkg> {
         self.packages
             .iter()
-            .filter(|p| p.source != exclude_source && p.id != exclude_id)
+            .filter(|p| !(p.source == exclude_source && p.id == exclude_id))
             .filter(|p| p.folders.iter().any(|f| folder_names.contains(&f.name)))
             .cloned()
             .collect()

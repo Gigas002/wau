@@ -308,16 +308,29 @@ fn find_pkgs_owning_folders_excluding_still_reports_other_packages() {
 }
 
 #[test]
-fn find_pkgs_owning_folders_excluding_ignores_any_package_on_the_same_source() {
-    // Ported verbatim from the original SQL's AND-not-OR exclusion quirk: a
-    // *different* package on the excluded source is also never reported,
-    // even though it doesn't share the excluded id.
+fn find_pkgs_owning_folders_excluding_skips_only_the_named_package() {
+    // The exclusion used to be `source != s && id != i` (ported from instawow's SQL), which
+    // also skipped every other package on the same source and every package with the same id
+    // on another source: updating curse:1 never saw curse:2 or wowi:1 owning a folder.
     let mut lock = LockFile::in_memory();
     lock.insert_pkg(make_pkg("curse", "1", "foo", "1.0.0"));
     lock.insert_pkg(make_pkg("curse", "2", "bar", "1.0.0"));
+    lock.insert_pkg(make_pkg("wowi", "1", "baz", "1.0.0"));
 
-    let conflicts = lock.find_pkgs_owning_folders_excluding(&["bar".to_owned()], "curse", "1");
-    assert!(conflicts.is_empty());
+    let folders = ["foo".to_owned(), "bar".to_owned(), "baz".to_owned()];
+    let mut conflicts: Vec<(String, String)> = lock
+        .find_pkgs_owning_folders_excluding(&folders, "curse", "1")
+        .into_iter()
+        .map(|p| (p.source, p.id))
+        .collect();
+    conflicts.sort();
+    assert_eq!(
+        conflicts,
+        vec![
+            ("curse".to_owned(), "2".to_owned()),
+            ("wowi".to_owned(), "1".to_owned())
+        ]
+    );
 }
 
 // ---------------------------------------------------------------------------
