@@ -12,7 +12,6 @@ unsafe_code = "forbid"
 edition = "2024"
 license = "GPL-3.0-only"
 authors = ["gigas002 <gigas002@pm.me>"]
-homepage = "https://github.com/Gigas002/wau"
 description = "World of Warcraft Addon Updater"
 keywords = ["wow", "warcraft", "cli", "addon", "updater"]
 repository = "https://github.com/Gigas002/wau"
