@@ -79,10 +79,9 @@ comment in `libwau/src/http/mod.rs` on `CacheTtl::Indefinite` says so directly.
   assumption ("this content never changes") turns out false, stale bytes are served until the
   TTL expires (never, for `Indefinite`) with no way to detect or force a refresh short of deleting
   the cache file.
-- **No `wau cache clear` / `--no-cache` flag.** Both existed at one point and were removed along
-  with the rest of the CLI surface trimming (see `docs/WAU_RS_PLAN.md`'s revision history);
-  restoring the cache mechanism didn't bring them back. Clearing the cache today is `rm -r
-  <cache_dir>/http` by hand.
+- **No `--no-cache` flag, and no per-category clean.** `wau cache` shows each category's size and
+  `wau cache --clean` removes all of them (HTTP responses, the catalogue mirror, staging, `git`
+  checkouts and builds); clearing only the HTTP cache is `rm -r <cache_dir>/http` by hand.
 - **Shared across every profile under one `config.toml`.** Since `Dirs.cache` is per-`GlobalConfig`
   and not per-profile, two profiles pointed at the same config share cached responses — not a
   correctness problem (the cache key includes headers, so different tokens/URLs never collide),
@@ -150,9 +149,9 @@ without another network round trip.
 - **A cache hit still writes a fresh file to `<cache_dir>/staging/`.** The HTTP-level cache avoids
   the *network* fetch, but `download_pkg_archive` always writes the response body out to
   `<cache_dir>/staging/download-<pid>-<nanos>` before returning — a new, uniquely-named file every
-  single call, cache hit or not. Nothing in `pkg_management` ever deletes these after extraction.
-  `<cache_dir>/staging` grows without bound over time; periodic manual cleanup (`rm -r
-  <cache_dir>/staging`) is needed until this gets its own eviction.
+  call, cache hit or not. `pkg_management` deletes these once the operation (install, update,
+  replace) is done with them; only a killed process leaves one behind, and `wau cache --clean`
+  removes those.
 - **No checksum verification anywhere in this path** (documented directly on
   `libwau/src/pkg_archives/download.rs`) — despite CurseForge exposing file hashes in its API,
   they're never checked against the downloaded bytes, cached or not.

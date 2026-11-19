@@ -485,10 +485,29 @@ fn check_installed_pkg_integrity(addon_dir: &Path, pkg: &Pkg) -> bool {
     pkg.folders.iter().all(|f| addon_dir.join(&f.name).exists())
 }
 
+/// Downloaded archives written to `<cache>/staging`, deleted when this is dropped: once
+/// extracted they're never read again, and the HTTP cache keeps its own copy. (A `file://`
+/// archive is the user's own file and is never listed here.)
+struct StagedArchives(Vec<PathBuf>);
+
+impl Drop for StagedArchives {
+    fn drop(&mut self) {
+        for path in &self.0 {
+            if let Err(err) = std::fs::remove_file(path) {
+                tracing::debug!(path = %path.display(), "cannot remove staged archive: {err}");
+            }
+        }
+    }
+}
+
 async fn download_all(
     ctx: &Ctx<'_>,
     candidates: &HashMap<Defn, PkgCandidate>,
-) -> (HashMap<Defn, PathBuf>, HashMap<Defn, Failure>) {
+) -> (
+    HashMap<Defn, PathBuf>,
+    HashMap<Defn, Failure>,
+    StagedArchives,
+) {
     let staging_dir = ctx.cache_dir.join("staging");
     let futures = candidates.iter().map(|(d, c)| {
         let headers = download_headers(ctx.sources, &d.source);
@@ -508,15 +527,20 @@ async fn download_all(
                 &c.name,
             )
             .await;
-            (d.clone(), result)
+            let staged = !pkg_archives::is_file_uri(&c.download_url);
+            (d.clone(), result.map(|path| (path, staged)))
         }
     });
 
     let mut paths = HashMap::new();
     let mut errors = HashMap::new();
+    let mut staged_paths = StagedArchives(Vec::new());
     for (d, r) in futures_util::future::join_all(futures).await {
         match r {
-            Ok(path) => {
+            Ok((path, staged)) => {
+                if staged {
+                    staged_paths.0.push(path.clone());
+                }
                 paths.insert(d, path);
             }
             Err(e) => {
@@ -524,7 +548,7 @@ async fn download_all(
             }
         }
     }
-    (paths, errors)
+    (paths, errors, staged_paths)
 }
 
 // ============================================================================
@@ -587,7 +611,7 @@ pub async fn install(
         return results;
     }
 
-    let (archive_paths, download_errors) = download_all(ctx, &candidates).await;
+    let (archive_paths, download_errors, _staged) = download_all(ctx, &candidates).await;
     for (d, e) in download_errors {
         results.insert(d, Err(e));
     }
@@ -769,7 +793,7 @@ pub async fn apply_update(
         .iter()
         .map(|(d, (_, c))| (d.clone(), c.clone()))
         .collect();
-    let (archive_paths, download_errors) = download_all(ctx, &candidates_only).await;
+    let (archive_paths, download_errors, _staged) = download_all(ctx, &candidates_only).await;
     for (d, e) in download_errors {
         results.insert(d, Err(e));
     }
@@ -935,7 +959,7 @@ pub async fn replace(
 
     let inverse: HashMap<&Defn, &Defn> = defns.iter().map(|(o, n)| (n, o)).collect();
 
-    let (archive_paths, download_errors) = download_all(ctx, &candidates).await;
+    let (archive_paths, download_errors, _staged) = download_all(ctx, &candidates).await;
     for (d, e) in download_errors {
         results.insert(d, Some(Err(e)));
     }
