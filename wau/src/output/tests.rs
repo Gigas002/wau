@@ -187,6 +187,52 @@ fn format_search_results_leaves_uninstalled_entries_untagged() {
 }
 
 #[test]
+fn remote_text_is_printed_without_control_characters() {
+    // Names, descriptions and versions come from source APIs and the catalogue; an OSC 52
+    // sequence in an addon's description used to reach the terminal as-is.
+    let osc = "\x1b]52;c;cm0gLXJmIH4=\x07";
+    let mut pkg = sample_pkg("curse", &format!("foo{osc}"));
+    pkg.name = format!("Foo{osc}");
+    pkg.description = format!("line one\nline two{osc}");
+    pkg.version = format!("1.0{osc}");
+    pkg.url = format!("https://example.com/{osc}");
+    pkg.folders[0].name = format!("Foo{osc}");
+    let entry = catalogue_entry("curse", "1", &format!("bar{osc}"), &format!("Bar{osc}"), 5);
+    let installed: HashMap<(String, String), String> =
+        [(("curse".to_owned(), "1".to_owned()), format!("2.0{osc}"))].into();
+    let failed: AnyOutcome<Outcome> = Err(InternalError::new(format!("HTTP 500: {osc}")).into());
+
+    for color in [false, true] {
+        let rendered = [
+            format_list_simple(&[&pkg], color),
+            format_list_detailed(&[&pkg], color),
+            format_search_results(&[&entry], &installed, color),
+            format_result(&Defn::new("curse", "foo"), &failed, color),
+        ];
+        for text in rendered {
+            assert!(
+                !text.contains('\x07') && !text.contains("\x1b]"),
+                "{text:?}"
+            );
+            assert!(text.contains('\u{FFFD}'), "{text:?}");
+        }
+    }
+    assert!(format_list_detailed(&[&pkg], false).contains("description: line one line two"));
+}
+
+#[test]
+fn printable_keeps_plain_text_and_optionally_line_breaks() {
+    use std::borrow::Cow;
+
+    assert!(matches!(style::printable("Déjà vu 日本"), Cow::Borrowed(_)));
+    assert_eq!(
+        style::printable("a\tb\r\nc\x1b[2Jd\u{9b}e"),
+        "a b  c\u{FFFD}[2Jd\u{FFFD}e"
+    );
+    assert_eq!(style::printable_lines("a\n\tb\r\x1b"), "a\n\tb \u{FFFD}");
+}
+
+#[test]
 fn format_list_json_round_trips_through_serde_json() {
     let pkg = sample_pkg("curse", "foo");
     let rendered = format_list_json(&[&pkg]);

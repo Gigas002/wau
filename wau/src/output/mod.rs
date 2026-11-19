@@ -37,12 +37,15 @@ pub fn format_result(defn: &Defn, outcome: &AnyOutcome<Outcome>, color: bool) ->
         Err(Failure::Manager(_)) => style::failure(color, symbol),
         Err(Failure::Internal(_)) => style::warn(color, symbol),
     };
-    let uri = style::name(color, &defn.as_uri(false, false));
+    let uri = style::name(color, &style::printable(&defn.as_uri(false, false)));
     let detail = match outcome {
         Ok(o) => o.to_string(),
         Err(e) => e.to_string(),
     };
-    format!("{symbol} {uri}\n  {}", style::dim(color, &detail))
+    format!(
+        "{symbol} {uri}\n  {}",
+        style::dim(color, &style::printable(&detail))
+    )
 }
 
 /// Renders a whole result batch, sorted by URI for stable output — results
@@ -75,9 +78,9 @@ pub fn format_list_simple(pkgs: &[&Pkg], color: bool) -> String {
         .map(|p| {
             format!(
                 "{}:{} {}",
-                style::source(color, &p.source),
-                style::name(color, &p.slug),
-                style::version(color, &p.version)
+                style::source(color, &style::printable(&p.source)),
+                style::name(color, &style::printable(&p.slug)),
+                style::version(color, &style::printable(&p.version))
             )
         })
         .collect::<Vec<_>>()
@@ -91,26 +94,29 @@ pub fn format_list_detailed(pkgs: &[&Pkg], color: bool) -> String {
             let folders = p
                 .folders
                 .iter()
-                .map(|f| f.name.as_str())
+                .map(|f| style::printable(&f.name))
                 .collect::<Vec<_>>()
                 .join(", ");
             let deps = p
                 .deps
                 .iter()
-                .map(|d| Defn::new(p.source.clone(), d.id.clone()).as_uri(false, false))
+                .map(|d| {
+                    style::printable(&Defn::new(p.source.clone(), d.id.clone()).as_uri(false, false))
+                        .into_owned()
+                })
                 .collect::<Vec<_>>()
                 .join(", ");
             let heading = format!(
                 "{}:{}",
-                style::source(color, &p.source),
-                style::name(color, &p.slug)
+                style::source(color, &style::printable(&p.source)),
+                style::name(color, &style::printable(&p.slug))
             );
             format!(
                 "{heading}\n  name: {}\n  description: {}\n  url: {}\n  version: {}\n  date published: {}\n  folders: {}\n  dependencies: {}\n  options: any_flavour={}; any_release_type={}; version_eq={}",
-                p.name,
-                style::dim(color, &p.description),
-                p.url,
-                style::version(color, &p.version),
+                style::printable(&p.name),
+                style::dim(color, &style::printable(&p.description)),
+                style::printable(&p.url),
+                style::version(color, &style::printable(&p.version)),
                 p.date_published.to_rfc3339(),
                 folders,
                 deps,
@@ -157,15 +163,21 @@ pub fn format_search_results(
             let heading = format!(
                 "{} {}/{} [{} \u{2193}]{}",
                 style::number(color, i + 1),
-                style::source(color, &entry.source),
-                style::name(color, slug),
+                style::source(color, &style::printable(&entry.source)),
+                style::name(color, &style::printable(slug)),
                 entry.download_count,
                 match installed_version {
-                    Some(version) => format!(" {}", style::installed_tag(color, version)),
+                    Some(version) => format!(
+                        " {}",
+                        style::installed_tag(color, &style::printable(version))
+                    ),
                     None => String::new(),
                 },
             );
-            format!("{heading}\n    {}", style::dim(color, &entry.name))
+            format!(
+                "{heading}\n    {}",
+                style::dim(color, &style::printable(&entry.name))
+            )
         })
         .collect::<Vec<_>>()
         .join("\n")

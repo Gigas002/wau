@@ -325,7 +325,7 @@ async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
             println!("== {target} ==");
         }
         if let Err(e) = reconcile_profile(&global, target, args, &mut catalogue).await {
-            eprintln!("{target}: {e}");
+            eprintln!("{target}: {}", style::printable_lines(&e.to_string()));
             any_errors = true;
         }
     }
@@ -417,16 +417,22 @@ async fn reconcile_profile(
             } else {
                 let names: Vec<&str> = group.folders.iter().map(|f| f.name.as_str()).collect();
                 let version = group.folders.first().and_then(|f| f.toc.version.clone());
-                let prompt = format!(
+                let prompt = style::printable(&format!(
                     "{} [{}]",
                     names.join(", "),
                     version.as_deref().unwrap_or("?")
-                );
+                ))
+                .into_owned();
                 let mut choices: Vec<Choice<Option<Defn>>> = shortlist
                     .iter()
                     .map(|(d, c)| {
                         Choice::new(
-                            format!("{} ({})", d.as_uri(false, false), c.version),
+                            style::printable(&format!(
+                                "{} ({})",
+                                d.as_uri(false, false),
+                                c.version
+                            ))
+                            .into_owned(),
                             Some((*d).clone()),
                         )
                     })
@@ -475,7 +481,7 @@ fn print_unreconciled(leftovers: &[matchers::AddonFolder], color: bool) {
     names.sort_unstable();
     println!("unreconciled:");
     for name in names {
-        println!("  {}", style::name(color, name));
+        println!("  {}", style::name(color, &style::printable(name)));
     }
 }
 
