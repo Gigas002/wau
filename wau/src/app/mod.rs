@@ -325,6 +325,13 @@ async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
             println!("== {target} ==");
         }
         if let Err(e) = reconcile_profile(&global, target, args, &mut catalogue).await {
+            // Ctrl-C in a prompt stops `init`, not just this profile.
+            if matches!(
+                e,
+                AppError::Prompt(inquire::InquireError::OperationInterrupted)
+            ) {
+                return Err(e);
+            }
             eprintln!("{target}: {}", style::printable_lines(&e.to_string()));
             any_errors = true;
         }
@@ -438,7 +445,7 @@ async fn reconcile_profile(
                     })
                     .collect();
                 choices.push(Choice::new("Skip (leave unreconciled)", None));
-                prompts::select_one(&prompt, choices).ok().flatten()
+                prompts::esc_as_none(prompts::select_one(&prompt, choices))?.flatten()
             };
             if let Some(d) = selection {
                 selections.push(d);

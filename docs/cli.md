@@ -67,7 +67,7 @@ Without it, reconciles **every** configured profile (`<config-dir>/profiles/*/pr
 
 For each profile, matches un-tracked addon folders (installed by hand or by another tool) against catalogue/TOC metadata and imports them, in three decreasing-precision passes (TOC provider-id keys → folder-name subsets → normalized name match).
 
-For each matched group, prompts a single-select of the candidate sources (priority order) and then confirms before installing the batch; `-a` / `--auto` picks the top-priority candidate for every group instead, with no prompting at all.
+For each matched group, prompts a single-select of the candidate sources (priority order) and then confirms before installing the batch; `-a` / `--auto` picks the top-priority candidate for every group instead, with no prompting at all. `Esc` (or "Skip") leaves a group unreconciled; Ctrl-C stops `init`. Without a terminal the prompt fails, so scripts need `--auto`.
 
 `--list-unreconciled` only lists what would be matched, for every profile, without installing anything, prompting, or touching the network.
 
