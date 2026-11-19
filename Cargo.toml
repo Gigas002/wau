@@ -15,4 +15,4 @@ authors = ["gigas002 <gigas002@pm.me>"]
 description = "World of Warcraft Addon Updater"
 keywords = ["wow", "warcraft", "cli", "addon", "updater"]
 repository = "https://github.com/Gigas002/wau"
-version = "0.1.0"
+version = "0.2.0"
