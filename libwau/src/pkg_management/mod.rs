@@ -323,6 +323,21 @@ fn trash_addon_folder(addon_dir: &Path, path: &Path) -> AnyOutcome<()> {
     Ok(())
 }
 
+/// Opens a downloaded archive, refusing one with no addon folder in it: installing it would
+/// extract nothing and still record the package as installed, with no folders to update or
+/// remove.
+fn open_addon_archive(archive_path: &Path) -> AnyOutcome<pkg_archives::OpenArchive> {
+    let archive = pkg_archives::open_zip_archive(archive_path).map_err(InternalError::new)?;
+    if archive.top_level_folders.is_empty() {
+        return Err(ManagerError::PkgFilesMissing {
+            reason: "the archive has no addon folder (a top-level <Folder>/<Folder>.toc)"
+                .to_owned(),
+        }
+        .into());
+    }
+    Ok(archive)
+}
+
 fn mutate_install(
     lock: &mut LockFile,
     addon_dir: &Path,
@@ -331,7 +346,7 @@ fn mutate_install(
     archive_path: &Path,
     replace_folders: bool,
 ) -> AnyOutcome<Outcome> {
-    let archive = pkg_archives::open_zip_archive(archive_path).map_err(InternalError::new)?;
+    let archive = open_addon_archive(archive_path)?;
     let folder_names: Vec<String> = archive.top_level_folders.iter().cloned().collect();
 
     let conflicts = lock.find_pkgs_owning_folders(&folder_names);
@@ -384,7 +399,7 @@ fn mutate_update(
     candidate: &PkgCandidate,
     archive_path: &Path,
 ) -> AnyOutcome<Outcome> {
-    let archive = pkg_archives::open_zip_archive(archive_path).map_err(InternalError::new)?;
+    let archive = open_addon_archive(archive_path)?;
     let folder_names: Vec<String> = archive.top_level_folders.iter().cloned().collect();
 
     let conflicts =
