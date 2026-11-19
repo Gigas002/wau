@@ -513,14 +513,11 @@ async fn cmd_search(cli: &Cli, args: &SearchArgs) -> Result<i32, AppError> {
         .start_date
         .as_deref()
         .map(|s| {
-            chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+            jiff::civil::Date::strptime("%Y-%m-%d", s)
+                .and_then(|d| d.to_zoned_datetime(jiff::tz::TimeZone::UTC))
+                .map(|midnight| midnight.timestamp())
                 .map_err(|_| {
                     AppError::Other("invalid --start-date, expected YYYY-MM-DD".to_owned())
-                })
-                .map(|d| {
-                    d.and_hms_opt(0, 0, 0)
-                        .expect("midnight is always valid")
-                        .and_utc()
                 })
         })
         .transpose()?;

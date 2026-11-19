@@ -5,7 +5,7 @@ mod tests;
 
 use std::time::Duration;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use jiff::Timestamp;
 use serde::Deserialize;
 use url::Url;
 
@@ -36,12 +36,12 @@ struct TukuiAddon {
     small_desc: String,
 }
 
-fn parse_date_only(s: &str) -> Result<DateTime<Utc>, Failure> {
-    let date = NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(InternalError::new)?;
-    let naive = date
-        .and_hms_opt(0, 0, 0)
-        .ok_or_else(|| InternalError::new("invalid date"))?;
-    Ok(naive.and_utc())
+fn parse_date_only(s: &str) -> Result<Timestamp, Failure> {
+    let date = jiff::civil::Date::strptime("%Y-%m-%d", s).map_err(InternalError::new)?;
+    let midnight = date
+        .to_zoned_datetime(jiff::tz::TimeZone::UTC)
+        .map_err(InternalError::new)?;
+    Ok(midnight.timestamp())
 }
 
 #[derive(Default)]

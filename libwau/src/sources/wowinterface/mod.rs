@@ -10,7 +10,7 @@ mod tests;
 
 use std::{collections::HashMap, time::Duration};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::Deserialize;
 use url::Url;
 
@@ -43,9 +43,8 @@ struct WowiDetailsItem {
     ui_changelog: String,
 }
 
-fn timestamp_to_datetime(millis: i64) -> DateTime<Utc> {
-    DateTime::from_timestamp_millis(millis)
-        .unwrap_or_else(|| DateTime::from_timestamp(0, 0).unwrap())
+fn timestamp_to_datetime(millis: i64) -> Timestamp {
+    Timestamp::from_millisecond(millis).unwrap_or(Timestamp::UNIX_EPOCH)
 }
 
 /// Casefolds `s` and replaces runs of non-alphanumeric characters with a

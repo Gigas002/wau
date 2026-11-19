@@ -5,7 +5,7 @@ mod tests;
 
 use std::{collections::HashMap, time::Duration};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::Deserialize;
 use url::Url;
 
@@ -38,9 +38,8 @@ struct WagoRelease {
     download_link: String,
 }
 
-fn parse_iso_datetime(s: &str) -> Result<DateTime<Utc>, Failure> {
-    DateTime::parse_from_rfc3339(s)
-        .map(|dt| dt.with_timezone(&Utc))
+fn parse_iso_datetime(s: &str) -> Result<Timestamp, Failure> {
+    s.parse::<Timestamp>()
         .map_err(|e| InternalError::new(e).into())
 }
 

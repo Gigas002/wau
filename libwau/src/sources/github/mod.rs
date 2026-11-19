@@ -16,7 +16,7 @@ mod tests;
 
 use std::{borrow::Cow, io::Cursor, time::Duration};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::Deserialize;
 use url::Url;
 
@@ -132,9 +132,8 @@ fn split_tag_prefix(s: &str) -> (&str, Option<&str>) {
     }
 }
 
-fn parse_iso_datetime(s: &str) -> Result<DateTime<Utc>, Failure> {
-    DateTime::parse_from_rfc3339(s)
-        .map(|dt| dt.with_timezone(&Utc))
+fn parse_iso_datetime(s: &str) -> Result<Timestamp, Failure> {
+    s.parse::<Timestamp>()
         .map_err(|e| InternalError::new(e).into())
 }
 

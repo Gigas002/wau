@@ -1,7 +1,5 @@
 use std::io::Write as _;
 
-use chrono::{TimeZone, Utc};
-
 use super::*;
 use crate::{
     catalogue::{AddonKey, CatalogueEntry},
@@ -77,7 +75,7 @@ fn entry(
         url: format!("https://example.invalid/{name}"),
         game_flavours: vec![Flavour::Mainline],
         download_count: 1,
-        last_updated: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        last_updated: "2026-01-01T00:00:00Z".parse::<jiff::Timestamp>().unwrap(),
         folders: folders
             .into_iter()
             .map(|f| f.into_iter().map(str::to_owned).collect())
@@ -214,7 +212,7 @@ fn get_unreconciled_folders_skips_tracked_and_untracked_without_toc() {
         description: "".into(),
         url: "".into(),
         download_url: "".into(),
-        date_published: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        date_published: "2026-01-01T00:00:00Z".parse::<jiff::Timestamp>().unwrap(),
         version: "1".into(),
         changelog_url: "".into(),
         options: crate::lockfile::PkgOptions {
@@ -415,7 +413,7 @@ fn find_equivalent_pkg_defns_uses_catalogue_same_as_and_toc_keys() {
         description: "".into(),
         url: "".into(),
         download_url: "".into(),
-        date_published: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        date_published: "2026-01-01T00:00:00Z".parse::<jiff::Timestamp>().unwrap(),
         version: "1.0".into(),
         changelog_url: "".into(),
         options: crate::lockfile::PkgOptions {
@@ -454,7 +452,7 @@ fn find_equivalent_pkg_defns_omits_packages_with_no_equivalents() {
         description: "".into(),
         url: "".into(),
         download_url: "".into(),
-        date_published: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        date_published: "2026-01-01T00:00:00Z".parse::<jiff::Timestamp>().unwrap(),
         version: "1.0".into(),
         changelog_url: "".into(),
         options: crate::lockfile::PkgOptions {

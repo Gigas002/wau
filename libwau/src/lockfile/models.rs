@@ -1,6 +1,6 @@
 //! Row-equivalent models for the installed-package lock file.
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
 use crate::model::{Defn, Strategies};
@@ -29,7 +29,7 @@ pub struct PkgDep {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PkgLoggedVersion {
     pub version: String,
-    pub install_time: DateTime<Utc>,
+    pub install_time: Timestamp,
 }
 
 /// An installed package: its own fields plus `options` (1:1), `folders`
@@ -48,7 +48,7 @@ pub struct Pkg {
     pub description: String,
     pub url: String,
     pub download_url: String,
-    pub date_published: DateTime<Utc>,
+    pub date_published: Timestamp,
     pub version: String,
     pub changelog_url: String,
     pub options: PkgOptions,

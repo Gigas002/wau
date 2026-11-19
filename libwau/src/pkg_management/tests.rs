@@ -1,7 +1,5 @@
 use std::{collections::HashMap, io::Write as _, sync::Mutex};
 
-use chrono::{TimeZone, Utc};
-
 use super::*;
 use crate::model::{ChangelogFormat, Strategy};
 
@@ -114,7 +112,7 @@ fn candidate(id: &str, slug: &str, version: &str, download_url: String) -> PkgCa
         description: "a fine addon".to_owned(),
         url: format!("https://example.invalid/{slug}"),
         download_url,
-        date_published: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        date_published: "2026-01-01T00:00:00Z".parse::<jiff::Timestamp>().unwrap(),
         version: version.to_owned(),
         changelog_url: "data:,changelog".to_owned(),
         deps: Vec::new(),
@@ -670,7 +668,7 @@ async fn remove_refuses_to_trash_a_folder_name_that_escapes_addon_dir() {
         description: "".into(),
         url: "".into(),
         download_url: "".into(),
-        date_published: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        date_published: "2026-01-01T00:00:00Z".parse::<jiff::Timestamp>().unwrap(),
         version: "1.0.0".into(),
         changelog_url: "".into(),
         options: PkgOptions {
@@ -917,7 +915,7 @@ fn outcome_display_messages() {
         description: "".into(),
         url: "".into(),
         download_url: "".into(),
-        date_published: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        date_published: "2026-01-01T00:00:00Z".parse::<jiff::Timestamp>().unwrap(),
         version: "1.0.0".into(),
         changelog_url: "".into(),
         options: PkgOptions {
