@@ -95,6 +95,18 @@ fn parse_selection_expands_ranges_in_either_order() {
 }
 
 #[test]
+fn parse_selection_clamps_huge_ranges_to_the_list() {
+    // An unclamped `1-99999999999999999999`-style range looped once per number (24.8 s for
+    // `1-100000000000`); usize::MAX would never finish.
+    assert_eq!(
+        parse_selection(&format!("1-{}", usize::MAX), 3),
+        vec![0, 1, 2]
+    );
+    assert_eq!(parse_selection(&format!("{}-2", usize::MAX), 3), vec![1, 2]);
+    assert_eq!(parse_selection("0-0", 3), Vec::<usize>::new());
+}
+
+#[test]
 fn parse_selection_drops_out_of_range_and_unparsable_tokens() {
     assert_eq!(parse_selection("0 6 2", 5), vec![1]);
     assert_eq!(parse_selection("abc 2 1-abc", 5), vec![1]);
