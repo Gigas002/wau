@@ -1,4 +1,3 @@
-use chrono::{TimeZone, Utc};
 use libwau::lockfile::{Pkg, PkgDep, PkgFolder, PkgOptions};
 
 use super::*;
@@ -12,7 +11,7 @@ fn sample_pkg(source: &str, id: &str, slug: &str, name: &str) -> Pkg {
         description: "desc".to_owned(),
         url: "https://example.com".to_owned(),
         download_url: "https://example.com/dl".to_owned(),
-        date_published: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        date_published: "2026-01-01T00:00:00Z".parse::<jiff::Timestamp>().unwrap(),
         version: "1.0.0".to_owned(),
         changelog_url: "https://example.com/changelog".to_owned(),
         options: PkgOptions {

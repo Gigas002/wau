@@ -3,7 +3,7 @@
 //! Infallible except for [`super::LockFile::save`]/`open`, since there's no
 //! I/O on the read/mutate path anymore.
 
-use chrono::Utc;
+use jiff::Timestamp;
 
 use super::models::{Pkg, PkgLoggedVersion};
 use super::{LockFile, LoggedVersion};
@@ -77,7 +77,7 @@ impl LockFile {
                 pkg_source: pkg.source.clone(),
                 pkg_id: pkg.id.clone(),
                 version: pkg.version.clone(),
-                install_time: Utc::now(),
+                install_time: Timestamp::now(),
             });
         }
 

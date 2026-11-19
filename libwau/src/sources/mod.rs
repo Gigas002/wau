@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 
 use crate::{
     config::{GitHubHandler, SecretString},
@@ -42,7 +42,7 @@ pub struct PkgCandidate {
     pub description: String,
     pub url: String,
     pub download_url: String,
-    pub date_published: DateTime<Utc>,
+    pub date_published: Timestamp,
     pub version: String,
     pub changelog_url: String,
     /// Dependency ids, within the same source.

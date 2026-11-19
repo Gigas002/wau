@@ -15,7 +15,7 @@ mod tests;
 
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::Deserialize;
 
 use crate::{
@@ -350,10 +350,10 @@ async fn git_version_string(repo_dir: &Path, rev: &str) -> AnyOutcome<String> {
     Ok(format!("r{}.{}", count.trim(), hash.trim()))
 }
 
-async fn git_commit_date(repo_dir: &Path, rev: &str) -> AnyOutcome<DateTime<Utc>> {
+async fn git_commit_date(repo_dir: &Path, rev: &str) -> AnyOutcome<Timestamp> {
     let s = run_git_capture(repo_dir, &["show", "-s", "--format=%cI", rev]).await?;
-    DateTime::parse_from_rfc3339(s.trim())
-        .map(|dt| dt.with_timezone(&Utc))
+    s.trim()
+        .parse::<Timestamp>()
         .map_err(|e| InternalError::new(e).into())
 }
 

@@ -14,7 +14,7 @@
 
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
 mod models;
@@ -58,7 +58,7 @@ pub(crate) struct RawPkg {
     description: String,
     url: String,
     download_url: String,
-    date_published: DateTime<Utc>,
+    date_published: Timestamp,
     version: String,
     changelog_url: String,
     options: PkgOptions,
@@ -120,7 +120,7 @@ struct LoggedVersion {
     pkg_source: String,
     pkg_id: String,
     version: String,
-    install_time: DateTime<Utc>,
+    install_time: Timestamp,
 }
 
 /// On-disk shape of `lock.toml` as a whole.

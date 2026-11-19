@@ -1,5 +1,3 @@
-use chrono::{TimeZone, Utc};
-
 use super::*;
 use crate::model::Defn;
 
@@ -12,7 +10,7 @@ fn make_pkg(source: &str, id: &str, slug: &str, version: &str) -> Pkg {
         description: "a fine addon".to_owned(),
         url: format!("https://example.invalid/{slug}"),
         download_url: format!("https://example.invalid/{slug}.zip"),
-        date_published: Utc.with_ymd_and_hms(2026, 1, 1, 12, 0, 0).unwrap(),
+        date_published: "2026-01-01T12:00:00Z".parse::<jiff::Timestamp>().unwrap(),
         version: version.to_owned(),
         changelog_url: format!("https://example.invalid/{slug}/changelog"),
         options: PkgOptions {
@@ -167,10 +165,12 @@ fn get_pkg_logged_versions_orders_most_recent_first_and_caps_at_ten() {
         let version = format!("1.0.{i}");
         lock.insert_pkg(make_pkg("curse", "1", "foo", &version));
         // Force distinct, ascending install times so ordering is unambiguous
-        // (real inserts happen fast enough that `Utc::now()` alone could tie).
+        // (real inserts happen fast enough that `Timestamp::now()` alone could tie).
         for entry in &mut lock.version_log {
             if entry.pkg_source == "curse" && entry.pkg_id == "1" && entry.version == version {
-                entry.install_time = Utc.with_ymd_and_hms(2026, 1, i, 0, 0, 0).unwrap();
+                entry.install_time = format!("2026-01-{i:02}T00:00:00Z")
+                    .parse::<jiff::Timestamp>()
+                    .unwrap();
             }
         }
         lock.delete_pkg("curse", "1");
@@ -336,6 +336,51 @@ fn find_pkgs_owning_folders_excluding_skips_only_the_named_package() {
 // ---------------------------------------------------------------------------
 // examples/profiles/example/lock.toml stays in sync with this format
 // ---------------------------------------------------------------------------
+
+#[test]
+fn lock_files_written_with_chrono_still_load() {
+    // Dates were chrono `DateTime<Utc>` until 0.2.0: `Z`-suffixed RFC 3339 with up to nine
+    // fractional digits (`Utc::now()` install times). jiff must read every one of them.
+    let raw = r#"
+version = 1
+
+[[package]]
+source = "curse"
+id = "1"
+slug = "foo"
+name = "Foo"
+description = ""
+url = ""
+download_url = ""
+date_published = "2026-03-04T18:30:00+00:00"
+version = "1"
+changelog_url = ""
+
+[package.options]
+any_flavour = false
+any_release_type = false
+version_eq = false
+
+[[version_log]]
+pkg_source = "curse"
+pkg_id = "1"
+version = "1"
+install_time = "2026-11-19T19:07:01.123456789Z"
+"#;
+    let data: LockFileData = toml::from_str(raw).unwrap();
+    assert_eq!(
+        data.packages[0].date_published,
+        "2026-03-04T18:30:00Z".parse::<jiff::Timestamp>().unwrap()
+    );
+    let install_time = data.version_log[0].install_time;
+    assert_eq!(install_time.as_second(), 1_795_115_221);
+    assert_eq!(install_time.subsec_nanosecond(), 123_456_789);
+
+    let rewritten = toml::to_string(&data).unwrap();
+    assert!(rewritten.contains("install_time = \"2026-11-19T19:07:01.123456789Z\""));
+    let reread: LockFileData = toml::from_str(&rewritten).unwrap();
+    assert_eq!(reread.version_log[0].install_time, install_time);
+}
 
 #[test]
 fn example_lock_toml_parses_and_matches_the_documented_format() {

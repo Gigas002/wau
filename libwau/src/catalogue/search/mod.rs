@@ -9,8 +9,8 @@
 
 use std::collections::HashSet;
 
-use chrono::{DateTime, Utc};
 use frizbee::{Config, Matcher};
+use jiff::Timestamp;
 
 use super::CatalogueEntry;
 use crate::model::Flavour;
@@ -35,7 +35,7 @@ pub struct SearchOptions<'a> {
     pub limit: usize,
     pub sources: &'a [String],
     pub prefer_source: Option<&'a str>,
-    pub start_date: Option<DateTime<Utc>>,
+    pub start_date: Option<Timestamp>,
     pub filter_installed: FilterInstalled,
 }
 

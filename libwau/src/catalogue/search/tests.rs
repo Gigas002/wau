@@ -1,7 +1,5 @@
 use std::collections::HashSet;
 
-use chrono::{TimeZone, Utc};
-
 use super::*;
 use crate::catalogue::AddonKey;
 
@@ -20,7 +18,7 @@ fn entry(
         url: format!("https://example.invalid/{name}"),
         game_flavours: flavours,
         download_count: downloads as u64,
-        last_updated: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        last_updated: "2026-01-01T00:00:00Z".parse::<jiff::Timestamp>().unwrap(),
         folders: vec![vec![name.to_owned()]],
         same_as: vec![],
         normalised_name: crate::catalogue::normalise_name(name),

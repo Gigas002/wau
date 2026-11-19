@@ -8,6 +8,12 @@
   several addons separately (e.g. an addon and its voice packs). Each prefix is its own package in
   the lock file. Plain `owner/repo` resolution is unchanged.
 
+### Changed
+
+- Dates use `jiff` instead of `chrono`, which is unmaintained (RUSTSEC-2026-0543). Lock files
+  read the same; `libwau`'s date fields (`date_published`, `last_updated`, `install_time`,
+  `SearchOptions::start_date`) are now `jiff::Timestamp`.
+
 ### Fixed
 
 - Unknown sections and keys in `config.toml`, `profile.toml` and `addbuild.toml` were ignored, so

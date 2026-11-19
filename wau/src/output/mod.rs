@@ -20,6 +20,12 @@ use crate::style;
 mod tests;
 
 /// Per-result symbol: plain glyphs, no terminal color dependency.
+/// `2026-01-01T12:00:00+00:00`, the form `chrono`'s `to_rfc3339` printed (jiff's own `Display`
+/// ends in `Z`), so `list --format json` keeps its output.
+fn rfc3339(ts: jiff::Timestamp) -> String {
+    ts.display_with_offset(jiff::tz::Offset::UTC).to_string()
+}
+
 pub fn symbol_for(outcome: &AnyOutcome<Outcome>) -> &'static str {
     match outcome {
         Ok(_) => "✓",
@@ -117,7 +123,7 @@ pub fn format_list_detailed(pkgs: &[&Pkg], color: bool) -> String {
                 style::dim(color, &style::printable(&p.description)),
                 style::printable(&p.url),
                 style::version(color, &style::printable(&p.version)),
-                p.date_published.to_rfc3339(),
+                rfc3339(p.date_published),
                 folders,
                 deps,
                 p.options.any_flavour,
@@ -217,7 +223,7 @@ impl From<&Pkg> for PkgJson {
             description: pkg.description.clone(),
             url: pkg.url.clone(),
             download_url: pkg.download_url.clone(),
-            date_published: pkg.date_published.to_rfc3339(),
+            date_published: rfc3339(pkg.date_published),
             version: pkg.version.clone(),
             changelog_url: pkg.changelog_url.clone(),
             folders: pkg.folders.iter().map(|f| f.name.clone()).collect(),

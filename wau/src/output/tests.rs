@@ -1,4 +1,3 @@
-use chrono::{TimeZone, Utc};
 use libwau::{
     lockfile::{Pkg, PkgDep, PkgFolder, PkgOptions},
     model::Flavour,
@@ -22,7 +21,7 @@ fn catalogue_entry(
         url: format!("https://example.com/{slug}"),
         game_flavours: vec![Flavour::Mainline],
         download_count,
-        last_updated: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        last_updated: "2026-01-01T00:00:00Z".parse::<jiff::Timestamp>().unwrap(),
         folders: vec![],
         same_as: vec![],
         normalised_name: slug.to_owned(),
@@ -39,7 +38,7 @@ fn sample_pkg(source: &str, slug: &str) -> Pkg {
         description: "A test addon".to_owned(),
         url: "https://example.com/foo".to_owned(),
         download_url: "https://example.com/foo.zip".to_owned(),
-        date_published: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        date_published: "2026-01-01T00:00:00Z".parse::<jiff::Timestamp>().unwrap(),
         version: "1.0.0".to_owned(),
         changelog_url: "https://example.com/foo/changelog".to_owned(),
         options: PkgOptions {
@@ -240,6 +239,8 @@ fn format_list_json_round_trips_through_serde_json() {
     assert_eq!(parsed[0]["source"], "curse");
     assert_eq!(parsed[0]["slug"], "foo");
     assert_eq!(parsed[0]["folders"][0], "Foo");
+    // The form chrono's to_rfc3339 printed before the move to jiff.
+    assert_eq!(parsed[0]["date_published"], "2026-01-01T00:00:00+00:00");
 }
 
 #[test]

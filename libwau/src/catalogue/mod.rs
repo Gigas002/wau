@@ -7,7 +7,7 @@
 
 use std::{collections::HashMap, path::Path};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::Deserialize;
 
 use crate::{
@@ -53,7 +53,7 @@ pub struct CatalogueEntry {
     pub url: String,
     pub game_flavours: Vec<Flavour>,
     pub download_count: u64,
-    pub last_updated: DateTime<Utc>,
+    pub last_updated: Timestamp,
     /// Each entry is one combination of co-installed folder names expected
     /// for this addon. Kept as `Vec<String>` (small, order-preserving)
     /// rather than a `HashSet` — lookups are "does this name appear here",
@@ -135,9 +135,7 @@ impl ComputedCatalogue {
             .entries
             .into_iter()
             .filter_map(|e| {
-                let last_updated = DateTime::parse_from_rfc3339(&e.last_updated)
-                    .ok()?
-                    .with_timezone(&Utc);
+                let last_updated = e.last_updated.parse::<Timestamp>().ok()?;
                 let same_as = if e.source == GITHUB_SOURCE_ID {
                     e.same_as
                         .iter()

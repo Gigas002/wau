@@ -31,7 +31,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
-chrono = "0.4"
+jiff = { version = "1.0.1", default-features = false, features = ["std"] }
 inquire = "0.9"
 indicatif = "0.18"
 owo-colors = "4"
