@@ -669,7 +669,8 @@ fn parse_selection(input: &str, max: usize) -> Vec<usize> {
             && let (Ok(a), Ok(b)) = (a.parse::<usize>(), b.parse::<usize>())
         {
             let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
-            for n in lo..=hi {
+            // Clamped, so `1-99999999999` doesn't count to a hundred billion.
+            for n in lo.max(1)..=hi.min(max) {
                 push_valid(n);
             }
         } else if let Ok(n) = token.parse::<usize>() {

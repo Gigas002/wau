@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- `wau search`: a huge range in the install prompt (`1-99999999999`) hung, counting through every
+  number. Ranges are now clamped to the listed results.
 - An archive with no top-level `<Folder>/<Folder>.toc` (a source-code zip, a misnamed git
   `addname`) was reported as installed, with nothing extracted. It's now an error.
 - Updating an addon didn't notice that another addon from the same source (or with the same id
