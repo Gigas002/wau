@@ -28,6 +28,7 @@ use crate::{
 
 /// On-disk shape of `<addname>/addbuild.toml`.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct AddBuild {
     addname: String,
     url: String,

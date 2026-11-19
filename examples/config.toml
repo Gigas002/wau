@@ -1,3 +1,6 @@
+# Every key is optional. Unknown sections and keys are errors that name them, so a typo
+# (`[providers.curse]`, `apikey`) fails instead of being ignored.
+
 [logging]
 level = "info"
 
