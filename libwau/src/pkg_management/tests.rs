@@ -324,6 +324,65 @@ async fn update_all_installs_new_version_when_changed() {
 }
 
 #[tokio::test]
+async fn update_refuses_a_folder_another_package_of_the_same_source_owns() {
+    // curse:1's new version also ships `Bar`, which curse:2 owns. With `Bar` missing from disk
+    // the update went through, leaving both packages owning `Bar`.
+    let url_dir = tempfile::tempdir().unwrap();
+    let foo_v1 = make_zip_file(url_dir.path(), "foo1.zip", "Foo", b"## Interface: 110000");
+    let bar = make_zip_file(url_dir.path(), "bar.zip", "Bar", b"## Interface: 110000");
+    let foo_v2 = {
+        use zip::{ZipWriter, write::FileOptions};
+        let path = url_dir.path().join("foo2.zip");
+        let mut zip = ZipWriter::new(std::fs::File::create(&path).unwrap());
+        for folder in ["Foo", "Bar"] {
+            zip.start_file(
+                format!("{folder}/{folder}.toc"),
+                FileOptions::<()>::default(),
+            )
+            .unwrap();
+            zip.write_all(b"## Interface: 110000").unwrap();
+        }
+        zip.finish().unwrap();
+        format!("file://{}", path.display())
+    };
+    let mut h = Harness::new(vec![Box::new(
+        TestResolver::new("test")
+            .with_candidate("foo", candidate("1", "foo", "1.0.0", foo_v1))
+            .with_candidate("bar", candidate("2", "bar", "1.0.0", bar)),
+    )]);
+    install(
+        &mut h.lock,
+        &ctx!(h),
+        &[defn("test", "foo"), defn("test", "bar")],
+        false,
+        false,
+    )
+    .await;
+    std::fs::remove_dir_all(h.addon_dir.join("Bar")).unwrap();
+    h.sources = vec![Box::new(
+        TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "2.0.0", foo_v2)),
+    )];
+
+    let results = update(
+        &mut h.lock,
+        &ctx!(h),
+        UpdateTarget::Specific(vec![defn("test", "foo")]),
+        false,
+    )
+    .await;
+
+    assert!(
+        matches!(
+            results.get(&defn("test", "foo")).unwrap(),
+            Err(Failure::Manager(
+                ManagerError::PkgConflictsWithInstalled { .. }
+            ))
+        ),
+        "{results:?}"
+    );
+}
+
+#[tokio::test]
 async fn update_reports_up_to_date_when_version_unchanged() {
     let url_dir = tempfile::tempdir().unwrap();
     let url = make_zip_file(url_dir.path(), "foo.zip", "Foo", b"## Interface: 110000");
