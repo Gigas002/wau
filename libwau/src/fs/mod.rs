@@ -31,9 +31,7 @@ pub fn trash(path: &Path) -> std::io::Result<PathBuf> {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or_default();
-    let dest_dir = std::env::temp_dir()
-        .join("wauT")
-        .join(format!("deleted-{name}-{}-{nanos}", std::process::id()));
+    let dest_dir = trash_root().join(format!("deleted-{name}-{}-{nanos}", std::process::id()));
     std::fs::create_dir_all(&dest_dir)?;
 
     let dest = dest_dir.join(&name);
@@ -50,6 +48,33 @@ pub fn trash(path: &Path) -> std::io::Result<PathBuf> {
         }
     }
     Ok(dest)
+}
+
+/// Where [`trash`] moves things: `<temp dir>/wauT`.
+#[cfg(not(test))]
+fn trash_root() -> PathBuf {
+    std::env::temp_dir().join("wauT")
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_TRASH_ROOT: std::cell::RefCell<Option<PathBuf>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Tests trash into a directory of their own (see [`set_test_trash_root`]): the real
+/// `<temp dir>/wauT` would collect a dozen directories on every test run.
+#[cfg(test)]
+fn trash_root() -> PathBuf {
+    TEST_TRASH_ROOT
+        .with(|root| root.borrow().clone())
+        .expect("a test that trashes files must call fs::set_test_trash_root first")
+}
+
+/// Points [`trash`] at `root` for the rest of this thread (one test).
+#[cfg(test)]
+pub(crate) fn set_test_trash_root(root: &Path) {
+    TEST_TRASH_ROOT.with(|slot| *slot.borrow_mut() = Some(root.to_owned()));
 }
 
 fn copy_dir_recursive(src: &Path, dest: &Path) -> std::io::Result<()> {

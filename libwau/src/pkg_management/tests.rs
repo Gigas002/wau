@@ -139,6 +139,7 @@ impl Harness {
         let cache_dir = tmp.path().join("cache");
         std::fs::create_dir_all(&addon_dir).unwrap();
         std::fs::create_dir_all(&cache_dir).unwrap();
+        crate::fs::set_test_trash_root(&tmp.path().join("trash"));
 
         Self {
             _tmp: tmp,
