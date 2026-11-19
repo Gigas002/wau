@@ -14,6 +14,33 @@ use owo_colors::{AnsiColors, OwoColorize};
 /// Whether stdout is a real terminal — the sole signal for whether to emit
 /// ANSI color codes. Piped/redirected output (including everything captured
 /// by tests) always comes back `false`.
+/// `s` with every control character replaced: line breaks and tabs by a space, the rest
+/// (ESC, BEL, C1 controls...) by `�`. Names, versions, descriptions and error text come from
+/// source APIs, the catalogue and addon `.toc` files; printed as-is, an `ESC ]` sequence in an
+/// addon's name could set the terminal title, write the clipboard (OSC 52) or hide text.
+pub fn printable(s: &str) -> std::borrow::Cow<'_, str> {
+    replace_controls(s, false)
+}
+
+/// [`printable`] for multi-line text such as an error message: keeps `\n` and `\t`.
+pub fn printable_lines(s: &str) -> std::borrow::Cow<'_, str> {
+    replace_controls(s, true)
+}
+
+fn replace_controls(s: &str, keep_lines: bool) -> std::borrow::Cow<'_, str> {
+    let unsafe_char = |c: char| c.is_control() && !(keep_lines && matches!(c, '\n' | '\t'));
+    if !s.chars().any(unsafe_char) {
+        return std::borrow::Cow::Borrowed(s);
+    }
+    s.chars()
+        .map(|c| match c {
+            c if !unsafe_char(c) => c,
+            '\n' | '\r' | '\t' => ' ',
+            _ => '\u{FFFD}',
+        })
+        .collect()
+}
+
 pub fn color_enabled() -> bool {
     std::io::stdout().is_terminal()
 }

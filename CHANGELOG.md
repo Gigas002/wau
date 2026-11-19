@@ -10,6 +10,9 @@
 
 ### Fixed
 
+- Text from sources, the catalogue and `.toc` files (names, descriptions, versions, error
+  messages) was printed with its control characters, so an escape sequence in an addon's metadata
+  reached the terminal. They're now shown as `�`, and line breaks in one-line fields as spaces.
 - GitHub: checking a release zip's contents with a ranged read allocated the asset's full size
   (213 MB peak memory for a 200 MB asset), and a server claiming a huge size crashed `wau`. It now
   reads the 25 KB tail in place: 11 MB peak, 20× faster.

@@ -39,7 +39,7 @@ async fn main() {
     match app::run(&cli).await {
         Ok(exit_code) => std::process::exit(exit_code),
         Err(e) => {
-            eprintln!("error: {e}");
+            eprintln!("error: {}", style::printable_lines(&e.to_string()));
             std::process::exit(1);
         }
     }
