@@ -16,6 +16,9 @@
 
 ### Fixed
 
+- A corrupt archive broke the addon it was updating: the old folders were already in the trash and
+  a half-extracted one took their place. Archives are now extracted to a hidden directory in
+  `AddOns` first and moved into place only once complete; installs leave nothing behind either.
 - `wau init`: Ctrl-C in the source picker only skipped that group, and without a terminal every
   group was skipped silently. Ctrl-C now stops `init` and a missing terminal is an error; `Esc`
   still skips.
