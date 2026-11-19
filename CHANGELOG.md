@@ -16,6 +16,9 @@
 
 ### Fixed
 
+- `wau init`: Ctrl-C in the source picker only skipped that group, and without a terminal every
+  group was skipped silently. Ctrl-C now stops `init` and a missing terminal is an error; `Esc`
+  still skips.
 - A `.toc` file starting with a UTF-8 byte order mark lost its first line (usually
   `## Interface`), and one that isn't UTF-8 (Latin-1 author names) hid its folder from `wau init`.
 - Unknown sections and keys in `config.toml`, `profile.toml` and `addbuild.toml` were ignored, so

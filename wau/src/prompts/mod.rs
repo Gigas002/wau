@@ -46,6 +46,16 @@ pub fn select_one<T>(message: &str, mut choices: Vec<Choice<T>>) -> InquireResul
 /// Prints `prompt` with no trailing newline, then reads and trims one line
 /// from stdin. Used for freeform prompts no `inquire` widget fits (`search`'s
 /// paru-style `1 2 3` / `1-3` selection line).
+/// `Esc` (cancel) as `None`; Ctrl-C, a stdin that isn't a terminal and I/O errors stay errors,
+/// so they stop the command instead of reading as "skip".
+pub fn esc_as_none<T>(result: InquireResult<T>) -> InquireResult<Option<T>> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(inquire::InquireError::OperationCanceled) => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
 pub fn read_line(prompt: &str) -> std::io::Result<String> {
     print!("{prompt}");
     std::io::stdout().flush()?;
