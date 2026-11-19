@@ -686,6 +686,79 @@ async fn resolve_uses_ranged_partial_zip_when_server_honours_range() {
     assert_eq!(candidate.download_url, zip_url);
 }
 
+#[tokio::test]
+async fn resolve_reads_a_ranged_tail_without_allocating_the_claimed_size() {
+    // The tail used to be copied into a zeroed buffer of the Content-Range total: 213 MB peak
+    // RSS for a 200 MB asset, and a server claiming 1 TiB aborted the process
+    // ("memory allocation of 1099511627776 bytes failed").
+    let mut server = mockito::Server::new_async().await;
+    server
+        .mock("GET", "/repos/Owner/Repo")
+        .with_status(200)
+        .with_body(repo_json().to_string())
+        .create_async()
+        .await;
+    let zip = make_test_zip(&[("Foo/Foo-Mainline.toc", b"## Interface: 110000")]);
+    let zip_url = format!("{}/Foo.zip", server.url());
+    server
+        .mock("GET", "/repos/Owner/Repo/releases")
+        .match_query(mockito::Matcher::Any)
+        .with_status(200)
+        .with_body(
+            serde_json::json!([release_json(
+                "v1.0.0",
+                serde_json::json!([zip_asset(&zip_url, "Foo.zip")])
+            )])
+            .to_string(),
+        )
+        .create_async()
+        .await;
+    let total: u64 = 1 << 40;
+    server
+        .mock("GET", "/Foo.zip")
+        .match_header("range", "bytes=-25000")
+        .with_status(206)
+        .with_header(
+            "Content-Range",
+            &format!("bytes {}-{}/{total}", total - zip.len() as u64, total - 1),
+        )
+        .with_body(zip)
+        .create_async()
+        .await;
+
+    let http = HttpClient::new().unwrap();
+    let candidate = crate::sources::resolve_one(
+        &resolver(&server),
+        &http,
+        Flavour::Mainline,
+        &defn("Owner/Repo"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(candidate.download_url, zip_url);
+}
+
+#[test]
+fn zip_tail_reads_zeros_before_the_tail_and_seeks_from_the_end() {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let mut tail = ZipTail {
+        start: 4,
+        data: b"abc".to_vec(),
+        pos: 0,
+    };
+    assert!(!tail.is_complete());
+    assert_eq!(tail.seek(SeekFrom::End(0)).unwrap(), 7);
+    assert_eq!(tail.seek(SeekFrom::End(-5)).unwrap(), 2);
+    let mut buf = Vec::new();
+    tail.read_to_end(&mut buf).unwrap();
+    assert_eq!(buf, b"\0\0abc");
+    assert_eq!(tail.read(&mut [0; 4]).unwrap(), 0);
+    assert!(tail.seek(SeekFrom::End(-8)).is_err());
+    assert!(tail.seek(SeekFrom::Current(-8)).is_err());
+    assert!(ZipTail::complete(b"abc".to_vec()).is_complete());
+}
+
 // ---------------------------------------------------------------------------
 // any_flavour
 // ---------------------------------------------------------------------------
