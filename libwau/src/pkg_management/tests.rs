@@ -693,6 +693,57 @@ async fn replace_switches_installed_package_to_new_source() {
     assert_eq!(pkgs[0].source, "new-source");
 }
 
+#[tokio::test]
+async fn replace_installs_the_new_packages_dependencies() {
+    // Dependencies are resolved along with the new package but have no old package to
+    // replace; replace used to panic on them ("every candidate has an inverse old defn"),
+    // possibly after the old package had already been removed.
+    let url_dir = tempfile::tempdir().unwrap();
+    let url_old = make_zip_file(url_dir.path(), "old.zip", "Foo", b"## Interface: 110000");
+    let url_new = make_zip_file(url_dir.path(), "new.zip", "Foo", b"## Interface: 110000");
+    let url_dep = make_zip_file(url_dir.path(), "dep.zip", "Lib", b"## Interface: 110000");
+    let mut h = Harness::new(vec![Box::new(
+        TestResolver::new("old-source")
+            .with_candidate("foo", candidate("1", "foo", "1.0.0", url_old)),
+    )]);
+    install(
+        &mut h.lock,
+        &ctx!(h),
+        &[defn("old-source", "foo")],
+        false,
+        false,
+    )
+    .await;
+    let mut new = candidate("9", "foo", "2.0.0", url_new);
+    new.deps = vec!["7".to_owned()];
+    h.sources = vec![Box::new(
+        TestResolver::new("new-source")
+            .with_candidate("foo", new)
+            .with_candidate("7", candidate("7", "lib", "1.0.0", url_dep)),
+    )];
+
+    let pairs = vec![(defn("old-source", "foo"), defn("new-source", "foo"))];
+    let results = replace(&mut h.lock, &ctx!(h), &pairs).await.unwrap();
+
+    assert!(results.values().all(Result::is_ok), "{results:?}");
+    let mut installed: Vec<(String, String)> = h
+        .lock
+        .get_all_pkgs()
+        .into_iter()
+        .map(|p| (p.source, p.id))
+        .collect();
+    installed.sort();
+    assert_eq!(
+        installed,
+        vec![
+            ("new-source".to_owned(), "7".to_owned()),
+            ("new-source".to_owned(), "9".to_owned())
+        ]
+    );
+    assert!(h.addon_dir.join("Foo").is_dir());
+    assert!(h.addon_dir.join("Lib").is_dir());
+}
+
 // ---------------------------------------------------------------------------
 // Outcome::Display
 // ---------------------------------------------------------------------------

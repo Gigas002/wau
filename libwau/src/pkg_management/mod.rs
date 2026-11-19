@@ -925,20 +925,27 @@ pub async fn replace(
         results.insert(d, Some(Err(e)));
     }
 
-    for (new_defn, path) in archive_paths {
-        let old_defn = (*inverse
-            .get(&new_defn)
-            .expect("every candidate has an inverse old defn"))
-        .clone();
-        let candidate = candidates[&new_defn].clone();
+    // Replacements first, then the new packages' dependencies (resolved with them, but with
+    // nothing to replace), installed the way `install` installs them.
+    let (replacements, dependencies): (Vec<_>, Vec<_>) = archive_paths
+        .into_iter()
+        .partition(|(new_defn, _)| inverse.contains_key(new_defn));
+    for (new_defn, path) in replacements {
+        let old_defn = (*inverse[&new_defn]).clone();
+        let candidate = &candidates[&new_defn];
 
         if let Some(old_pkg) = old_pkgs.get(&old_defn) {
             let remove_outcome = mutate_remove(lock, ctx.addon_dir, old_pkg, false);
             results.insert(old_defn, Some(remove_outcome));
         }
         let install_outcome =
-            mutate_install(lock, ctx.addon_dir, &new_defn, &candidate, &path, false);
+            mutate_install(lock, ctx.addon_dir, &new_defn, candidate, &path, false);
         results.insert(new_defn, Some(install_outcome));
+    }
+    for (dep_defn, path) in dependencies {
+        let candidate = &candidates[&dep_defn];
+        let outcome = mutate_install(lock, ctx.addon_dir, &dep_defn, candidate, &path, false);
+        results.insert(dep_defn, Some(outcome));
     }
 
     Ok(results
