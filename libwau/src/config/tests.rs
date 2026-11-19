@@ -511,6 +511,7 @@ fn profile_config_delete_trashes_config_file_and_lock_file() {
     let profile =
         ProfileConfig::new(global, "gone-soon", &addon_dir, Some(Flavour::Mainline)).unwrap();
     profile.write().unwrap();
+    crate::fs::set_test_trash_root(&dir.path().join("trash"));
     fs::write(profile.lock_file_path(), b"version = 1\n").unwrap();
     assert!(profile.config_file_path().exists());
     assert!(profile.lock_file_path().exists());
@@ -579,6 +580,7 @@ fn profile_config_delete_without_lock_file_still_succeeds() {
         ProfileConfig::new(global, "no-lock-yet", &addon_dir, Some(Flavour::Mainline)).unwrap();
     profile.write().unwrap();
     assert!(!profile.lock_file_path().exists());
+    crate::fs::set_test_trash_root(&dir.path().join("trash"));
 
     profile.delete().unwrap();
     assert!(!profile.config_file_path().exists());

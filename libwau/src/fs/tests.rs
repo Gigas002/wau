@@ -5,6 +5,7 @@ use super::*;
 #[test]
 fn trash_moves_file_out_of_place() {
     let dir = tempfile::tempdir().unwrap();
+    set_test_trash_root(&dir.path().join("trash"));
     let file = dir.path().join("doomed.txt");
     fs::write(&file, b"bye").unwrap();
 
@@ -18,6 +19,7 @@ fn trash_moves_file_out_of_place() {
 #[test]
 fn trash_moves_directory_out_of_place() {
     let dir = tempfile::tempdir().unwrap();
+    set_test_trash_root(&dir.path().join("trash"));
     let target = dir.path().join("doomed_dir");
     fs::create_dir(&target).unwrap();
     fs::write(target.join("inner.txt"), b"contents").unwrap();
@@ -32,6 +34,7 @@ fn trash_moves_directory_out_of_place() {
 #[test]
 fn trash_destinations_are_unique_per_call() {
     let dir = tempfile::tempdir().unwrap();
+    set_test_trash_root(&dir.path().join("trash"));
     let a = dir.path().join("a.txt");
     let b = dir.path().join("b.txt");
     fs::write(&a, b"a").unwrap();
@@ -46,6 +49,7 @@ fn trash_destinations_are_unique_per_call() {
 #[test]
 fn copy_dir_recursive_preserves_nested_structure() {
     let dir = tempfile::tempdir().unwrap();
+    set_test_trash_root(&dir.path().join("trash"));
     let src = dir.path().join("src");
     fs::create_dir_all(src.join("nested")).unwrap();
     fs::write(src.join("top.txt"), b"top").unwrap();
@@ -66,6 +70,7 @@ fn copy_dir_recursive_preserves_nested_structure() {
 #[test]
 fn is_within_true_for_a_descendant() {
     let dir = tempfile::tempdir().unwrap();
+    set_test_trash_root(&dir.path().join("trash"));
     let child = dir.path().join("child");
     fs::create_dir(&child).unwrap();
 
@@ -75,12 +80,14 @@ fn is_within_true_for_a_descendant() {
 #[test]
 fn is_within_false_for_the_root_itself() {
     let dir = tempfile::tempdir().unwrap();
+    set_test_trash_root(&dir.path().join("trash"));
     assert!(!is_within(dir.path(), dir.path()));
 }
 
 #[test]
 fn is_within_false_for_the_parent_of_root() {
     let dir = tempfile::tempdir().unwrap();
+    set_test_trash_root(&dir.path().join("trash"));
     let child = dir.path().join("child");
     fs::create_dir(&child).unwrap();
 
