@@ -323,6 +323,37 @@ fn trash_addon_folder(addon_dir: &Path, path: &Path) -> AnyOutcome<()> {
     Ok(())
 }
 
+/// A hidden directory in the addon dir that an archive is extracted into first, so a corrupt
+/// archive fails before anything in the addon dir changes. It's on the same filesystem, so
+/// moving the folders into place is a rename. Removed when dropped.
+struct ExtractDir(PathBuf);
+
+impl ExtractDir {
+    fn extract(archive: &pkg_archives::OpenArchive, addon_dir: &Path) -> AnyOutcome<Self> {
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = Self(addon_dir.join(format!(".wau-extract-{}-{n}", std::process::id())));
+        std::fs::create_dir(&dir.0).map_err(InternalError::new)?;
+        archive.extract(&dir.0).map_err(InternalError::new)?;
+        Ok(dir)
+    }
+
+    fn move_into(&self, addon_dir: &Path, folder_names: &[String]) -> AnyOutcome<()> {
+        for name in folder_names {
+            std::fs::rename(self.0.join(name), addon_dir.join(name)).map_err(InternalError::new)?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for ExtractDir {
+    fn drop(&mut self) {
+        if let Err(err) = std::fs::remove_dir_all(&self.0) {
+            tracing::debug!(path = %self.0.display(), "cannot remove extract dir: {err}");
+        }
+    }
+}
+
 /// Opens a downloaded archive, refusing one with no addon folder in it: installing it would
 /// extract nothing and still record the package as installed, with no folders to update or
 /// remove.
@@ -357,6 +388,7 @@ fn mutate_install(
         .into());
     }
 
+    let extracted = ExtractDir::extract(&archive, addon_dir)?;
     if replace_folders {
         for name in &folder_names {
             let path = addon_dir.join(name);
@@ -379,7 +411,7 @@ fn mutate_install(
         }
     }
 
-    archive.extract(addon_dir).map_err(InternalError::new)?;
+    extracted.move_into(addon_dir, &folder_names)?;
 
     let pkg = build_pkg(defn, candidate, folder_names);
     lock.insert_pkg(pkg.clone());
@@ -427,13 +459,14 @@ fn mutate_update(
         .into());
     }
 
+    let extracted = ExtractDir::extract(&archive, addon_dir)?;
     for folder in &old_pkg.folders {
         let path = addon_dir.join(&folder.name);
         if path.exists() {
             trash_addon_folder(addon_dir, &path)?;
         }
     }
-    archive.extract(addon_dir).map_err(InternalError::new)?;
+    extracted.move_into(addon_dir, &folder_names)?;
 
     let new_pkg = build_pkg(defn, candidate, folder_names);
     lock.delete_pkg(&old_pkg.source, &old_pkg.id);

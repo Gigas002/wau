@@ -381,6 +381,75 @@ async fn downloads_are_removed_from_staging_after_install_and_update() {
     assert_eq!(staged(&h), 0);
 }
 
+/// `make_zip_file`, with the `.toc`'s stored bytes changed after the CRC was written: the
+/// archive opens and lists fine, but extracting it fails partway.
+fn make_corrupt_zip_file(dir: &Path, filename: &str, folder: &str) -> String {
+    let url = make_zip_file(dir, filename, folder, b"## Version: corrupt-me");
+    let path = pkg_archives::file_uri_to_path(&url).unwrap();
+    let mut bytes = std::fs::read(&path).unwrap();
+    let at = bytes.windows(10).position(|w| w == b"corrupt-me").unwrap();
+    bytes[at..at + 10].copy_from_slice(b"CORRUPT-ME");
+    std::fs::write(&path, bytes).unwrap();
+    url
+}
+
+#[tokio::test]
+async fn update_with_a_corrupt_archive_keeps_the_old_folders() {
+    // The old folders were trashed before extracting, so a CRC error left a half-written
+    // folder in place of a working addon, with the lock still naming the old version.
+    let url_dir = tempfile::tempdir().unwrap();
+    let v1 = make_zip_file(url_dir.path(), "v1.zip", "Foo", b"## Version: 1");
+    let v2 = make_corrupt_zip_file(url_dir.path(), "v2.zip", "Foo");
+    let mut h = Harness::new(vec![Box::new(
+        TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", v1)),
+    )]);
+    install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
+    h.sources = vec![Box::new(
+        TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "2.0.0", v2)),
+    )];
+
+    let results = update(
+        &mut h.lock,
+        &ctx!(h),
+        UpdateTarget::Specific(vec![defn("test", "foo")]),
+        false,
+    )
+    .await;
+
+    assert!(
+        matches!(
+            results.get(&defn("test", "foo")).unwrap(),
+            Err(Failure::Internal(_))
+        ),
+        "{results:?}"
+    );
+    assert_eq!(
+        std::fs::read(h.addon_dir.join("Foo/Foo.toc")).unwrap(),
+        b"## Version: 1"
+    );
+    assert_eq!(h.lock.get_all_pkgs()[0].version, "1.0.0");
+    let names: Vec<String> = std::fs::read_dir(&h.addon_dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .collect();
+    assert_eq!(names, vec!["Foo".to_owned()]);
+}
+
+#[tokio::test]
+async fn install_with_a_corrupt_archive_leaves_nothing_behind() {
+    let url_dir = tempfile::tempdir().unwrap();
+    let url = make_corrupt_zip_file(url_dir.path(), "foo.zip", "Foo");
+    let mut h = Harness::new(vec![Box::new(
+        TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url)),
+    )]);
+
+    let results = install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
+
+    assert!(results.get(&defn("test", "foo")).unwrap().is_err());
+    assert!(h.lock.get_all_pkgs().is_empty());
+    assert_eq!(std::fs::read_dir(&h.addon_dir).unwrap().count(), 0);
+}
+
 #[tokio::test]
 async fn install_unknown_source_is_source_invalid() {
     let mut h = Harness::new(vec![]);
