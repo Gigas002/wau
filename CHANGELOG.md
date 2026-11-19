@@ -10,6 +10,9 @@
 
 ### Fixed
 
+- Unknown sections and keys in `config.toml`, `profile.toml` and `addbuild.toml` were ignored, so
+  `[providers.curse]` silently left CurseForge without its key and `flavours = [...]` in an
+  addbuild restricted nothing. They're now errors that name the key.
 - Text from sources, the catalogue and `.toc` files (names, descriptions, versions, error
   messages) was printed with its control characters, so an escape sequence in an addon's metadata
   reached the terminal. They're now shown as `�`, and line breaks in one-line fields as spaces.

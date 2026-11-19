@@ -270,18 +270,21 @@ pub enum GitHubHandler {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct LoggingConfigFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     level: Option<LogLevel>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PathsConfigFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     cache: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ProviderConfigFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     api_key: Option<SecretString>,
@@ -290,6 +293,7 @@ struct ProviderConfigFile {
 /// `[providers.github]` — same `api_key` every provider has, plus
 /// `handler` to opt into the `gh`-CLI request path instead.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct GitHubProviderConfigFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     api_key: Option<SecretString>,
@@ -298,6 +302,7 @@ struct GitHubProviderConfigFile {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ProvidersConfigFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     curseforge: Option<ProviderConfigFile>,
@@ -309,6 +314,7 @@ struct ProvidersConfigFile {
 
 /// On-disk shape of `config.toml` — [`Dirs`] are computed, never persisted.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct GlobalConfigFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     logging: Option<LoggingConfigFile>,
@@ -463,6 +469,7 @@ impl InstalledProduct {
 
 /// On-disk shape of `profiles/<name>/profile.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ProfileConfigFile {
     profile: String,
     path: PathBuf,

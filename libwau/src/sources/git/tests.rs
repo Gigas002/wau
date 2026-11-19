@@ -146,6 +146,28 @@ async fn resolve_addname_mismatch_is_internal_error() {
 }
 
 #[tokio::test]
+async fn resolve_rejects_an_unknown_addbuild_key() {
+    // `flavours` (for `flavors`) used to be ignored, so the build wasn't restricted at all.
+    let addbuilds = tempfile::tempdir().unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    let dir = addbuilds.path().join("foo");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("addbuild.toml"),
+        "addname = \"foo\"\nurl = \"x\"\nbuild = \"build.sh\"\nflavours = [\"mainline\"]\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("build.sh"), SUCCESS_SCRIPT).unwrap();
+
+    let resolver = GitResolver::new(addbuilds.path().to_owned(), cache.path().to_owned());
+    let http = HttpClient::new().unwrap();
+    let err = resolve_one(&resolver, &http, Flavour::Mainline, &defn("foo"))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("flavours"), "{err}");
+}
+
+#[tokio::test]
 async fn resolve_flavour_not_supported_is_rejected_and_any_flavour_bypasses() {
     let addbuilds = tempfile::tempdir().unwrap();
     let cache = tempfile::tempdir().unwrap();

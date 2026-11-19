@@ -194,6 +194,37 @@ fn global_config_read_from_a_path_uses_its_parent_as_the_config_dir() {
 }
 
 #[test]
+fn unknown_config_keys_are_errors_that_name_the_key() {
+    // `[providers.curse]` (the source's id, not the section name) used to be ignored, so the
+    // API key silently went unused and CurseForge reported "access token missing".
+    let dir = tempfile::tempdir().unwrap();
+    let config_path = dir.path().join("config.toml");
+    for (toml, key) in [
+        ("[providers.curse]\napi_key = \"k\"\n", "curse"),
+        ("[providers.curseforge]\napikey = \"k\"\n", "apikey"),
+        ("[paths]\ncache_dir = \"/x\"\n", "cache_dir"),
+        ("[log]\nlevel = \"debug\"\n", "log"),
+    ] {
+        fs::write(&config_path, toml).unwrap();
+        let err = GlobalConfig::read_from(Some(&config_path)).unwrap_err();
+        assert!(err.to_string().contains(key), "{toml}: {err}");
+    }
+
+    let addon_dir = dir.path().join("addons");
+    fs::create_dir_all(&addon_dir).unwrap();
+    let global = global_config_in(dir.path());
+    let profile =
+        ProfileConfig::new(global.clone(), "p", &addon_dir, Some(Flavour::Mainline)).unwrap();
+    profile.write().unwrap();
+    let path = profile.config_file_path();
+    let mut text = fs::read_to_string(&path).unwrap();
+    text.push_str("flavor = \"classic\"\n");
+    fs::write(&path, text).unwrap();
+    let err = ProfileConfig::read(global, "p").unwrap_err();
+    assert!(err.to_string().contains("flavor"), "{err}");
+}
+
+#[test]
 fn global_config_read_from_a_missing_path_falls_back_to_defaults() {
     let dir = tempfile::tempdir().unwrap();
     let config_path = dir.path().join("does-not-exist.toml");
