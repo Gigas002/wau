@@ -7,6 +7,11 @@ level = "info"
 [paths]
 cache = "~/.cache/wau"
 
+[removal]
+# Folders that remove/sync/replace take out are moved to <temp dir>/wauT by default (a copy,
+# when /tmp is a tmpfs). false deletes them outright; `--no-trash` does so for one run.
+trash = true
+
 [providers.curseforge]
 api_key = "your-curseforge-api-key"
 

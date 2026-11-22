@@ -119,6 +119,105 @@ fn remove_of_a_never_installed_addon_reports_not_installed() {
     assert!(stdout(&output).contains("curse:nonexistent-addon"));
 }
 
+/// Writes a lock file with one installed package, `curse:foo`, owning the folder `Foo`, and
+/// creates that folder, so `remove` has something to remove without touching the network.
+fn install_fake_foo(tmp: &TempDir) -> PathBuf {
+    fs::write(
+        tmp.path().join("lock.toml"),
+        r#"version = 1
+
+[[package]]
+source = "curse"
+id = "1"
+slug = "foo"
+name = "Foo"
+description = ""
+url = ""
+download_url = ""
+date_published = "2026-01-01T00:00:00Z"
+version = "1.0.0"
+changelog_url = ""
+folders = ["Foo"]
+deps = []
+
+[package.options]
+any_flavour = false
+any_release_type = false
+version_eq = false
+"#,
+    )
+    .unwrap();
+    let folder = tmp.path().join("_retail_/Interface/AddOns/Foo");
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("Foo.toc"), "## Interface: 110000\n").unwrap();
+    folder
+}
+
+/// Runs `wau remove curse:foo` (plus `extra` args) with the temp dir, where the trash lives,
+/// pointed into `tmp`; returns the output and the trash dir.
+fn remove_foo(tmp: &TempDir, extra: &[&str]) -> (Output, PathBuf) {
+    let temp_dir = tmp.path().join("tmpdir");
+    fs::create_dir_all(&temp_dir).unwrap();
+    let mut args = vec!["--config", "config.toml", "--profile", "profile.toml"];
+    args.extend_from_slice(extra);
+    args.extend_from_slice(&["remove", "curse:foo"]);
+    let output = Command::new(env!("CARGO_BIN_EXE_wau"))
+        .current_dir(tmp.path())
+        .env("TMPDIR", &temp_dir)
+        .args(&args)
+        .output()
+        .expect("failed to run the wau binary");
+    (output, temp_dir.join("wauT"))
+}
+
+#[test]
+#[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
+fn remove_trashes_the_folder_by_default() {
+    let tmp = env_copy("retail");
+    let folder = install_fake_foo(&tmp);
+
+    let (output, trash) = remove_foo(&tmp, &[]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(!folder.exists());
+    assert_eq!(fs::read_dir(trash).unwrap().count(), 1);
+}
+
+#[test]
+#[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
+fn remove_with_no_trash_deletes_the_folder_outright() {
+    let tmp = env_copy("retail");
+    let folder = install_fake_foo(&tmp);
+
+    let (output, trash) = remove_foo(&tmp, &["--no-trash"]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(!folder.exists());
+    assert!(!trash.exists());
+    assert!(
+        !fs::read_to_string(tmp.path().join("lock.toml"))
+            .unwrap()
+            .contains("foo")
+    );
+}
+
+#[test]
+#[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
+fn removal_trash_false_in_config_deletes_the_folder_outright() {
+    let tmp = env_copy("retail");
+    let folder = install_fake_foo(&tmp);
+    let config = tmp.path().join("config.toml");
+    let mut text = fs::read_to_string(&config).unwrap();
+    text.push_str("\n[removal]\ntrash = false\n");
+    fs::write(&config, text).unwrap();
+
+    let (output, trash) = remove_foo(&tmp, &[]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(!folder.exists());
+    assert!(!trash.exists());
+}
+
 #[test]
 #[ignore = "spawns the real wau binary; run locally with `cargo test -p wau --test cli -- --ignored`"]
 fn replace_of_a_never_installed_addon_reports_errors_for_both_sides() {

@@ -54,7 +54,7 @@ checks: `cargo clippy` at the three gate levels, `cargo deny check`, `typos`,
 | Download staging | Every install, update and replace wrote the archive to `<cache>/staging` and never deleted it, on top of the HTTP cache's copy: one extra archive per operation, forever. Now **0** files remain after an install and an update (test). | Fixed, medium (39353bc) |
 | chrono → jiff | Neutral. Catalogue parse of a synthetic 60k-entry catalogue, best of 15: **72.0 ms** (chrono) vs **73.3 ms** (jiff). Release binary **14.82 → 15.23 MB** (+409 KB); `Cargo.lock` 285 → 278 packages. | OK (1e2c139) |
 | `wau list` | 500 packages and a 2000-entry version log, median of 40 runs, base vs final: simple **17.6 / 17.6 ms**, detailed **17.5 / 17.9 ms**, json **18.6 / 18.7 ms**; peak RSS **16.1 / 16.4 MB**. | OK |
-| Trash | `fs::trash` moves removed folders to `<temp dir>/wauT`. `/tmp` is usually tmpfs on a different filesystem from `AddOns`, so each removal is a copy: **~300 ms and 196 MB of RAM**, held until reboot, for a 196 MB addon (a same-filesystem rename takes 0.07 ms). Once `/tmp` is full, trashing fails, and so do update and remove. | Accepted, see §7 |
+| Trash | `fs::trash` moves removed folders to `<temp dir>/wauT`. `/tmp` is usually tmpfs on a different filesystem from `AddOns`, so each removal is a copy: **~300 ms and 196 MB of RAM**, held until reboot, for a 196 MB addon (a same-filesystem rename takes 0.07 ms). Once `/tmp` is full, trashing fails, and so do update and remove. | Accepted; `[removal] trash = false` / `--no-trash` deletes outright instead, see §7 |
 | HTTP cache | Archives are cached `Indefinite` and never evicted. `wau cache` shows the size and `wau cache --clean` removes it. | Accepted, see §7 |
 | Extraction | One pass, entries streamed to disk; the extract directory adds a rename per folder. | OK |
 
@@ -100,9 +100,11 @@ used), and extraction throughput.
 
 - **Where the trash lives.** `<temp dir>/wauT` costs a copy and RAM on tmpfs
   (§3), fails updates once `/tmp` is full, and is shared between users (§4).
-  Trashing into the cache dir (same filesystem as most installs, shown and
-  cleaned by `wau cache`), the freedesktop trash, or deleting outright are
-  product decisions, and `fs::trash` would need the cache dir passed in.
+  Deleting outright is now an option (`[removal] trash = false`, or
+  `--no-trash` for one run), and the default stays trashing. Trashing into the
+  cache dir (same filesystem as most installs, shown and cleaned by
+  `wau cache`) or the freedesktop trash are still open, and `fs::trash` would
+  need the cache dir passed in.
 - **Download checksums.** CurseForge publishes hashes; checking them would
   catch a corrupt cache entry or download before extraction.
 - **HTTP cache eviction.** `Indefinite` entries (archives, changelogs) stay

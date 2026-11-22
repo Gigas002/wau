@@ -18,12 +18,27 @@ A native, CLI-only World of Warcraft addon manager. Configs are TOML — see `ex
   file. `init` is the one exception — omitting `-p` there reconciles _every_
   configured profile in turn rather than erroring on "several configured"; give it explicitly to
   restrict `init` to just that one profile (see below).
+- `--no-trash` — delete removed and replaced addon folders outright instead of moving them to
+  the trash (see [Removed folders](#removed-folders)), for this run only.
 
 ## Configuration
 
 `<config-dir>` is the platform-conventional config directory (`~/.config/wau` on Linux, `~/Library/Application Support/wau` on macOS, `%APPDATA%\wau` on Windows) by default — override it for a single invocation with `--config` (see above)
 
 The default cache directory is likewise platform-conventional (`~/.cache/wau` on Linux)
+
+### Removed folders
+
+The folders `remove` deletes, and the old ones `sync`, `replace` and `install --replace`
+replace, are moved to `<temp dir>/wauT` (`/tmp/wauT` on Linux) rather than deleted, as a way
+back. `/tmp` is usually a tmpfs on another filesystem, so each one is a copy held in RAM until
+reboot, and once `/tmp` is full, removing and updating fail. To delete them outright instead,
+set this in `config.toml`, or pass `--no-trash` for one run:
+
+```toml
+[removal]
+trash = false
+```
 
 Every command errors out immediately if the profile it needs doesn't exist; without `-p`, `init` reports instead if there are no profiles configured at all, rather than erroring.
 

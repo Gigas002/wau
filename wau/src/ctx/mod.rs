@@ -5,6 +5,7 @@ use std::path::Path;
 
 use libwau::{
     config::{ConfigError, GlobalConfig, ProfileConfig},
+    fs::Removal,
     http::{HttpClient, HttpError},
     lockfile::{LockError, LockFile},
     pkg_archives::DownloadLocks,
@@ -85,6 +86,16 @@ pub fn source_config(global: &GlobalConfig) -> SourceConfig {
     }
 }
 
+/// Reads the global config from `cli.config` (else the platform-conventional dir), with
+/// `--no-trash` applied on top of its `[removal] trash`.
+pub fn read_global(cli: &Cli) -> Result<GlobalConfig, ConfigError> {
+    let mut global = GlobalConfig::read_from(cli.config.as_deref())?;
+    if cli.no_trash {
+        global.removal = Removal::Delete;
+    }
+    Ok(global)
+}
+
 impl AppCtx {
     /// Reads the global config (from `cli.config`, if given, else the
     /// platform-conventional dir) and `cli.profile`'s config, then builds a
@@ -93,7 +104,7 @@ impl AppCtx {
     /// command surfaces that as an error pointing at the example configs;
     /// there is no interactive bootstrap.
     pub fn build(cli: &Cli) -> Result<Self, CtxError> {
-        let global = GlobalConfig::read_from(cli.config.as_deref())?;
+        let global = read_global(cli)?;
         let profile = resolve_profile(global, cli.profile.as_deref())?;
         Self::from_profile(profile)
     }

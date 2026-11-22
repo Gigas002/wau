@@ -77,3 +77,32 @@ fn read_profile_reads_directly_from_a_toml_path() {
         fixture_path.with_file_name("lock.toml")
     );
 }
+
+#[test]
+fn read_global_applies_no_trash_over_the_config_file() {
+    use clap::Parser;
+    let dir = tempdir().unwrap();
+    let config = dir.path().join("config.toml");
+    let config_arg = config.to_str().unwrap();
+    let cli = |args: &[&str]| {
+        let mut full = vec!["wau", "--config", config_arg];
+        full.extend(args);
+        Cli::try_parse_from(full).unwrap()
+    };
+
+    std::fs::write(&config, "").unwrap();
+    assert_eq!(
+        read_global(&cli(&["list"])).unwrap().removal,
+        Removal::Trash
+    );
+    assert_eq!(
+        read_global(&cli(&["--no-trash", "list"])).unwrap().removal,
+        Removal::Delete
+    );
+
+    std::fs::write(&config, "[removal]\ntrash = false\n").unwrap();
+    assert_eq!(
+        read_global(&cli(&["list"])).unwrap().removal,
+        Removal::Delete
+    );
+}

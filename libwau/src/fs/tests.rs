@@ -94,3 +94,50 @@ fn is_within_false_for_the_parent_of_root() {
     // `dir` is the parent of `child` — must not be "within" `child`.
     assert!(!is_within(&child, dir.path()));
 }
+
+#[test]
+fn remove_delete_removes_a_directory_without_trashing_it() {
+    let dir = tempfile::tempdir().unwrap();
+    // No trash root set: trashing would panic, so this proves nothing is trashed.
+    let target = dir.path().join("doomed_dir");
+    fs::create_dir_all(target.join("nested")).unwrap();
+    fs::write(target.join("nested").join("inner.txt"), b"contents").unwrap();
+    let file = dir.path().join("doomed.txt");
+    fs::write(&file, b"bye").unwrap();
+
+    remove(&target, Removal::Delete).unwrap();
+    remove(&file, Removal::Delete).unwrap();
+
+    assert!(!target.exists());
+    assert!(!file.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn remove_delete_removes_a_symlink_not_its_target() {
+    let dir = tempfile::tempdir().unwrap();
+    let real = dir.path().join("real");
+    fs::create_dir(&real).unwrap();
+    fs::write(real.join("keep.txt"), b"keep").unwrap();
+    let link = dir.path().join("link");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+
+    remove(&link, Removal::Delete).unwrap();
+
+    assert!(fs::symlink_metadata(&link).is_err());
+    assert_eq!(fs::read(real.join("keep.txt")).unwrap(), b"keep");
+}
+
+#[test]
+fn remove_trash_moves_into_the_trash() {
+    let dir = tempfile::tempdir().unwrap();
+    let trash_root = dir.path().join("trash");
+    set_test_trash_root(&trash_root);
+    let file = dir.path().join("doomed.txt");
+    fs::write(&file, b"bye").unwrap();
+
+    remove(&file, Removal::Trash).unwrap();
+
+    assert!(!file.exists());
+    assert_eq!(fs::read_dir(&trash_root).unwrap().count(), 1);
+}

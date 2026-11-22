@@ -23,6 +23,13 @@ fn no_profile_flag_leaves_it_unset() {
 }
 
 #[test]
+fn no_trash_is_off_by_default_and_global() {
+    assert!(!parse(&["sync"]).no_trash);
+    assert!(parse(&["--no-trash", "remove", "curse:foo"]).no_trash);
+    assert!(parse(&["sync", "--no-trash"]).no_trash);
+}
+
+#[test]
 fn config_flag_parses_as_a_path() {
     let cli = parse(&["--config", "/tmp/fixture/config.toml", "list"]);
     assert_eq!(

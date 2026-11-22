@@ -225,6 +225,41 @@ fn unknown_config_keys_are_errors_that_name_the_key() {
 }
 
 #[test]
+fn removal_defaults_to_trash_and_trash_false_deletes() {
+    let dir = tempfile::tempdir().unwrap();
+    let config_path = dir.path().join("config.toml");
+    for (toml, removal) in [
+        ("", Removal::Trash),
+        ("[removal]\n", Removal::Trash),
+        ("[removal]\ntrash = true\n", Removal::Trash),
+        ("[removal]\ntrash = false\n", Removal::Delete),
+    ] {
+        fs::write(&config_path, toml).unwrap();
+        let config = GlobalConfig::read_from(Some(&config_path)).unwrap();
+        assert_eq!(config.removal, removal, "{toml:?}");
+    }
+
+    fs::write(&config_path, "[removal]\ntrash = \"no\"\n").unwrap();
+    assert!(GlobalConfig::read_from(Some(&config_path)).is_err());
+}
+
+#[test]
+fn write_round_trips_removal_delete() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = global_config_in(dir.path());
+    config.removal = Removal::Delete;
+    config.write().unwrap();
+
+    let text = fs::read_to_string(config.config_file_path()).unwrap();
+    assert!(
+        text.contains("[removal]") && text.contains("trash = false"),
+        "{text}"
+    );
+    let read = GlobalConfig::read_from(Some(&config.config_file_path())).unwrap();
+    assert_eq!(read.removal, Removal::Delete);
+}
+
+#[test]
 fn global_config_read_from_a_missing_path_falls_back_to_defaults() {
     let dir = tempfile::tempdir().unwrap();
     let config_path = dir.path().join("does-not-exist.toml");
@@ -547,6 +582,25 @@ fn profile_config_delete_trashes_config_file_and_lock_file() {
     assert!(profile.config_file_path().exists());
     assert!(profile.lock_file_path().exists());
 
+    profile.delete().unwrap();
+    assert!(!profile.config_file_path().exists());
+    assert!(!profile.lock_file_path().exists());
+}
+
+#[test]
+fn profile_config_delete_with_removal_delete_deletes_without_trashing() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut global = global_config_in(dir.path());
+    global.removal = Removal::Delete;
+    let addon_dir = dir.path().join("addons");
+    fs::create_dir_all(&addon_dir).unwrap();
+
+    let profile =
+        ProfileConfig::new(global, "gone-soon", &addon_dir, Some(Flavour::Mainline)).unwrap();
+    profile.write().unwrap();
+    fs::write(profile.lock_file_path(), b"version = 1\n").unwrap();
+
+    // No test trash root set: trashing would panic.
     profile.delete().unwrap();
     assert!(!profile.config_file_path().exists());
     assert!(!profile.lock_file_path().exists());

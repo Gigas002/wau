@@ -31,6 +31,12 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub profile: Option<String>,
 
+    /// Delete removed and replaced addon folders outright instead of moving
+    /// them to the trash (`<temp dir>/wauT`); `[removal] trash = false` in
+    /// config.toml does this for every run.
+    #[arg(long, global = true)]
+    pub no_trash: bool,
+
     #[command(subcommand)]
     pub command: Command,
 }

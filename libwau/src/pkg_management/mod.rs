@@ -12,7 +12,7 @@ use std::{
 };
 
 use crate::{
-    fs as trash_fs,
+    fs::{self as trash_fs, Removal},
     http::HttpClient,
     lockfile::{LockFile, Pkg, PkgDep, PkgFolder, PkgOptions},
     model::{Defn, Flavour, HeadersIntent, Strategy},
@@ -35,6 +35,8 @@ pub struct Ctx<'a> {
     pub cache_dir: &'a Path,
     pub progress: &'a ProgressBus,
     pub flavour: Flavour,
+    /// Whether replaced and removed addon folders are trashed or deleted outright.
+    pub removal: Removal,
 }
 
 /// A successful package operation outcome.
@@ -306,12 +308,12 @@ fn resolve_deps<'a>(
 // Mutations (run sequentially, one item at a time)
 // ============================================================================
 
-/// Moves an addon folder into the trash, refusing to touch anything that
+/// Trashes or deletes (`removal`) an addon folder, refusing to touch anything that
 /// doesn't resolve strictly inside `addon_dir`. Folder names ultimately come
 /// from lock file rows built off archive contents — a corrupted or
 /// maliciously-crafted entry (e.g. a folder name of `""` or `".."`) must
 /// never let this delete `addon_dir` itself or something outside it.
-fn trash_addon_folder(addon_dir: &Path, path: &Path) -> AnyOutcome<()> {
+fn remove_addon_folder(addon_dir: &Path, path: &Path, removal: Removal) -> AnyOutcome<()> {
     if !trash_fs::is_within(addon_dir, path) {
         return Err(InternalError::new(format!(
             "refusing to remove {}: not inside the addon directory",
@@ -319,7 +321,7 @@ fn trash_addon_folder(addon_dir: &Path, path: &Path) -> AnyOutcome<()> {
         ))
         .into());
     }
-    trash_fs::trash(path).map_err(InternalError::new)?;
+    trash_fs::remove(path, removal).map_err(InternalError::new)?;
     Ok(())
 }
 
@@ -376,6 +378,7 @@ fn mutate_install(
     candidate: &PkgCandidate,
     archive_path: &Path,
     replace_folders: bool,
+    removal: Removal,
 ) -> AnyOutcome<Outcome> {
     let archive = open_addon_archive(archive_path)?;
     let folder_names: Vec<String> = archive.top_level_folders.iter().cloned().collect();
@@ -393,7 +396,7 @@ fn mutate_install(
         for name in &folder_names {
             let path = addon_dir.join(name);
             if path.exists() {
-                trash_addon_folder(addon_dir, &path)?;
+                remove_addon_folder(addon_dir, &path, removal)?;
             }
         }
     } else {
@@ -430,6 +433,7 @@ fn mutate_update(
     old_pkg: &Pkg,
     candidate: &PkgCandidate,
     archive_path: &Path,
+    removal: Removal,
 ) -> AnyOutcome<Outcome> {
     let archive = open_addon_archive(archive_path)?;
     let folder_names: Vec<String> = archive.top_level_folders.iter().cloned().collect();
@@ -463,7 +467,7 @@ fn mutate_update(
     for folder in &old_pkg.folders {
         let path = addon_dir.join(&folder.name);
         if path.exists() {
-            trash_addon_folder(addon_dir, &path)?;
+            remove_addon_folder(addon_dir, &path, removal)?;
         }
     }
     extracted.move_into(addon_dir, &folder_names)?;
@@ -485,12 +489,13 @@ fn mutate_remove(
     addon_dir: &Path,
     pkg: &Pkg,
     keep_folders: bool,
+    removal: Removal,
 ) -> AnyOutcome<Outcome> {
     if !keep_folders {
         for folder in &pkg.folders {
             let path = addon_dir.join(&folder.name);
             if path.exists() {
-                trash_addon_folder(addon_dir, &path)?;
+                remove_addon_folder(addon_dir, &path, removal)?;
             }
         }
     }
@@ -651,7 +656,15 @@ pub async fn install(
 
     for (d, path) in archive_paths {
         let candidate = &candidates[&d];
-        let outcome = mutate_install(lock, ctx.addon_dir, &d, candidate, &path, replace_folders);
+        let outcome = mutate_install(
+            lock,
+            ctx.addon_dir,
+            &d,
+            candidate,
+            &path,
+            replace_folders,
+            ctx.removal,
+        );
         results.insert(d, outcome);
     }
 
@@ -834,8 +847,16 @@ pub async fn apply_update(
     for (d, path) in archive_paths {
         let (old, candidate) = &updatables[&d];
         let outcome = match old {
-            Some(o) => mutate_update(lock, ctx.addon_dir, &d, o, candidate, &path),
-            None => mutate_install(lock, ctx.addon_dir, &d, candidate, &path, false),
+            Some(o) => mutate_update(lock, ctx.addon_dir, &d, o, candidate, &path, ctx.removal),
+            None => mutate_install(
+                lock,
+                ctx.addon_dir,
+                &d,
+                candidate,
+                &path,
+                false,
+                ctx.removal,
+            ),
         };
         results.insert(d, outcome);
     }
@@ -868,12 +889,13 @@ pub async fn update(
     apply_update(lock, ctx, plan).await
 }
 
-/// Removes installed packages by `Defn`.
+/// Removes installed packages by `Defn`, trashing or deleting (`removal`) their folders.
 pub fn remove(
     lock: &mut LockFile,
     addon_dir: &Path,
     defns: &[Defn],
     keep_folders: bool,
+    removal: Removal,
 ) -> HashMap<Defn, AnyOutcome<Outcome>> {
     let pkgs = lock.get_pkgs(defns);
     defns
@@ -881,7 +903,7 @@ pub fn remove(
         .zip(pkgs)
         .map(|(d, p)| {
             let outcome = match p {
-                Some(pkg) => mutate_remove(lock, addon_dir, &pkg, keep_folders),
+                Some(pkg) => mutate_remove(lock, addon_dir, &pkg, keep_folders, removal),
                 None => Err(ManagerError::PkgNotInstalled.into()),
             };
             (d.clone(), outcome)
@@ -1007,16 +1029,31 @@ pub async fn replace(
         let candidate = &candidates[&new_defn];
 
         if let Some(old_pkg) = old_pkgs.get(&old_defn) {
-            let remove_outcome = mutate_remove(lock, ctx.addon_dir, old_pkg, false);
+            let remove_outcome = mutate_remove(lock, ctx.addon_dir, old_pkg, false, ctx.removal);
             results.insert(old_defn, Some(remove_outcome));
         }
-        let install_outcome =
-            mutate_install(lock, ctx.addon_dir, &new_defn, candidate, &path, false);
+        let install_outcome = mutate_install(
+            lock,
+            ctx.addon_dir,
+            &new_defn,
+            candidate,
+            &path,
+            false,
+            ctx.removal,
+        );
         results.insert(new_defn, Some(install_outcome));
     }
     for (dep_defn, path) in dependencies {
         let candidate = &candidates[&dep_defn];
-        let outcome = mutate_install(lock, ctx.addon_dir, &dep_defn, candidate, &path, false);
+        let outcome = mutate_install(
+            lock,
+            ctx.addon_dir,
+            &dep_defn,
+            candidate,
+            &path,
+            false,
+            ctx.removal,
+        );
         results.insert(dep_defn, Some(outcome));
     }
 

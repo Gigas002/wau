@@ -132,6 +132,7 @@ async fn cmd_install(cli: &Cli, args: &InstallArgs) -> Result<i32, AppError> {
         cache_dir: &profile.global_config.dirs.cache,
         progress: &progress,
         flavour: profile.product.flavour(),
+        removal: profile.global_config.removal,
     };
 
     let results = crate::progress::with_download_bars(
@@ -162,6 +163,7 @@ async fn cmd_sync(cli: &Cli, args: &SyncArgs) -> Result<i32, AppError> {
         cache_dir: &profile.global_config.dirs.cache,
         progress: &progress,
         flavour: profile.product.flavour(),
+        removal: profile.global_config.removal,
     };
 
     let target = if args.addons.is_empty() {
@@ -240,7 +242,13 @@ async fn cmd_remove(cli: &Cli, args: &RemoveArgs) -> Result<i32, AppError> {
     } = app_ctx;
     let defns = parse_defns_retain(&args.addons, &sources)?;
 
-    let results = pkg_management::remove(&mut lock, &profile.addon_dir, &defns, args.keep_folders);
+    let results = pkg_management::remove(
+        &mut lock,
+        &profile.addon_dir,
+        &defns,
+        args.keep_folders,
+        profile.global_config.removal,
+    );
     println!("{}", format_results(&results, style::color_enabled()));
     Ok(i32::from(any_errors(&results)))
 }
@@ -269,6 +277,7 @@ async fn cmd_replace(cli: &Cli, args: &ReplaceArgs) -> Result<i32, AppError> {
         cache_dir: &profile.global_config.dirs.cache,
         progress: &progress,
         flavour: profile.product.flavour(),
+        removal: profile.global_config.removal,
     };
 
     let results = crate::progress::with_download_bars(
@@ -295,7 +304,7 @@ async fn cmd_replace(cli: &Cli, args: &ReplaceArgs) -> Result<i32, AppError> {
 /// instead) then confirms before installing; folders that never match
 /// anything are printed at the end for the user to handle by hand.
 async fn cmd_init(cli: &Cli, args: &InitArgs) -> Result<i32, AppError> {
-    let global = GlobalConfig::read_from(cli.config.as_deref())?;
+    let global = ctx::read_global(cli)?;
 
     let targets: Vec<String> = match &cli.profile {
         Some(arg) => vec![arg.clone()],
@@ -381,6 +390,7 @@ async fn reconcile_profile(
         cache_dir: &profile.global_config.dirs.cache,
         progress: &progress,
         flavour,
+        removal: profile.global_config.removal,
     };
 
     type Pass<'a> = Box<dyn Fn(&[matchers::AddonFolder]) -> Vec<matchers::MatcherGroup> + 'a>;
@@ -592,6 +602,7 @@ async fn cmd_search(cli: &Cli, args: &SearchArgs) -> Result<i32, AppError> {
         cache_dir: &profile.global_config.dirs.cache,
         progress: &progress,
         flavour,
+        removal: profile.global_config.removal,
     };
     let results = crate::progress::with_download_bars(
         &progress,

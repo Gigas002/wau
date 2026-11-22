@@ -20,8 +20,11 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{
-    Flavour, ProductInfo, extract_installation_dir_from_addon_dir, infer_product_from_addon_dir,
+use crate::{
+    fs::Removal,
+    model::{
+        Flavour, ProductInfo, extract_installation_dir_from_addon_dir, infer_product_from_addon_dir,
+    },
 };
 
 #[cfg(test)]
@@ -283,6 +286,15 @@ struct PathsConfigFile {
     cache: Option<PathBuf>,
 }
 
+/// `[removal]` — `trash = false` deletes removed and replaced addon folders outright
+/// instead of moving them to the trash (`<temp dir>/wauT`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RemovalConfigFile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    trash: Option<bool>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProviderConfigFile {
@@ -321,6 +333,8 @@ struct GlobalConfigFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     paths: Option<PathsConfigFile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    removal: Option<RemovalConfigFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     providers: Option<ProvidersConfigFile>,
 }
 
@@ -330,6 +344,8 @@ pub struct GlobalConfig {
     pub access_tokens: AccessTokens,
     pub github_handler: GitHubHandler,
     pub dirs: Dirs,
+    /// `[removal] trash`: trash removed addon folders (the default) or delete them.
+    pub removal: Removal,
     /// Set only by [`Self::read_from`] with an explicit path; makes
     /// [`Self::config_file_path`] return that exact path instead of
     /// reconstructing it from `dirs.config`.
@@ -346,6 +362,10 @@ impl GlobalConfig {
         let log_level = file.logging.and_then(|l| l.level).unwrap_or_default();
 
         let cache_override = file.paths.and_then(|p| p.cache).map(expand_tilde);
+        let removal = match file.removal.and_then(|r| r.trash) {
+            Some(false) => Removal::Delete,
+            Some(true) | None => Removal::Trash,
+        };
 
         let providers = file.providers.unwrap_or_default();
         let github_provider = providers.github.unwrap_or_default();
@@ -361,6 +381,7 @@ impl GlobalConfig {
             access_tokens,
             github_handler,
             dirs: Dirs::default_dirs(cache_override),
+            removal,
             config_path_override: None,
         }
     }
@@ -421,6 +442,8 @@ impl GlobalConfig {
                 paths: Some(PathsConfigFile {
                     cache: Some(self.dirs.cache.clone()),
                 }),
+                removal: (self.removal == Removal::Delete)
+                    .then_some(RemovalConfigFile { trash: Some(false) }),
                 providers: Some(ProvidersConfigFile {
                     curseforge: self.access_tokens.cfcore.clone().map(|api_key| {
                         ProviderConfigFile {
@@ -702,12 +725,14 @@ impl ProfileConfig {
         Ok(())
     }
 
-    /// Trashes the profile's config file and its sibling `lock.toml`, if any.
+    /// Trashes (or, with `[removal] trash = false`, deletes) the profile's config file and
+    /// its sibling `lock.toml`, if any.
     pub fn delete(&self) -> Result<(), ConfigError> {
-        crate::fs::trash(&self.config_file_path())?;
+        let removal = self.global_config.removal;
+        crate::fs::remove(&self.config_file_path(), removal)?;
         let lock_path = self.lock_file_path();
         if lock_path.exists() {
-            crate::fs::trash(&lock_path)?;
+            crate::fs::remove(&lock_path, removal)?;
         }
         Ok(())
     }

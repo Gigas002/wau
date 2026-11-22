@@ -4,6 +4,11 @@
 
 ### Added
 
+- `[removal] trash = false` in `config.toml`, or `--no-trash` for one run, deletes removed and
+  replaced addon folders outright instead of moving them to `<temp dir>/wauT`, which is a copy
+  held in RAM when `/tmp` is a tmpfs and fails once it's full. `libwau`: `fs::Removal`,
+  `fs::remove`, `GlobalConfig::removal`, `pkg_management::Ctx::removal`, and a `removal`
+  argument to `pkg_management::remove`.
 - GitHub: `github:owner/repo@<tag-prefix>` installs one release stream of a monorepo that tags
   several addons separately (e.g. an addon and its voice packs). Each prefix is its own package in
   the lock file. Plain `owner/repo` resolution is unchanged.

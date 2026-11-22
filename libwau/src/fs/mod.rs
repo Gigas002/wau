@@ -1,8 +1,8 @@
 //! Minimal filesystem safety helpers shared across `libwau`.
 //!
-//! Removed content is moved into a temp "trash" location rather than
-//! hard-deleted. This is the only safety net for destructive operations —
-//! there is no SavedVariables backup/restore feature.
+//! Removed content is moved into a temp "trash" location by default rather
+//! than hard-deleted ([`Removal`]). This is the only safety net for
+//! destructive operations — there is no SavedVariables backup/restore feature.
 
 use std::{
     path::{Path, PathBuf},
@@ -11,6 +11,31 @@ use std::{
 
 #[cfg(test)]
 mod tests;
+
+/// What [`remove`] does with what it removes: config.toml's `[removal] trash`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Removal {
+    /// Move it out of the way with [`trash`] (the default).
+    #[default]
+    Trash,
+    /// Delete it outright. No copy and no `/tmp` usage, but no way back either.
+    Delete,
+}
+
+/// Removes `path` (a file, a directory, or a symlink, which is removed rather than its
+/// target) the way `removal` says.
+pub fn remove(path: &Path, removal: Removal) -> std::io::Result<()> {
+    match removal {
+        Removal::Trash => trash(path).map(drop),
+        Removal::Delete => {
+            if std::fs::symlink_metadata(path)?.is_dir() {
+                std::fs::remove_dir_all(path)
+            } else {
+                std::fs::remove_file(path)
+            }
+        }
+    }
+}
 
 /// Moves `path` into a unique subdirectory of the system temp dir instead of
 /// deleting it, returning the new location. `path` may be a file or directory.

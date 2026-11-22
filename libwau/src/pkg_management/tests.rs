@@ -128,9 +128,15 @@ struct Harness {
     locks: DownloadLocks,
     progress: ProgressBus,
     sources: Vec<Box<dyn Resolver>>,
+    trash: PathBuf,
 }
 
 impl Harness {
+    /// How many things have been moved to the trash.
+    fn trashed(&self) -> usize {
+        std::fs::read_dir(&self.trash).map_or(0, |d| d.count())
+    }
+
     fn new(sources: Vec<Box<dyn Resolver>>) -> Self {
         let tmp = tempfile::tempdir().unwrap();
         let addon_dir = tmp.path().join("AddOns");
@@ -140,6 +146,7 @@ impl Harness {
         crate::fs::set_test_trash_root(&tmp.path().join("trash"));
 
         Self {
+            trash: tmp.path().join("trash"),
             _tmp: tmp,
             addon_dir,
             cache_dir,
@@ -158,6 +165,9 @@ impl Harness {
 /// through a `&self` method here would borrow all of `$h` and conflict.
 macro_rules! ctx {
     ($h:expr) => {
+        ctx!($h, crate::fs::Removal::Trash)
+    };
+    ($h:expr, $removal:expr) => {
         Ctx {
             http: &$h.http,
             sources: &$h.sources,
@@ -166,6 +176,7 @@ macro_rules! ctx {
             cache_dir: &$h.cache_dir,
             progress: &$h.progress,
             flavour: Flavour::Mainline,
+            removal: $removal,
         }
     };
 }
@@ -488,6 +499,42 @@ async fn update_all_installs_new_version_when_changed() {
     assert!(matches!(outcome, Ok(Outcome::PkgUpdated { .. })));
     let pkgs = h.lock.get_all_pkgs();
     assert_eq!(pkgs[0].version, "2.0.0");
+    assert_eq!(h.trashed(), 1);
+}
+
+#[tokio::test]
+async fn update_with_removal_delete_deletes_the_old_folders_without_trashing_them() {
+    let url_dir = tempfile::tempdir().unwrap();
+    let url_v1 = make_zip_file(url_dir.path(), "v1.zip", "Foo", b"## Interface: 110000");
+    let mut h = Harness::new(vec![Box::new(
+        TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url_v1)),
+    )]);
+    install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
+
+    let url_v2 = make_zip_file(
+        url_dir.path(),
+        "v2.zip",
+        "Foo",
+        b"## Interface: 110000\n## Version: 2",
+    );
+    h.sources = vec![Box::new(
+        TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "2.0.0", url_v2)),
+    )];
+    let results = update(
+        &mut h.lock,
+        &ctx!(h, Removal::Delete),
+        UpdateTarget::All,
+        false,
+    )
+    .await;
+
+    let outcome = results.values().next().unwrap();
+    assert!(matches!(outcome, Ok(Outcome::PkgUpdated { .. })));
+    assert_eq!(
+        std::fs::read(h.addon_dir.join("Foo").join("Foo.toc")).unwrap(),
+        b"## Interface: 110000\n## Version: 2"
+    );
+    assert_eq!(h.trashed(), 0);
 }
 
 #[tokio::test]
@@ -700,13 +747,45 @@ async fn remove_deletes_db_row_and_trashes_folder_by_default() {
     )]);
     install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
 
-    let results = remove(&mut h.lock, &h.addon_dir, &[defn("test", "foo")], false);
+    let results = remove(
+        &mut h.lock,
+        &h.addon_dir,
+        &[defn("test", "foo")],
+        false,
+        Removal::Trash,
+    );
     assert!(matches!(
         results.get(&defn("test", "foo")).unwrap(),
         Ok(Outcome::PkgRemoved { .. })
     ));
     assert!(h.lock.get_all_pkgs().is_empty());
     assert!(!h.addon_dir.join("Foo").exists());
+    assert_eq!(h.trashed(), 1);
+}
+
+#[tokio::test]
+async fn remove_with_removal_delete_deletes_the_folder_without_trashing_it() {
+    let url_dir = tempfile::tempdir().unwrap();
+    let url = make_zip_file(url_dir.path(), "foo.zip", "Foo", b"## Interface: 110000");
+    let mut h = Harness::new(vec![Box::new(
+        TestResolver::new("test").with_candidate("foo", candidate("1", "foo", "1.0.0", url)),
+    )]);
+    install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
+
+    let results = remove(
+        &mut h.lock,
+        &h.addon_dir,
+        &[defn("test", "foo")],
+        false,
+        Removal::Delete,
+    );
+    assert!(matches!(
+        results.get(&defn("test", "foo")).unwrap(),
+        Ok(Outcome::PkgRemoved { .. })
+    ));
+    assert!(h.lock.get_all_pkgs().is_empty());
+    assert!(!h.addon_dir.join("Foo").exists());
+    assert_eq!(h.trashed(), 0);
 }
 
 #[tokio::test]
@@ -718,7 +797,13 @@ async fn remove_keep_folders_leaves_files_on_disk() {
     )]);
     install(&mut h.lock, &ctx!(h), &[defn("test", "foo")], false, false).await;
 
-    remove(&mut h.lock, &h.addon_dir, &[defn("test", "foo")], true);
+    remove(
+        &mut h.lock,
+        &h.addon_dir,
+        &[defn("test", "foo")],
+        true,
+        Removal::Trash,
+    );
     assert!(h.addon_dir.join("Foo").join("Foo.toc").is_file());
 }
 
@@ -749,7 +834,13 @@ async fn remove_refuses_to_trash_a_folder_name_that_escapes_addon_dir() {
         deps: vec![],
     });
 
-    let results = remove(&mut h.lock, &h.addon_dir, &[defn("test", "foo")], false);
+    let results = remove(
+        &mut h.lock,
+        &h.addon_dir,
+        &[defn("test", "foo")],
+        false,
+        Removal::Trash,
+    );
     assert!(matches!(
         results.get(&defn("test", "foo")).unwrap(),
         Err(Failure::Internal(_))
@@ -764,7 +855,13 @@ async fn remove_refuses_to_trash_a_folder_name_that_escapes_addon_dir() {
 #[tokio::test]
 async fn remove_not_installed_is_reported() {
     let mut h = Harness::new(vec![]);
-    let results = remove(&mut h.lock, &h.addon_dir, &[defn("test", "foo")], false);
+    let results = remove(
+        &mut h.lock,
+        &h.addon_dir,
+        &[defn("test", "foo")],
+        false,
+        Removal::Trash,
+    );
     assert!(matches!(
         results.get(&defn("test", "foo")).unwrap(),
         Err(Failure::Manager(ManagerError::PkgNotInstalled))
