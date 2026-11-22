@@ -313,6 +313,9 @@ fn cache_key(method: &str, url: &str, headers: &[(&str, &str)]) -> String {
 }
 
 fn build_client(cloudflare_compat: bool) -> Result<reqwest::Client, HttpError> {
+    // reqwest is built without a crypto provider (no AWS-LC); use ring. This
+    // fails only when one is installed already, which is the goal.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let mut builder = reqwest::Client::builder()
         .user_agent(user_agent())
         .connect_timeout(Duration::from_secs(60))

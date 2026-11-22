@@ -75,6 +75,7 @@ used), and extraction throughput.
 | Shared trash dir | `/tmp/wauT` is a fixed name in a world-writable directory. Another user can create it first, so wau's trashing fails, or files land in a directory they can read (addon files, a profile's `profile.toml`/`lock.toml`; no secrets). | Accepted, low, see §7 |
 | Checksums | Downloads aren't verified, although CurseForge publishes file hashes. Documented in `docs/caching.md`. | Accepted, see §7 |
 | Tokens | `SecretString` redacts `Debug`/`Display`. reqwest drops `Authorization` on a cross-host redirect. With `handler = "gh"`, downloads go out unauthenticated (documented). | OK |
+| TLS | reqwest's `rustls` feature built AWS-LC (`aws-lc-sys`: C and assembly, needs cmake, the slowest crate to compile). rustls now runs on the `ring` provider (`rustls-no-provider` + `rustls/ring`, installed in `http::build_client`), as in gaki; AWS-LC and cmake are out of the tree. | Fixed, low |
 | Git sources | Build scripts run from the user's own `addbuilds` dir; `addname` is checked with `is_safe_folder_name`; `zip_dir` skips symlinks. Trusted by design. | OK |
 | Concurrent runs | Lock saves are atomic, but two `wau` processes can each load, change and save the lock, and the second save drops the first's change. | Accepted, see §7 |
 

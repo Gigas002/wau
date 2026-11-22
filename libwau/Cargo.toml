@@ -28,7 +28,11 @@ serde_json = "1"
 url = "2"
 jiff = { version = "1.0.1", default-features = false, features = ["std", "serde"] }
 tokio = { workspace = true, features = ["fs", "time", "process"] }
-reqwest = { version = "0.13", default-features = false, features = ["gzip", "rustls", "stream"] }
+# TLS on rustls with the ring provider (installed in `http::build_client`):
+# reqwest's default `rustls` feature pulls AWS-LC, a whole C crypto library
+# that needs cmake and is the slowest crate to build.
+reqwest = { version = "0.13", default-features = false, features = ["gzip", "rustls-no-provider", "stream"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 async-trait = "0.1"
 futures-util = "0.3"
